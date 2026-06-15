@@ -20,13 +20,13 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.10.1",
+    "nodemailer": "^9.0.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "eslint": "^9.19.0",
     "prisma": "^6.9.0",
     "supertest": "^7.1.0",
-    "vitest": "^3.2.1"
+    "vitest": "^4.1.9"
   }
 }

@@ -6,15 +6,16 @@ export default defineConfig({
   css: {
     preprocessorOptions: {
       scss: {
-        // Rend les variables et mixins accessibles dans tous les modules Sass
-        // sans import explicite — DRY (Don't Repeat Yourself)
-        additionalData: `@use "src/styles/variables" as *; @use "src/styles/mixins" as *;`,
+        // loadPaths dit à Sass : "quand tu vois @use 'variables',
+        // cherche dans ce dossier". Comme ça, n'importe quel fichier
+        // .scss du projet peut faire @use 'variables' as *; sans
+        // chemin relatif compliqué (../../styles/variables).
+        loadPaths: ['src/styles'],
       },
     },
   },
   server: {
     port: 5173,
-    // Proxy vers l'API en dev pour éviter les problèmes CORS
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

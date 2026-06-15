@@ -1,3 +1,5 @@
+@use 'variables' as *;
+@use 'mixins' as *;
 // Mascotte — styles du cerf de Senlis (voir charte §4)
 .mascot {
   display: inline-block;

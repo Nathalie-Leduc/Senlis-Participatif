@@ -1,3 +1,5 @@
+@use 'variables' as *;
+@use 'mixins' as *;
 // Joy Layer — sections colorées, boutons, cartes (voir charte §5)
 .section-hero { background: linear-gradient(170deg, #1a4f6b 0%, $nonette 35%, $nonette-glow 100%); color: $blanc; position: relative; overflow: hidden; }
 .section-proposals { background: linear-gradient(180deg, $nonette-light 0%, #d3e8f0 100%); }
