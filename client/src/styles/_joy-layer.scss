@@ -1,0 +1,16 @@
+// Joy Layer — sections colorées, boutons, cartes (voir charte §5)
+.section-hero { background: linear-gradient(170deg, #1a4f6b 0%, $nonette 35%, $nonette-glow 100%); color: $blanc; position: relative; overflow: hidden; }
+.section-proposals { background: linear-gradient(180deg, $nonette-light 0%, #d3e8f0 100%); }
+.section-survey { background: linear-gradient(170deg, #FFF8E7 0%, $dore-light 100%); }
+.section-map { background: linear-gradient(170deg, $tilleul-light 0%, #c8e6d0 100%); }
+.section-cta { background: linear-gradient(170deg, #1a4f6b 0%, $ardoise 100%); color: $blanc; }
+.section-how { background: $blanc; }
+.stat-pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.15); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,.2); border-radius: $radius-pill; padding: 8px 18px; font: 700 15px $font-body; color: $blanc; .num { font-size: 20px; color: $dore-bright; } }
+.btn { display: inline-flex; align-items: center; gap: 8px; font: 700 17px $font-body; padding: 16px 32px; border-radius: $radius-md; border: none; cursor: pointer; min-height: 52px; @include motion { transition: all .25s $ease-bounce; &:active { transform: translateY(0) scale(.98); } } }
+.btn-gold { background: $dore-bright; color: $ardoise; box-shadow: $shadow-gold; @include motion { &:hover { transform: translateY(-3px) scale(1.02); } } }
+.btn-primary { background: $nonette; color: $blanc; box-shadow: $shadow-nonette; @include motion { &:hover { transform: translateY(-3px); } } }
+.btn-ghost { background: rgba(255,255,255,.15); color: $blanc; border: 2px solid rgba(255,255,255,.3); @include motion { &:hover { background: rgba(255,255,255,.25); transform: translateY(-2px); } } }
+.card-joyful { background: $blanc; border-radius: $radius-lg; box-shadow: $shadow-card; @include motion { transition: all .3s $ease-bounce; &:hover { transform: translateY(-8px); box-shadow: $shadow-card-hover; } } }
+.badge-live { display: inline-flex; align-items: center; gap: 6px; font: 700 13px $font-body; text-transform: uppercase; letter-spacing: .5px; color: $tilleul; &::before { content: ''; width: 8px; height: 8px; background: $tilleul; border-radius: 50%; @include motion { animation: pulse 2s ease-in-out infinite; } } }
+.vote-bar { display: flex; height: 18px; border-radius: $radius-pill; overflow: hidden; background: #e0dbd0; span { height: 100%; } .pour { background: linear-gradient(90deg, $tilleul, $tilleul-bright); } .neutre { background: #B9B2A4; } .contre { background: linear-gradient(90deg, #C25539, $brique); } @include motion { span { transition: width 1.2s $ease-smooth; } } }
+.hero-blob { position: absolute; border-radius: 50%; pointer-events: none; @include motion { animation: blobFloat 12s ease-in-out infinite; } }

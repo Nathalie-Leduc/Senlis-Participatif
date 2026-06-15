@@ -1,0 +1,14 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+@use 'animations';
+@use 'mascot';
+@use 'joy-layer';
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: $font-body; font-size: $font-size-base; line-height: 1.6; color: $ardoise; background: $pierre; overflow-x: hidden; }
+h1, h2, h3 { font-family: $font-display; line-height: 1.2; }
+a { color: $nonette; }
+:focus-visible { outline: 3px solid $nonette; outline-offset: 2px; border-radius: 4px; }
+.skip-link { position: absolute; left: -999px; top: 8px; background: $ardoise; color: $blanc; padding: 10px 16px; border-radius: $radius-sm; z-index: 100; font: 600 15px $font-body; text-decoration: none; &:focus { left: 8px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }

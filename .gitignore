@@ -1,0 +1,32 @@
+# Dépendances
+node_modules/
+
+# Environnement — JAMAIS commité (secrets JWT, SMTP, DATABASE_URL)
+.env
+.env.local
+.env.production
+
+# Builds
+dist/
+build/
+
+# Prisma
+api/prisma/*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Tests
+coverage/

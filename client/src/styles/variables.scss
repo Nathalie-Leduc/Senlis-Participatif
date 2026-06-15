@@ -1,0 +1,55 @@
+// ══════════════════════════════════════════════════════════
+// Variables — Charte « la pierre, la rivière et le cerf »
+// Source de vérité : document 09-charte-graphique.md
+// ══════════════════════════════════════════════════════════
+
+// ── Palette principale ──────────────────────────────────
+$ardoise: #26333A;
+$pierre: #FDF9F0;
+$blanc: #FFFFFF;
+$nonette: #1E5F7C;
+$tilleul: #3A7A4D;
+$brique: #A8442F;
+$dore: #D4A84A;
+$gris: #6B6257;
+
+// ── Joy Layer (sections colorées) ───────────────────────
+$nonette-light: #E3F0F6;
+$nonette-glow: #2A8AB4;
+$tilleul-light: #E0F2E5;
+$tilleul-bright: #4CAF65;
+$dore-light: #FFF4DB;
+$dore-bright: #F0C45A;
+$brique-light: #FCEAE6;
+
+// ── Palette mascotte ────────────────────────────────────
+$cerf-corps: #D4A84A;
+$cerf-ventre: #F6F1E7;
+$cerf-visage: #E8BD6A;
+$cerf-bois: #8B6914;
+$cerf-joues: #E8A090;
+
+// ── Typographie ─────────────────────────────────────────
+$font-display: 'Fraunces', Georgia, serif;
+$font-body: 'Public Sans', system-ui, sans-serif;
+$font-size-base: 18px;
+
+// ── Rayons ──────────────────────────────────────────────
+$radius-sm: 8px;
+$radius-md: 16px;
+$radius-lg: 32px;
+$radius-pill: 999px;
+
+// ── Ombres ──────────────────────────────────────────────
+$shadow-card: 0 2px 8px rgba(38, 51, 58, 0.06);
+$shadow-card-hover: 0 16px 40px rgba(38, 51, 58, 0.12);
+$shadow-gold: 0 4px 20px rgba(240, 196, 90, 0.35);
+$shadow-nonette: 0 4px 16px rgba(30, 95, 124, 0.3);
+
+// ── Transitions ─────────────────────────────────────────
+$ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+$ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+// ── Breakpoints ─────────────────────────────────────────
+$breakpoint-tablet: 768px;
+$breakpoint-desktop: 1024px;

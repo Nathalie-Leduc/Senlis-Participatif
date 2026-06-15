@@ -1,0 +1,13 @@
+// Keyframes centralisés — voir 09-charte-graphique.md §4.3
+@keyframes blink { 0%,45%,55%,100% { transform: scaleY(1); } 50% { transform: scaleY(.05); } }
+@keyframes earWiggle { 0%,85%,100% { transform: rotate(0); } 88% { transform: rotate(8deg); } 91% { transform: rotate(-5deg); } 94% { transform: rotate(3deg); } }
+@keyframes tailWag { 0%,100% { transform: rotate(0); } 25% { transform: rotate(12deg); } 75% { transform: rotate(-8deg); } }
+@keyframes bubblePop { 0% { transform: translateX(-50%) scale(0); opacity: 0; } 100% { transform: translateX(-50%) scale(1); opacity: 1; } }
+@keyframes gentleBob { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-8px) rotate(2deg); } }
+@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(1.5); } }
+@keyframes blobFloat { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(20px,-15px) scale(1.05); } 66% { transform: translate(-10px,10px) scale(.97); } }
+@keyframes confettiFall { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+@keyframes slideUp { 0% { transform: translateY(20px) scale(.9); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+@keyframes underlineGrow { to { transform: scaleX(1); } }
+@keyframes bubbleFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }

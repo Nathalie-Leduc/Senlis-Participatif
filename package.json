@@ -1,0 +1,13 @@
+{
+  "name": "senlis-participatif",
+  "private": true,
+  "description": "Plateforme citoyenne pour Senlis — propositions, votes, enquêtes",
+  "workspaces": ["api", "client"],
+  "scripts": {
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

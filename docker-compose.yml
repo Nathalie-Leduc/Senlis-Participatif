@@ -1,0 +1,50 @@
+# ══════════════════════════════════════════════════════════════
+# Senlis Participatif — docker-compose.yml
+# Lance PostgreSQL + l'API en un seul `docker compose up`.
+# Le client React tourne via `npm run dev` hors Docker (Vite HMR).
+# ══════════════════════════════════════════════════════════════
+
+services:
+  # ── Base de données ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: senlis-db
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: senlis
+      POSTGRES_PASSWORD: senlis_dev_password
+      POSTGRES_DB: senlis_participatif
+    volumes:
+      # Les données survivent au `docker compose down` (pas au `down -v`)
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U senlis -d senlis_participatif']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── API Express ──────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: senlis-api
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://senlis:senlis_dev_password@postgres:5432/senlis_participatif
+      PORT: 3000
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # En dev, on monte le code source pour le rechargement auto
+    volumes:
+      - ./api/src:/app/src
+      - ./api/prisma:/app/prisma
+
+volumes:
+  pgdata:

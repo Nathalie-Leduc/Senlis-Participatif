@@ -1,0 +1,25 @@
+// Mascotte — styles du cerf de Senlis (voir charte §4)
+.mascot {
+  display: inline-block;
+  filter: drop-shadow(0 4px 12px rgba(38,51,58,.1));
+  &--hero { width: 220px; height: 240px; }
+  &--section { width: 80px; height: 90px; }
+  &--inline { width: 48px; height: 48px; }
+  &--widget { width: 42px; height: 42px; }
+  @include motion {
+    .eye-blink { animation: blink 4s ease-in-out infinite; }
+    .ear-wiggle { animation: earWiggle 5s ease-in-out infinite; transform-origin: bottom center; }
+    .tail-wag { animation: tailWag 2s ease-in-out infinite; transform-origin: left center; }
+    &--hero { transition: transform .3s $ease-bounce; }
+    &--hero:hover { transform: scale(1.06) rotate(-3deg); }
+    &--inline { animation: bounce 2s ease-in-out infinite; }
+  }
+}
+.speech-bubble {
+  position: absolute; top: -10px; right: -30px;
+  background: $blanc; border: 2px solid $nonette; border-radius: $radius-md $radius-md $radius-md 4px;
+  padding: 10px 16px; font: 700 14px $font-body; color: $nonette;
+  box-shadow: 0 4px 16px rgba(0,0,0,.1); white-space: nowrap; z-index: 3;
+  &::after { content: ''; position: absolute; bottom: -8px; left: 18px; border: 8px solid transparent; border-top-color: $nonette; border-bottom: 0; }
+  @include motion { animation: bubbleFloat 3s ease-in-out infinite; }
+}

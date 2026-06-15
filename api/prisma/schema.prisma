@@ -1,0 +1,336 @@
+// ════════════════════════════════════════════════════════════════════
+//  SENLIS PARTICIPATIF — Schéma de données (v1.1)
+//  Stack : Prisma 7 + PostgreSQL (même socle que Cinés-Délices)
+//
+//  ⚠️ Le schéma couvre le MVP COMPLET (Lots 1 et 2) : on conçoit en une
+//  fois, on implémente en deux temps. Ajouter Comment aujourd'hui ne
+//  coûte rien ; l'ajouter en cours de route = migration sur données réelles.
+//
+//  Deux "ailes" :
+//   1. PARTICIPATION : User → Proposal → Vote
+//   2. ENQUÊTES      : Survey → Question → QuestionOption
+//                      et côté citoyen : SurveyResponse → Answer
+// ════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  ENUMS — des "menus fixes" : la BDD refuse toute valeur hors liste.
+//  Avantage vs String libre : impossible d'avoir "ouvert", "Ouvert",
+//  "OUVERT " (avec espace) qui cassent les filtres.
+// ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  CITIZEN // citoyen inscrit : vote, répond aux enquêtes
+  ADMIN   // toi : crée propositions et enquêtes, modère
+}
+
+enum ProposalStatus {
+  DRAFT          // brouillon, visible uniquement par l'auteur
+  PENDING_REVIEW // soumise par un citoyen → en attente de modération
+  PUBLISHED      // visible et ouverte aux votes
+  REJECTED       // refusée par la modération (motif dans moderationNote)
+  CLOSED         // votes clos, résultats consultables
+  ARCHIVED       // retirée de la liste publique
+}
+
+// Cycle de vie d'un commentaire : publié seulement après modération.
+// (Modération a priori : plus de travail pour l'admin, mais aucun contenu
+// injurieux ne sera jamais visible publiquement — prudence pour un site
+// qui veut être crédible face à une mairie.)
+enum CommentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Position défendue par un commentaire : c'est elle qui transforme un
+// "fil de discussion" en "débat structuré" (affichage en deux colonnes
+// pour / contre, comptage des arguments de chaque camp...)
+enum Stance {
+  POUR
+  CONTRE
+  NEUTRE
+}
+
+// Jetons à usage unique envoyés par email
+enum TokenType {
+  VERIFY_EMAIL   // confirmation d'inscription
+  RESET_PASSWORD // mot de passe oublié
+}
+
+enum VoteValue {
+  POUR
+  CONTRE
+  NEUTRE // "je veux suivre sans me prononcer" — utile en concertation
+}
+
+enum SurveyStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+// Cible de l'enquête : ton questionnaire stationnement aura
+// deux variantes (résidents / commerçants n'ont pas les mêmes craintes)
+enum Audience {
+  TOUS
+  RESIDENTS
+  COMMERCANTS
+}
+
+enum QuestionType {
+  CHOIX_UNIQUE   // boutons radio  → ex : "Où garez-vous votre voiture ?"
+  CHOIX_MULTIPLE // cases à cocher → ex : "Quels jours utilisez-vous la voiture ?"
+  NOMBRE         // champ numérique → ex : "Combien de voitures dans le foyer ?"
+  OUI_NON        // booléen        → ex : "Disposez-vous d'un box privé ?"
+  TEXTE_LIBRE    // commentaire    → à doser : difficile à analyser en masse
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  AILE 1 — PARTICIPATION
+// ────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  // On ne stocke JAMAIS le mot de passe : uniquement son hash Argon2.
+  // Analogie : on garde l'empreinte du doigt, pas le doigt.
+  passwordHash String
+  // Le pseudo est ce qui s'affiche publiquement → l'email reste privé (RGPD :
+  // minimisation de l'exposition des données personnelles)
+  pseudo       String   @unique
+  role         Role     @default(CITIZEN)
+
+  // Barrière anti-comptes jetables : l'email doit être vérifié (jeton envoyé
+  // à l'inscription) avant de voter ou répondre. Des comptes bidons qui
+  // gonflent les votes = crédibilité du site ruinée face à la mairie.
+  emailVerified Boolean @default(false)
+
+  // Préférences de notification broadcast (Lot 2). Modifiables à tout moment
+  // + lien de désinscription dans chaque email : obligation légale.
+  notifyNewProposal  Boolean @default(true)
+  notifySurveyClosed Boolean @default(true)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  proposals Proposal[]
+  votes     Vote[]
+  responses SurveyResponse[]
+  comments  Comment[]   // Lot 2
+  tokens    AuthToken[]
+}
+
+model Proposal {
+  id      String         @id @default(uuid())
+  // Slug = identifiant lisible dans l'URL : /propositions/pietonnisation-centre-historique
+  // Meilleur pour le SEO et pour partager le lien à la mairie qu'un UUID opaque
+  slug    String         @unique
+  title   String
+  // summary : l'accroche affichée dans les cartes de la liste (≈ 200 caractères)
+  summary String
+  // content : l'argumentaire complet en Markdown — tes chiffres INSEE, tes sources…
+  content String
+  status  ProposalStatus @default(DRAFT)
+
+  // Géolocalisation pour la carte Leaflet :
+  // - lat/lng : le "point d'ancrage" (marqueur) — ex : place Henri IV
+  // - geoJson : le périmètre dessiné (polygone de la zone piétonne proposée).
+  //   Json est volontairement souple : Leaflet produit/consomme du GeoJSON natif.
+  lat     Float?
+  lng     Float?
+  geoJson Json?
+
+  // Si l'auteur supprime son compte (droit à l'effacement RGPD),
+  // la proposition publique survit mais devient "anonyme" → SetNull.
+  // Cascade aurait supprimé la proposition ET tous les votes des autres
+  // citoyens : on ne détruit pas l'expression collective pour un départ.
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  votes    Vote[]
+  comments Comment[] // Lot 2
+
+  // Motif communiqué à l'auteur si sa proposition est REJECTED (Lot 2) :
+  // un refus sans explication décourage la participation
+  moderationNote String?
+
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  closesAt    DateTime? // date de clôture des votes (optionnelle)
+}
+
+model Vote {
+  id    String    @id @default(uuid())
+  value VoteValue
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // un citoyen peut changer d'avis : on met à jour, on ne duplique pas
+
+  // ⭐ L'ISOLOIR NUMÉRIQUE : une personne = un vote par proposition.
+  // C'est PostgreSQL qui le garantit (contrainte d'unicité), pas le JS.
+  // Même un appel API direct qui contournerait ton front sera rejeté.
+  @@unique([userId, proposalId])
+}
+
+// Commentaire-argument sous une proposition (Lot 2).
+// C'est la "stance" qui transforme un fil de discussion en débat structuré :
+// affichage en deux colonnes pour/contre, comptage des arguments par camp.
+model Comment {
+  id      String        @id @default(uuid())
+  content String
+  stance  Stance
+  status  CommentStatus @default(PENDING) // modération a priori : rien ne se publie sans validation
+
+  // Suppression de compte → l'argument publié survit, anonymisé.
+  // Même logique que Proposal : on n'ampute pas un débat public.
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  AILE 2 — ENQUÊTES
+//
+//  Choix d'architecture : moteur d'enquête GÉNÉRIQUE.
+//  On aurait pu créer une table "EnqueteStationnement" avec une colonne
+//  par question (nbVoitures, typeStationnement…). Plus simple… jusqu'à
+//  l'enquête n°2, qui exigerait une migration SQL à chaque nouveau
+//  questionnaire. Ici, créer une enquête = insérer des lignes, pas
+//  modifier la structure. Analogie : un formulaire vierge à cases
+//  configurables plutôt qu'un formulaire imprimé une fois pour toutes.
+// ────────────────────────────────────────────────────────────────────
+
+model Survey {
+  id          String       @id @default(uuid())
+  slug        String       @unique
+  title       String       // ex : "Stationnement et déplacements dans le centre historique"
+  description String       // contexte affiché en tête du questionnaire
+  audience    Audience     @default(TOUS)
+  status      SurveyStatus @default(DRAFT)
+  opensAt     DateTime?
+  closesAt    DateTime?
+
+  questions Question[]
+  responses SurveyResponse[]
+
+  createdAt DateTime @default(now())
+}
+
+model Question {
+  id       String       @id @default(uuid())
+  label    String       // "Combien de voitures compte votre foyer ?"
+  helpText String?      // précision sous la question, ex : "y compris véhicule de fonction"
+  type     QuestionType
+  required Boolean      @default(true)
+  order    Int          // position dans le questionnaire
+
+  surveyId String
+  survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  options QuestionOption[]
+  answers Answer[]
+
+  // Pas deux questions au même rang dans une même enquête
+  @@unique([surveyId, order])
+}
+
+model QuestionOption {
+  id    String @id @default(uuid())
+  label String // ex : "Box ou garage privé", "Voirie payante", "Parking gratuit externe"
+  order Int
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  answers Answer[]
+
+  @@unique([questionId, order])
+}
+
+// Le "bulletin" déposé par un citoyen : UNE réponse globale par enquête,
+// qui regroupe toutes ses réponses individuelles (Answer).
+model SurveyResponse {
+  id          String   @id @default(uuid())
+  submittedAt DateTime @default(now())
+
+  surveyId String
+  survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  // ⭐ PSEUDONYMISATION RGPD : userId nullable + SetNull.
+  // Le lien au compte sert UNIQUEMENT à empêcher la double réponse.
+  // Si le citoyen efface son compte, ses réponses deviennent anonymes
+  // mais tes STATISTIQUES survivent ("42 % se garent en voirie" reste vrai).
+  // Cascade aurait fait fondre ton échantillon à chaque désinscription.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  answers Answer[]
+
+  // L'isoloir, again : une seule participation par citoyen par enquête
+  @@unique([userId, surveyId])
+}
+
+// Une réponse à UNE question. Une seule des trois "valeurs" est remplie
+// selon le type de question (le validateur Zod côté API s'en assurera) :
+//  - CHOIX_UNIQUE / OUI_NON  → 1 ligne avec optionId
+//  - CHOIX_MULTIPLE           → N lignes, chacune avec un optionId
+//  - NOMBRE                   → 1 ligne avec valueNumber
+//  - TEXTE_LIBRE              → 1 ligne avec valueText
+model Answer {
+  id String @id @default(uuid())
+
+  responseId String
+  response   SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  optionId String?
+  option   QuestionOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  valueText   String?
+  valueNumber Float?
+
+  // Empêche de cocher deux fois la même option, et limite à une ligne
+  // par question pour les types à réponse unique (complété par Zod)
+  @@unique([responseId, questionId, optionId])
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  TRANSVERSE — Jetons email à usage unique (Lot 1)
+// ────────────────────────────────────────────────────────────────────
+
+// Vérification d'email et "mot de passe oublié".
+// ⭐ On stocke le HASH du jeton, jamais le jeton en clair : si la BDD
+// fuite, les liens de réinitialisation ne sont pas exploitables.
+// Même principe que les mots de passe : l'empreinte, pas le doigt.
+model AuthToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  type      TokenType
+  expiresAt DateTime  // typiquement 1 h — un jeton qui traîne est une porte ouverte
+  usedAt    DateTime? // usage unique : consommé = définitivement inutilisable
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}

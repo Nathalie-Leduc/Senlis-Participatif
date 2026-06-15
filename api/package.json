@@ -1,0 +1,32 @@
+{
+  "name": "senlis-participatif-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API REST — Senlis Participatif",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "seed": "node prisma/seed.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.9.0",
+    "argon2": "^0.41.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.10.1",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "eslint": "^9.19.0",
+    "prisma": "^6.9.0",
+    "supertest": "^7.1.0",
+    "vitest": "^3.2.1"
+  }
+}
