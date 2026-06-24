@@ -12,6 +12,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import healthRouter from './routes/health.js';
+import authRouter from './routes/auth.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
@@ -59,6 +60,7 @@ app.use(globalLimiter);
 // permettra à un client mobile ou une mairie (Lot 3) de
 // coexister avec une future v2 sans casser l'existant.
 app.use('/api/v1', healthRouter);
+app.use('api/v1/auth', authRouter)
 
 // Sprint 1 → app.use('/api/v1/auth', authRouter);
 // Sprint 2 → app.use('/api/v1/proposals', proposalsRouter);
