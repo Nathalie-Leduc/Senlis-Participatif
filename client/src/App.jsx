@@ -2,133 +2,87 @@
 // App — Point d'entrée React
 //
 // Sprint 0 : squelette minimal avec le hero joyeux et la
-// mascotte. Les routes (React Router) arriveront au Sprint 1.
+// mascotte.
+// Sprint 1 : auth complet + hero joyeux.
+// Les routes propositions/enquêtes/carte arriveront aux
+// sprints suivants — les <Link> dans la nav sont déjà prêts.
 // ══════════════════════════════════════════════════════════
 
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext.jsx';
+import Header from './components/Header/Header.jsx';
+import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute.jsx';
+
+// Pages
+import Accueil from './pages/Accueil.jsx';
+import Inscription from './pages/Inscription.jsx';
+import Connexion from './pages/Connexion.jsx';
+import VerificationEmail from './pages/VerificationEmail.jsx';
+import MotDePasseOublie from './pages/MotDePasseOublie.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
+import MonCompte from './pages/MonCompte.jsx';
 import Mascot from './components/Mascot/Mascot.jsx';
+
+// Page 404 avec mascotte perdue 🦌
+function NotFound() {
+  return (
+    <div className="wrap" style={{ padding: '80px 20px', textAlign: 'center' }}>
+      <Mascot size="section" speech="Je me suis perdu dans la forêt… 🌲" />
+      <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 32, margin: '20px 0 8px' }}>
+        Page introuvable
+      </h1>
+      <p style={{ color: '#6B6257', fontSize: 17 }}>
+        Cette page n'existe pas — retournons à l'accueil !
+      </p>
+      <a href="/" className="btn btn-primary" style={{ marginTop: 24 }}>
+        Retour à l'accueil
+      </a>
+    </div>
+  );
+}
 
 export default function App() {
   return (
-    <>
-      {/* Skip link : premier élément focusable (accessibilité) */}
-      <a href="#main" className="skip-link">Aller au contenu</a>
+    <BrowserRouter>
+      <AuthProvider>
+        {/* Skip link : premier élément focusable (accessibilité) */}
+        <a href="#main" className="skip-link">Aller au contenu</a>
 
-      {/* ── Header ──────────────────────────────────────── */}
-      <header style={{
-        background: '#fff',
-        borderBottom: '2px solid #FFF4DB',
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-      }}>
-        <div className="wrap" style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '12px 20px',
-          gap: 10,
+        <Header />
+
+        <main id="main">
+          <Routes>
+            {/* Routes publiques */}
+            <Route path="/" element={<Accueil />} />
+            <Route path="/inscription" element={<Inscription />} />
+            <Route path="/connexion" element={<Connexion />} />
+            <Route path="/verification-email" element={<VerificationEmail />} />
+            <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+
+            {/* Routes protégées */}
+            <Route path="/mon-compte" element={
+              <ProtectedRoute><MonCompte /></ProtectedRoute>
+            } />
+
+            {/* Sprint 2 → /propositions, /propositions/:slug */}
+            {/* Sprint 3 → /carte */}
+            {/* Sprint 4 → /enquetes, /enquetes/:slug */}
+
+            {/* 404 — le cerf est perdu 🦌 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+
+        {/* Footer */}
+        <footer style={{
+          background: '#26333A', color: 'rgba(255,255,255,0.6)',
+          padding: '28px 20px', textAlign: 'center', fontSize: 14,
         }}>
-          <span style={{
-            fontFamily: "'Fraunces', Georgia, serif",
-            fontWeight: 700,
-            fontSize: 19,
-            color: '#26333A',
-          }}>
-            🦌 Senlis Participatif
-          </span>
-        </div>
-      </header>
-
-      {/* ── Hero ────────────────────────────────────────── */}
-      <main id="main">
-        <section className="section-hero" style={{ padding: '56px 20px 60px' }}>
-          {/* Blobs décoratifs */}
-          <div className="hero-blob" style={{
-            top: -80, right: -60, width: 400, height: 400,
-            background: 'radial-gradient(circle, rgba(212,168,74,.2) 0%, transparent 70%)',
-          }} />
-          <div className="hero-blob" style={{
-            bottom: -100, left: -80, width: 350, height: 350,
-            background: 'radial-gradient(circle, rgba(58,122,77,.15) 0%, transparent 70%)',
-          }} />
-
-          <div className="wrap" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 40,
-            flexWrap: 'wrap',
-            position: 'relative',
-            zIndex: 2,
-          }}>
-            <div style={{ flex: '1 1 320px' }}>
-              <h1 style={{
-                fontFamily: "'Fraunces', serif",
-                fontSize: 'clamp(30px, 5.5vw, 48px)',
-                fontWeight: 800,
-                lineHeight: 1.15,
-                marginBottom: 16,
-                color: '#fff',
-              }}>
-                Votre ville.<br />
-                Votre <span style={{ color: '#F0C45A' }}>voix</span>.
-              </h1>
-              <p style={{
-                fontSize: 19,
-                opacity: 0.9,
-                marginBottom: 28,
-                color: '#fff',
-                lineHeight: 1.7,
-              }}>
-                Découvrez les propositions pour Senlis, votez en
-                10 secondes et participez aux enquêtes qui comptent
-                vraiment.
-              </p>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-                <div className="stat-pill"><span className="num">0</span> participants</div>
-                <div className="stat-pill"><span className="num">0</span> propositions</div>
-              </div>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button className="btn btn-gold">Je participe !</button>
-                <button className="btn btn-ghost">Explorer la carte</button>
-              </div>
-            </div>
-
-            {/* La mascotte hero — Sprint 0, palier 1 (statique + bulle) */}
-            <div style={{ flex: '0 0 auto' }}>
-              <Mascot size="hero" speech="Bienvenue à Senlis ! 🏛️" />
-            </div>
-          </div>
-        </section>
-
-        {/* ── Placeholder des sections suivantes ─────────── */}
-        <section className="section-how" style={{ padding: '56px 20px', textAlign: 'center' }}>
-          <div className="wrap">
-            <h2 style={{
-              fontFamily: "'Fraunces', serif",
-              fontSize: 32,
-              marginBottom: 8,
-            }}>
-              Comment ça marche ?
-            </h2>
-            <p style={{ color: '#6B6257', marginBottom: 24 }}>
-              Les propositions, votes et enquêtes arrivent aux prochains sprints.
-              Pour l'instant, le cerf veille. 🦌
-            </p>
-            <Mascot size="section" />
-          </div>
-        </section>
-      </main>
-
-      {/* ── Footer ──────────────────────────────────────── */}
-      <footer style={{
-        background: '#26333A',
-        color: 'rgba(255,255,255,0.6)',
-        padding: '28px 20px',
-        textAlign: 'center',
-        fontSize: 14,
-      }}>
-        <p><strong style={{ color: '#F0C45A' }}>Senlis Participatif</strong> · Plateforme citoyenne indépendante</p>
-        <p style={{ marginTop: 4 }}>🦌 Aucun cerf n'a été blessé pendant la fabrication de ce site</p>
-      </footer>
-    </>
+          <p><strong style={{ color: '#F0C45A' }}>Senlis Participatif</strong> · Plateforme citoyenne indépendante</p>
+          <p style={{ marginTop: 4 }}>🦌 Aucun cerf n'a été blessé pendant la fabrication de ce site</p>
+        </footer>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
