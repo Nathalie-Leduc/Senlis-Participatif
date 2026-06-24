@@ -19,6 +19,8 @@ export default [
         requestAnimationFrame: 'readonly',
         navigator: 'readonly',
         fetch: 'readonly',
+        localStorage: 'readonly',
+        confirm: 'readonly',
       },
     },
     rules: {
