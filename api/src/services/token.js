@@ -40,7 +40,7 @@ export async function createToken(userId, type) {
   // Stocke en BDD avec expiration
   await prisma.authToken.create({
     data: {
-      hash,
+      tokenHash: hash, // ← Prisma attend "tokenHash", pas "hash"
       type,
       userId,
       expiresAt: new Date(Date.now() + TOKEN_TTL_MINUTES * 60 * 1000),
@@ -63,7 +63,7 @@ export async function verifyAndConsumeToken(plainToken, type) {
 
   const token = await prisma.authToken.findFirst({
     where: {
-      hash,
+      tokenHash: hash,   // ← Prisma attend "tokenHash", pas "hash"
       type,
       usedAt: null, // pas encore utilisé
     },

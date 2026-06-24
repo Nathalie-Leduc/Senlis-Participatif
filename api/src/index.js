@@ -60,7 +60,7 @@ app.use(globalLimiter);
 // permettra à un client mobile ou une mairie (Lot 3) de
 // coexister avec une future v2 sans casser l'existant.
 app.use('/api/v1', healthRouter);
-app.use('api/v1/auth', authRouter)
+app.use('/api/v1/auth', authRouter)
 
 // Sprint 1 → app.use('/api/v1/auth', authRouter);
 // Sprint 2 → app.use('/api/v1/proposals', proposalsRouter);
