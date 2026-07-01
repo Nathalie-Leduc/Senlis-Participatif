@@ -30,15 +30,9 @@ const router = Router();
 // sans gêner un humain normal.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: {
-      code: 'RATE_LIMITED',
-      message: 'Trop de tentatives — réessayez dans 15 minutes.',
-    },
-  },
+  // ⚠️ En test, une suite Vitest enchaîne des dizaines de register/login
+  // depuis la même IP en quelques secondes → on desserre la limite.
+  max: process.env.NODE_ENV === 'test' ? 1000 : 10,
 });
 
 // ── Routes publiques (🔓) ───────────────────────────────
