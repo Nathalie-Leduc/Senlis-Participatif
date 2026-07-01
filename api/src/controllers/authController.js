@@ -129,7 +129,8 @@ export async function me(req, res, next) {
         pseudo: true,
         role: true,
         emailVerified: true,
-        notificationPref: true,
+        notifyNewProposal: true, // ← au lieu de notificationPref
+        notifySurveyClosed: true,   // ← ajouté
         createdAt: true,
       },
     });
