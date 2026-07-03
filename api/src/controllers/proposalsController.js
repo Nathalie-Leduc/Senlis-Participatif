@@ -22,26 +22,43 @@ import { generateUniqueSlug } from '../lib/slug.js';
 // PENDING_REVIEW, REJECTED ou ARCHIVED côté public.
 const VISIBLE_STATUSES = ['PUBLISHED', 'CLOSED'];
 
-// ── Agrégat des votes — partagé par getBySlug, castVote, removeVote ─
+// ── Agrégat des votes — pour PLUSIEURS propositions à la fois ──
 //
-// groupBy compte les votes par valeur (POUR/CONTRE/NEUTRE) en UNE
-// requête agrégée en base, plutôt que de rapatrier tous les votes
-// en mémoire pour les compter côté Node.
-async function getVoteAggregate(proposalId) {
+// Pourquoi "plusieurs" et pas "une seule" ? La liste publique affiche
+// une jauge de vote sur CHAQUE carte (voir wireframe). Si on appelait
+// une requête par proposition, une page de 10 cartes ferait 10 allers-
+// retours vers Postgres. Ici, UNE requête groupée couvre toute la page.
+//
+// Analogie : plutôt que d'appeler chaque table du restaurant une par
+// une pour demander l'addition, le serveur fait un seul passage et
+// note tout d'un coup.
+async function getVoteAggregatesForMany(proposalIds) {
+  if (proposalIds.length === 0) return {};
+
   const rawCounts = await prisma.vote.groupBy({
-    by: ['value'],
-    where: { proposalId },
+    by: ['proposalId', 'value'],
+    where: { proposalId: { in: proposalIds } },
     _count: true,
   });
 
-  // On garantit les 3 clés même à 0 vote — plus simple à consommer
-  // côté front qu'un objet qui pourrait manquer "NEUTRE" si personne
-  // n'a encore voté neutre.
-  const votes = { POUR: 0, CONTRE: 0, NEUTRE: 0 };
-  for (const { value, _count } of rawCounts) {
-    votes[value] = _count;
+  // On initialise à 0 pour TOUTES les propositions demandées — sinon
+  // une proposition sans aucun vote n'apparaîtrait pas du tout dans
+  // le résultat, et le front devrait deviner qu'"absent" veut dire 0.
+  const map = {};
+  for (const id of proposalIds) {
+    map[id] = { POUR: 0, CONTRE: 0, NEUTRE: 0 };
   }
-  return votes;
+  for (const { proposalId, value, _count } of rawCounts) {
+    map[proposalId][value] = _count;
+  }
+  return map;
+}
+
+// Version "une seule proposition" — un simple raccourci au-dessus de
+// la version batch, pour ne pas dupliquer la logique de groupBy.
+async function getVoteAggregate(proposalId) {
+  const map = await getVoteAggregatesForMany([proposalId]);
+  return map[proposalId];
 }
 
 // ── Règle métier partagée : le vote est-il encore ouvert ? ──
@@ -85,25 +102,43 @@ const LIST_SELECT = {
 // ── GET /proposals — liste paginée, publique ────────────
 export async function list(req, res, next) {
   try {
-    const { page, limit } = req.validatedQuery;
+    const { page, limit, status, sort } = req.validatedQuery;
 
-    // Deux requêtes en parallèle : les résultats de la page +
-    // le total pour calculer le nombre de pages côté front.
+    // Si un statut précis est demandé (PUBLISHED ou CLOSED, jamais
+    // autre chose — voir listProposalsQuerySchema), on filtre dessus.
+    // Sinon, "toutes" veut dire "toutes celles que le public peut voir".
+    const where = { status: status || { in: VISIBLE_STATUSES } };
+
+    // Deux tris possibles : les plus récentes d'abord (par défaut),
+    // ou les plus votées d'abord. Prisma sait trier directement sur
+    // le NOMBRE d'éléments d'une relation (votes: { _count: ... }),
+    // donc le tri se fait en base, pas en mémoire côté Node — important
+    // puisque skip/take doivent porter sur le même ordre.
+    const orderBy = sort === 'votes'
+      ? { votes: { _count: 'desc' } }
+      : { publishedAt: 'desc' };
+
     const [items, total] = await Promise.all([
       prisma.proposal.findMany({
-        where: { status: { in: VISIBLE_STATUSES } },
+        where,
         select: LIST_SELECT,
-        orderBy: { publishedAt: 'desc' },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.proposal.count({
-        where: { status: { in: VISIBLE_STATUSES } },
-      }),
+      prisma.proposal.count({ where }),
     ]);
 
+    // Une seule requête groupée pour les votes de TOUTE la page
+    // (voir getVoteAggregatesForMany plus haut).
+    const votesByProposal = await getVoteAggregatesForMany(items.map((p) => p.id));
+    const itemsWithVotes = items.map((p) => ({
+      ...p,
+      votes: votesByProposal[p.id],
+    }));
+
     res.json({
-      items,
+      items: itemsWithVotes,
       pagination: {
         page,
         limit,

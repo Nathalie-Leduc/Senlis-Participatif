@@ -65,6 +65,56 @@ describe('Propositions — liste et détail publics', () => {
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
+  it('chaque carte de la liste porte son agrégat de votes', async () => {
+    await seedProposal({ title: 'Avec votes' });
+
+    const res = await request(app).get(API);
+
+    expect(res.body.items[0].votes).toEqual({ POUR: 0, CONTRE: 0, NEUTRE: 0 });
+  });
+
+  it('filtre la liste par statut (?status=CLOSED)', async () => {
+    await seedProposal({ title: 'Publiée', status: 'PUBLISHED' });
+    await seedProposal({ title: 'Close', status: 'CLOSED' });
+
+    const res = await request(app).get(`${API}?status=CLOSED`);
+
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].title).toBe('Close');
+  });
+
+  it('rejette un statut hors PUBLISHED/CLOSED (ex. DRAFT) dans le filtre', async () => {
+    const res = await request(app).get(`${API}?status=DRAFT`);
+    expect(res.status).toBe(400);
+  });
+
+  it('trie par nombre de votes (?sort=votes) quand demandé', async () => {
+    const peuVotee = await seedProposal({ title: 'Peu votée' });
+    const treVotee = await seedProposal({ title: 'Très votée' });
+    const { user } = await makeCitizen();
+
+    await prisma.vote.createMany({
+      data: [
+        { userId: user.id, proposalId: peuVotee.id, value: 'POUR' },
+      ],
+    });
+    // Deux citoyens différents pour la seconde, car un même userId ne
+    // peut voter qu'une fois sur une même proposition (contrainte unique).
+    const alice = await makeCitizen();
+    const bob = await makeCitizen();
+    await prisma.vote.createMany({
+      data: [
+        { userId: alice.user.id, proposalId: treVotee.id, value: 'POUR' },
+        { userId: bob.user.id, proposalId: treVotee.id, value: 'CONTRE' },
+      ],
+    });
+
+    const res = await request(app).get(`${API}?sort=votes`);
+
+    expect(res.body.items[0].title).toBe('Très votée');
+    expect(res.body.items[1].title).toBe('Peu votée');
+  });
+
   it('renvoie le détail avec l\'agrégat des votes (0 partout si personne n\'a voté)', async () => {
     const proposal = await seedProposal();
 

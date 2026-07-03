@@ -43,10 +43,20 @@ app.use(
 
 app.use(express.json({ limit: '10kb' }));
 
-// Rate limiting global : 100 requêtes / minute / IP.
+// Rate limiting global : 100 requêtes / minute / IP en production.
+//
+// ⚠️ Même piège que pour authLimiter (voir routes/auth.js) : une
+// suite de tests d'intégration fait de VRAIES requêtes HTTP les
+// unes après les autres — inscription + vérification + connexion
+// pour chaque citoyen simulé, parfois plusieurs par test. Avec
+// des dizaines de tests, on dépasse vite 100 requêtes en quelques
+// secondes. Sans cet assouplissement, ce videur-ci bloquerait les
+// tests aussi silencieusement que l'autre (un 429 que Supertest
+// ne fait pas remonter comme une erreur — juste une réponse qu'on
+// ne vérifie pas forcément).
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

@@ -21,6 +21,7 @@ import VerificationEmail from './pages/VerificationEmail.jsx';
 import MotDePasseOublie from './pages/MotDePasseOublie.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
 import MonCompte from './pages/MonCompte.jsx';
+import Propositions from './pages/Propositions.jsx';
 import Mascot from './components/Mascot/Mascot.jsx';
 
 // Page 404 avec mascotte perdue 🦌
@@ -59,13 +60,14 @@ export default function App() {
             <Route path="/verification-email" element={<VerificationEmail />} />
             <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/propositions" element={<Propositions />} />
 
             {/* Routes protégées */}
             <Route path="/mon-compte" element={
               <ProtectedRoute><MonCompte /></ProtectedRoute>
             } />
 
-            {/* Sprint 2 → /propositions, /propositions/:slug */}
+            {/* Sprint 2 → /propositions/:slug (détail, prochaine étape) */}
             {/* Sprint 3 → /carte */}
             {/* Sprint 4 → /enquetes, /enquetes/:slug */}
 
