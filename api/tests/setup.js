@@ -22,6 +22,9 @@ vi.mock('nodemailer', () => ({
 // qu'on nettoie avant chaque expérience, sinon les résidus de
 // la précédente faussent le résultat de la suivante.
 beforeEach(async () => {
+  await prisma.vote.deleteMany();
+  await prisma.comment.deleteMany();
+  await prisma.proposal.deleteMany();
   await prisma.authToken.deleteMany();
   await prisma.user.deleteMany();
   sendMailMock.mockClear();
