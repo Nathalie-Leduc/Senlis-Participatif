@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import prisma from '../src/lib/prisma.js';
-import { makeAdminUser, buildUser, extractTokenFromEmail } from './helpers.js';
+import { makeAdminUser, makeCitizen, buildUser, extractTokenFromEmail } from './helpers.js';
 import { sendMailMock } from './setup.js';
 
 const API = '/api/v1/proposals';
@@ -257,5 +257,151 @@ describe('Propositions — CRUD admin', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe('Propositions — vote', () => {
+  it('refuse de voter sans authentification', async () => {
+    const proposal = await seedProposal();
+    const res = await request(app).put(`${API}/${proposal.id}/vote`).send({ value: 'POUR' });
+    expect(res.status).toBe(401);
+  });
+
+  it("refuse de voter sans email vérifié", async () => {
+    const proposal = await seedProposal();
+    const credentials = buildUser();
+    await request(app).post('/api/v1/auth/register').send(credentials);
+    // Pas de vérification d'email ici, volontairement.
+    // On ne peut pas se connecter sans email vérifié (voir auth.test.js),
+    // donc on ne peut même pas obtenir de JWT — ce test documente
+    // qu'EMAIL_NOT_VERIFIED est de toute façon inatteignable sans passer
+    // par login, qui bloque déjà en amont. On vérifie donc plutôt le cas
+    // symétrique : login refusé, comme prévu par le contrôleur auth.
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: credentials.email, password: credentials.password });
+    expect(login.status).toBe(403);
+    expect(login.body.error.code).toBe('EMAIL_NOT_VERIFIED');
+  });
+
+  it('un citoyen vote POUR — upsert en création', async () => {
+    const proposal = await seedProposal();
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .put(`${API}/${proposal.id}/vote`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 'POUR' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.votes).toEqual({ POUR: 1, CONTRE: 0, NEUTRE: 0 });
+  });
+
+  it("un citoyen change d'avis — upsert en mise à jour, pas de doublon", async () => {
+    const proposal = await seedProposal();
+    const { token } = await makeCitizen();
+
+    await request(app).put(`${API}/${proposal.id}/vote`).set('Authorization', `Bearer ${token}`).send({ value: 'POUR' });
+    const res = await request(app)
+      .put(`${API}/${proposal.id}/vote`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 'CONTRE' });
+
+    expect(res.status).toBe(200);
+    // Un seul vote pour ce citoyen : POUR est retombé à 0, CONTRE est monté à 1.
+    expect(res.body.votes).toEqual({ POUR: 0, CONTRE: 1, NEUTRE: 0 });
+
+    const votesInDb = await prisma.vote.findMany({ where: { proposalId: proposal.id } });
+    expect(votesInDb).toHaveLength(1);
+  });
+
+  it('rejette une valeur de vote invalide', async () => {
+    const proposal = await seedProposal();
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .put(`${API}/${proposal.id}/vote`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 'PEUT-ETRE' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('refuse de voter sur une proposition CLOSED', async () => {
+    const proposal = await seedProposal({ status: 'CLOSED' });
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .put(`${API}/${proposal.id}/vote`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 'POUR' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('VOTES_CLOSED');
+  });
+
+  it('refuse de voter après la date closesAt, même si le statut est encore PUBLISHED', async () => {
+    const hier = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const proposal = await seedProposal({ closesAt: hier });
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .put(`${API}/${proposal.id}/vote`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 'POUR' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('VOTES_CLOSED');
+  });
+
+  it('renvoie 404 en votant sur une proposition inexistante', async () => {
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .put(`${API}/00000000-0000-0000-0000-000000000000/vote`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 'POUR' });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('un citoyen retire son vote', async () => {
+    const proposal = await seedProposal();
+    const { token } = await makeCitizen();
+
+    await request(app).put(`${API}/${proposal.id}/vote`).set('Authorization', `Bearer ${token}`).send({ value: 'NEUTRE' });
+    const res = await request(app)
+      .delete(`${API}/${proposal.id}/vote`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.votes).toEqual({ POUR: 0, CONTRE: 0, NEUTRE: 0 });
+
+    const votesInDb = await prisma.vote.findMany({ where: { proposalId: proposal.id } });
+    expect(votesInDb).toHaveLength(0);
+  });
+
+  it("renvoie 404 en retirant un vote qui n'existe pas", async () => {
+    const proposal = await seedProposal();
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .delete(`${API}/${proposal.id}/vote`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('deux citoyens différents votent sans se marcher dessus', async () => {
+    const proposal = await seedProposal();
+    const alice = await makeCitizen();
+    const bob = await makeCitizen();
+
+    await request(app).put(`${API}/${proposal.id}/vote`).set('Authorization', `Bearer ${alice.token}`).send({ value: 'POUR' });
+    await request(app).put(`${API}/${proposal.id}/vote`).set('Authorization', `Bearer ${bob.token}`).send({ value: 'CONTRE' });
+
+    const res = await request(app).get(`${API}/${proposal.slug}`);
+    expect(res.body.votes).toEqual({ POUR: 1, CONTRE: 1, NEUTRE: 0 });
   });
 });

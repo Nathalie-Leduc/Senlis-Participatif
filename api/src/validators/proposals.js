@@ -53,3 +53,9 @@ export const listProposalsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
+
+export const voteSchema = z.object({
+  value: z.enum(['POUR', 'CONTRE', 'NEUTRE'], {
+    errorMap: () => ({ message: 'La valeur doit être POUR, CONTRE ou NEUTRE' }),
+  }),
+});

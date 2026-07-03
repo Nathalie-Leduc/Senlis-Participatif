@@ -52,6 +52,27 @@ export function extractTokenFromEmail(sendMailCallArgs) {
 }
 
 /**
+ * Fabrique un citoyen inscrit ET vérifié, prêt à voter. Contrairement
+ * à makeAdminUser(), pas de promotion en base — juste le parcours
+ * normal d'un visiteur qui devient citoyen.
+ *
+ * @returns {Promise<{ user: object, token: string }>}
+ */
+export async function makeCitizen() {
+  const credentials = buildUser();
+
+  await request(app).post('/api/v1/auth/register').send(credentials);
+  const token = extractTokenFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+  await request(app).post('/api/v1/auth/verify-email').send({ token: token });
+
+  const loginRes = await request(app)
+    .post('/api/v1/auth/login')
+    .send({ email: credentials.email, password: credentials.password });
+
+  return { user: loginRes.body.user, token: loginRes.body.token };
+}
+
+/**
  * Fabrique un utilisateur ADMIN prêt à l'emploi et renvoie son JWT.
  *
  * Il n'existe pas (encore) de route API pour créer un admin — c'est
