@@ -35,3 +35,35 @@ export function validate(schema) {
     next();
   };
 }
+
+/**
+ * Même principe que validate(), mais pour req.query (les paramètres
+ * d'URL comme ?page=2&limit=20). Séparé de validate() parce que
+ * req.query est en lecture seule sur certaines versions d'Express —
+ * on écrit plutôt le résultat nettoyé dans req.validatedQuery, que
+ * les contrôleurs utilisent à la place de req.query directement.
+ *
+ * Usage : router.get('/', validateQuery(listProposalsQuerySchema), ctrl.list);
+ */
+export function validateQuery(schema) {
+  return (req, _res, next) => {
+    const result = schema.safeParse(req.query);
+
+    if (!result.success) {
+      const details = {};
+      for (const issue of result.error.issues) {
+        const field = issue.path.join('.');
+        details[field] = issue.message;
+      }
+
+      const error = new Error('Paramètres de requête invalides');
+      error.status = 400;
+      error.code = 'VALIDATION_ERROR';
+      error.details = details;
+      return next(error);
+    }
+
+    req.validatedQuery = result.data; // ex. { page: 1, limit: 10 } déjà coercés en nombres
+    next();
+  };
+}
