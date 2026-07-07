@@ -111,6 +111,7 @@ export async function login(req, res, next) {
         email: user.email,
         pseudo: user.pseudo,
         role: user.role,
+        emailVerified: user.emailVerified,
       },
     });
   } catch (err) {
@@ -129,8 +130,8 @@ export async function me(req, res, next) {
         pseudo: true,
         role: true,
         emailVerified: true,
-        notifyNewProposal: true, // ← au lieu de notificationPref
-        notifySurveyClosed: true,   // ← ajouté
+        notifyNewProposal: true,
+        notifySurveyClosed: true,
         createdAt: true,
       },
     });

@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 
 export default function Connexion() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,15 @@ export default function Connexion() {
     setError(null);
     try {
       await login(form);
-      navigate('/');
+      // ?redirect=/propositions/xxx permet de revenir exactement
+      // là où on était avant d'être invité à se connecter — ex. sur
+      // une proposition, pour que le vote qu'on voulait faire puisse
+      // être rejoué automatiquement (voir PropositionDetail.jsx).
+      // On ne fait confiance qu'à un chemin interne commençant par
+      // "/" — jamais à une URL complète, pour éviter qu'un lien
+      // piégé ne redirige vers un site externe après connexion.
+      const redirect = searchParams.get('redirect');
+      navigate(redirect && redirect.startsWith('/') ? redirect : '/');
     } catch (err) {
       setError(err.message || 'Email ou mot de passe incorrect');
     } finally {

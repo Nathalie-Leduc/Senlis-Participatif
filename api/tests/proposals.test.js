@@ -169,6 +169,28 @@ describe('Propositions — liste et détail publics', () => {
     const res = await request(app).get(`${API}/ce-slug-n-existe-pas`);
     expect(res.status).toBe(404);
   });
+
+  it("myVote est absent (null) pour un visiteur anonyme", async () => {
+    const proposal = await seedProposal();
+    const res = await request(app).get(`${API}/${proposal.slug}`);
+    expect(res.body.myVote).toBeNull();
+  });
+
+  it('myVote reflète le vote déjà enregistré pour un citoyen connecté', async () => {
+    const proposal = await seedProposal();
+    const { token } = await makeCitizen();
+
+    await request(app)
+      .put(`${API}/${proposal.id}/vote`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ value: 'CONTRE' });
+
+    const res = await request(app)
+      .get(`${API}/${proposal.slug}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.body.myVote).toBe('CONTRE');
+  });
 });
 
 describe('Propositions — CRUD admin', () => {

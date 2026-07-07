@@ -8,6 +8,11 @@
 @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(1.5); } }
 @keyframes blobFloat { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(20px,-15px) scale(1.05); } 66% { transform: translate(-10px,10px) scale(.97); } }
 @keyframes confettiFall { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+// .confetti-piece réutilise ce keyframe — voir components/Confetti/Confetti.jsx.
+// Le composant React ne crée ces éléments QUE si prefers-reduced-motion
+// n'est pas activé (vérifié en JS), donc pas besoin de @include motion
+// ici : s'ils existent dans le DOM, c'est qu'on peut déjà les animer.
+.confetti-piece { position: absolute; top: -20px; width: 10px; height: 14px; border-radius: 2px; animation-name: confettiFall; animation-timing-function: ease-in; animation-fill-mode: forwards; }
 @keyframes slideUp { 0% { transform: translateY(20px) scale(.9); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
 @keyframes underlineGrow { to { transform: scaleX(1); } }
 @keyframes bubbleFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
