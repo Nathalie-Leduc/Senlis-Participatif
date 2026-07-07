@@ -45,6 +45,40 @@ export function auth(req, _res, next) {
 }
 
 /**
+ * Identifie l'utilisateur SI un JWT valide est fourni — mais ne
+ * bloque jamais, contrairement à auth(). req.user reste undefined
+ * si personne n'est connecté, ou si le token est invalide/expiré
+ * (on l'ignore silencieusement plutôt que de renvoyer une erreur).
+ *
+ * Utile pour une route publique qui se comporte "un peu différemment"
+ * pour quelqu'un de connecté — ex. GET /proposals/:slug renvoie
+ * l'agrégat des votes pour tout le monde, mais SI le visiteur est
+ * connecté, on ajoute aussi "voici votre propre vote" à la réponse.
+ *
+ * Analogie : le videur habituel (auth) refuse l'entrée sans badge.
+ * Celui-ci laisse entrer tout le monde, mais note discrètement qui
+ * porte un badge valide, pour adapter l'accueil sans jamais recaler
+ * personne à la porte.
+ *
+ * Usage : router.get('/:slug', optionalAuth, ctrl.getBySlug);
+ */
+export function optionalAuth(req, _res, next) {
+  const header = req.headers.authorization;
+
+  if (!header || !header.startsWith('Bearer ')) {
+    return next(); // pas de token → visiteur anonyme, on continue
+  }
+
+  try {
+    req.user = verifyToken(header.slice(7));
+  } catch {
+    // Token présent mais invalide/expiré : on l'ignore plutôt que
+    // de bloquer une route publique pour un problème de session.
+  }
+  next();
+}
+
+/**
  * Exige le rôle ADMIN (à chaîner APRÈS auth).
  * Usage : router.post('/...', auth, isAdmin, ctrl.create);
  */

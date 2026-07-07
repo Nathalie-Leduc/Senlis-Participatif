@@ -172,7 +172,20 @@ export async function getBySlug(req, res, next) {
     // — voir getVoteAggregate() plus haut, réutilisée par castVote/removeVote.
     const votes = await getVoteAggregate(proposal.id);
 
-    res.json({ proposal, votes });
+    // req.user n'existe QUE si optionalAuth a trouvé un JWT valide
+    // (voir middlewares/auth.js). Un visiteur anonyme n'a pas de
+    // myVote dans la réponse — le front traite "absent" comme
+    // "n'a pas encore voté", ce qui est la vérité dans ce cas.
+    let myVote = null;
+    if (req.user) {
+      const vote = await prisma.vote.findUnique({
+        where: { userId_proposalId: { userId: req.user.userId, proposalId: proposal.id } },
+        select: { value: true },
+      });
+      myVote = vote?.value || null;
+    }
+
+    res.json({ proposal, votes, myVote });
   } catch (err) {
     next(err);
   }

@@ -13,7 +13,7 @@
 
 import { Router } from 'express';
 import { validate, validateQuery } from '../middlewares/validate.js';
-import { auth, isAdmin, requireVerifiedEmail } from '../middlewares/auth.js';
+import { auth, isAdmin, requireVerifiedEmail, optionalAuth } from '../middlewares/auth.js';
 import * as ctrl from '../controllers/proposalsController.js';
 import {
   createProposalSchema,
@@ -26,7 +26,7 @@ const router = Router();
 
 // ── Routes publiques (🔓) ───────────────────────────────
 router.get('/', validateQuery(listProposalsQuerySchema), ctrl.list);
-router.get('/:slug', ctrl.getBySlug);
+router.get('/:slug', optionalAuth, ctrl.getBySlug);
 
 // ── Routes admin (👑) ───────────────────────────────────
 // auth vérifie le JWT ; isAdmin vérifie ENSUITE le rôle — l'ordre
