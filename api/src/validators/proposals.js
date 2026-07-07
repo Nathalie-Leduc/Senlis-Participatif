@@ -47,11 +47,15 @@ export const updateProposalSchema = z.object({
   moderationNote: z.string().trim().max(500).optional(),
 });
 
-// Query params de la liste publique : ?page=2&limit=20
+// Query params de la liste publique : ?page=2&limit=20&status=PUBLISHED&sort=votes
 // z.coerce transforme la chaîne de l'URL ("2") en nombre (2) avant validation.
 export const listProposalsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(10),
+  // Volontairement restreint à PUBLISHED/CLOSED : même filtré, le public
+  // ne doit jamais pouvoir demander DRAFT ou PENDING_REVIEW dans l'URL.
+  status: z.enum(['PUBLISHED', 'CLOSED']).optional(),
+  sort: z.enum(['recent', 'votes']).default('recent'),
 });
 
 export const voteSchema = z.object({
