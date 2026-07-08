@@ -10,6 +10,25 @@ import { sendMailMock } from './setup.js';
 let counter = 0;
 
 /**
+ * Crée une proposition directement en base (sans passer par l'API),
+ * pour préparer le terrain d'un test sans dépendre du contrôleur
+ * qu'on est justement en train de tester.
+ */
+export function seedProposal(overrides = {}) {
+  return prisma.proposal.create({
+    data: {
+      slug: `proposition-${Math.random().toString(36).slice(2, 8)}`,
+      title: 'Piétonnisation du centre historique',
+      summary: 'Fermer le centre-ville à la circulation chaque samedi.',
+      content: 'Argumentaire complet avec chiffres INSEE et retours des commerçants...',
+      status: 'PUBLISHED',
+      publishedAt: new Date(),
+      ...overrides,
+    },
+  });
+}
+
+/**
  * Construit un utilisateur de test avec un email et un pseudo
  * uniques à chaque appel.
  *
