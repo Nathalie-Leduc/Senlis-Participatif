@@ -11,27 +11,10 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import prisma from '../src/lib/prisma.js';
-import { makeAdminUser, makeCitizen, buildUser, extractTokenFromEmail } from './helpers.js';
+import { makeAdminUser, makeCitizen, buildUser, extractTokenFromEmail, seedProposal } from './helpers.js';
 import { sendMailMock } from './setup.js';
 
 const API = '/api/v1/proposals';
-
-// Raccourci : crée une proposition directement en base (sans passer
-// par l'API), pour préparer le terrain d'un test sans dépendre du
-// contrôleur qu'on est justement en train de tester.
-function seedProposal(overrides = {}) {
-  return prisma.proposal.create({
-    data: {
-      slug: `proposition-${Math.random().toString(36).slice(2, 8)}`,
-      title: 'Piétonnisation du centre historique',
-      summary: 'Fermer le centre-ville à la circulation chaque samedi.',
-      content: 'Argumentaire complet avec chiffres INSEE et retours des commerçants...',
-      status: 'PUBLISHED',
-      publishedAt: new Date(),
-      ...overrides,
-    },
-  });
-}
 
 describe('Propositions — liste et détail publics', () => {
   it('liste uniquement les propositions PUBLISHED et CLOSED', async () => {
@@ -190,6 +173,66 @@ describe('Propositions — liste et détail publics', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.body.myVote).toBe('CONTRE');
+  });
+});
+
+describe('Propositions — liste admin', () => {
+  it('refuse la liste admin sans authentification', async () => {
+    const res = await request(app).get(`${API}/admin`);
+    expect(res.status).toBe(401);
+  });
+
+  it('refuse la liste admin à un citoyen non-admin', async () => {
+    const { token } = await makeCitizen();
+    const res = await request(app).get(`${API}/admin`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('un admin voit TOUS les statuts, brouillons compris', async () => {
+    await seedProposal({ title: 'Brouillon', status: 'DRAFT', publishedAt: null });
+    await seedProposal({ title: 'Publiée', status: 'PUBLISHED' });
+    const { token } = await makeAdminUser();
+
+    const res = await request(app).get(`${API}/admin`).set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(2);
+  });
+
+  it('filtre la liste admin par statut exact (ex. DRAFT)', async () => {
+    await seedProposal({ title: 'Brouillon', status: 'DRAFT', publishedAt: null });
+    await seedProposal({ title: 'Publiée', status: 'PUBLISHED' });
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .get(`${API}/admin?status=DRAFT`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].title).toBe('Brouillon');
+  });
+
+  it('un admin peut consulter le détail d\'un brouillon via /propositions/:slug', async () => {
+    const draft = await seedProposal({ status: 'DRAFT', publishedAt: null });
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .get(`${API}/${draft.slug}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.proposal.status).toBe('DRAFT');
+  });
+
+  it('un citoyen (non-admin) ne peut PAS consulter un brouillon, même connecté', async () => {
+    const draft = await seedProposal({ status: 'DRAFT', publishedAt: null });
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .get(`${API}/${draft.slug}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
   });
 });
 

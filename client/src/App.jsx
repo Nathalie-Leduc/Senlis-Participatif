@@ -23,6 +23,8 @@ import ResetPassword from './pages/ResetPassword.jsx';
 import MonCompte from './pages/MonCompte.jsx';
 import Propositions from './pages/Propositions.jsx';
 import PropositionDetail from './pages/PropositionDetail.jsx';
+import AdminPropositions from './pages/AdminPropositions.jsx';
+import AdminPropositionForm from './pages/AdminPropositionForm.jsx';
 import Mascot from './components/Mascot/Mascot.jsx';
 
 // Page 404 avec mascotte perdue 🦌
@@ -67,6 +69,15 @@ export default function App() {
             {/* Routes protégées */}
             <Route path="/mon-compte" element={
               <ProtectedRoute><MonCompte /></ProtectedRoute>
+            } />
+            <Route path="/admin/propositions" element={
+              <ProtectedRoute adminOnly><AdminPropositions /></ProtectedRoute>
+            } />
+            <Route path="/admin/propositions/nouvelle" element={
+              <ProtectedRoute adminOnly><AdminPropositionForm /></ProtectedRoute>
+            } />
+            <Route path="/admin/propositions/:slug/modifier" element={
+              <ProtectedRoute adminOnly><AdminPropositionForm /></ProtectedRoute>
             } />
 
             {/* Sprint 3 → /carte */}
