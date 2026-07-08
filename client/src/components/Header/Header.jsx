@@ -6,10 +6,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
 export default function Header() {
-  const { isLogged, user, logout } = useAuth();
+  const { isLogged, isAdmin, user, logout } = useAuth();
   const { pathname } = useLocation();
 
-  const isActive = (path) => pathname === path;
+  // "/" doit être une correspondance EXACTE (sinon elle matcherait
+  // TOUJOURS, puisque tout chemin commence par "/"). Les autres
+  // acceptent aussi leurs sous-pages (ex. /admin/propositions/nouvelle
+  // doit garder "Admin" actif dans la nav).
+  const isActive = (path) => (path === '/' ? pathname === '/' : pathname.startsWith(path));
 
   return (
     <header style={{
@@ -34,7 +38,12 @@ export default function Header() {
 
         <nav style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <NavBtn to="/" active={isActive('/')}>Accueil</NavBtn>
-          {/* Sprint 2 → <NavBtn to="/propositions">Propositions</NavBtn> */}
+          <NavBtn to="/propositions" active={isActive('/propositions')}>Propositions</NavBtn>
+          {isAdmin && (
+            <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>
+              Admin
+            </NavBtn>
+          )}
           {/* Sprint 4 → <NavBtn to="/enquetes">Enquêtes</NavBtn> */}
 
           {isLogged ? (

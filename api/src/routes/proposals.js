@@ -2,13 +2,14 @@
 // Routes Propositions — /api/v1/proposals/...
 //
 // 🔓 GET  /proposals          liste publique (paginée)
+// 👑 GET  /proposals/admin    liste ADMIN, tous statuts (brouillons inclus)
 // 🔓 GET  /proposals/:slug    détail public + agrégat des votes
+//                             (un admin peut aussi y voir un brouillon)
 // 👑 POST /proposals          créer
 // 👑 PATCH  /proposals/:id    éditer / changer de statut
 // 👑 DELETE /proposals/:id    supprimer
-//
-// Le vote (PUT /proposals/:id/vote) arrive dans un prochain
-// morceau du Sprint 2 — pas encore dans ce fichier.
+// 🔐 PUT    /proposals/:id/vote     voter (email vérifié)
+// 🔐 DELETE /proposals/:id/vote     retirer son vote
 // ══════════════════════════════════════════════════════════
 
 import { Router } from 'express';
@@ -19,6 +20,7 @@ import {
   createProposalSchema,
   updateProposalSchema,
   listProposalsQuerySchema,
+  adminListProposalsQuerySchema,
   voteSchema,
 } from '../validators/proposals.js';
 
@@ -26,6 +28,13 @@ const router = Router();
 
 // ── Routes publiques (🔓) ───────────────────────────────
 router.get('/', validateQuery(listProposalsQuerySchema), ctrl.list);
+
+// ⚠️ IMPORTANT : cette route doit être déclarée AVANT "/:slug" —
+// sinon Express interpréterait "admin" comme une VALEUR de :slug
+// (il cherche une correspondance dans l'ORDRE où les routes sont
+// écrites, et s'arrête à la première qui correspond).
+router.get('/admin', auth, isAdmin, validateQuery(adminListProposalsQuerySchema), ctrl.listAdmin);
+
 router.get('/:slug', optionalAuth, ctrl.getBySlug);
 
 // ── Routes admin (👑) ───────────────────────────────────

@@ -193,6 +193,66 @@ describe('Propositions — liste et détail publics', () => {
   });
 });
 
+describe('Propositions — liste admin', () => {
+  it('refuse la liste admin sans authentification', async () => {
+    const res = await request(app).get(`${API}/admin`);
+    expect(res.status).toBe(401);
+  });
+
+  it('refuse la liste admin à un citoyen non-admin', async () => {
+    const { token } = await makeCitizen();
+    const res = await request(app).get(`${API}/admin`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('un admin voit TOUS les statuts, brouillons compris', async () => {
+    await seedProposal({ title: 'Brouillon', status: 'DRAFT', publishedAt: null });
+    await seedProposal({ title: 'Publiée', status: 'PUBLISHED' });
+    const { token } = await makeAdminUser();
+
+    const res = await request(app).get(`${API}/admin`).set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(2);
+  });
+
+  it('filtre la liste admin par statut exact (ex. DRAFT)', async () => {
+    await seedProposal({ title: 'Brouillon', status: 'DRAFT', publishedAt: null });
+    await seedProposal({ title: 'Publiée', status: 'PUBLISHED' });
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .get(`${API}/admin?status=DRAFT`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].title).toBe('Brouillon');
+  });
+
+  it('un admin peut consulter le détail d\'un brouillon via /propositions/:slug', async () => {
+    const draft = await seedProposal({ status: 'DRAFT', publishedAt: null });
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .get(`${API}/${draft.slug}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.proposal.status).toBe('DRAFT');
+  });
+
+  it('un citoyen (non-admin) ne peut PAS consulter un brouillon, même connecté', async () => {
+    const draft = await seedProposal({ status: 'DRAFT', publishedAt: null });
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .get(`${API}/${draft.slug}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('Propositions — CRUD admin', () => {
   it('refuse la création sans authentification', async () => {
     const res = await request(app).post(API).send({

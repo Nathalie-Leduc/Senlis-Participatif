@@ -63,3 +63,14 @@ export const voteSchema = z.object({
     errorMap: () => ({ message: 'La valeur doit être POUR, CONTRE ou NEUTRE' }),
   }),
 });
+
+// Query params de la liste ADMIN : mêmes page/limit que la version
+// publique, mais le filtre statut accepte cette fois les 6 valeurs
+// (DRAFT, PENDING_REVIEW... ) — c'est tout l'intérêt de cette route :
+// un admin doit pouvoir retrouver ses brouillons, pas seulement ce
+// qui est déjà publié.
+export const adminListProposalsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  status: proposalStatus.optional(),
+});
