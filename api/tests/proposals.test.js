@@ -383,7 +383,6 @@ describe('Propositions — vote', () => {
   });
 
   it("refuse de voter sans email vérifié", async () => {
-    const proposal = await seedProposal();
     const credentials = buildUser();
     await request(app).post('/api/v1/auth/register').send(credentials);
     // Pas de vérification d'email ici, volontairement.
