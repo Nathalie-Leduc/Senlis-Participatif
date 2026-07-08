@@ -99,6 +99,38 @@ const LIST_SELECT = {
   closesAt: true,
 };
 
+// ── GET /proposals/admin — liste ADMIN, tous statuts confondus ─
+//
+// Contrairement à list() (public), celle-ci ne filtre JAMAIS sur
+// VISIBLE_STATUSES — un admin doit retrouver ses brouillons pour
+// pouvoir les éditer ou les publier. C'est la "réserve du magasin",
+// pas la vitrine.
+export async function listAdmin(req, res, next) {
+  try {
+    const { page, limit, status } = req.validatedQuery;
+
+    const where = status ? { status } : {}; // pas de filtre = tout voir
+
+    const [items, total] = await Promise.all([
+      prisma.proposal.findMany({
+        where,
+        select: LIST_SELECT,
+        orderBy: { createdAt: 'desc' }, // les plus récemment créées d'abord, brouillons inclus
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.proposal.count({ where }),
+    ]);
+
+    res.json({
+      items,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ── GET /proposals — liste paginée, publique ────────────
 export async function list(req, res, next) {
   try {
@@ -158,10 +190,16 @@ export async function getBySlug(req, res, next) {
 
     const proposal = await prisma.proposal.findUnique({ where: { slug } });
 
-    // Une proposition DRAFT existe en BDD mais n'existe pas pour
-    // le public — on renvoie 404, jamais 403 : sinon un visiteur
-    // saurait qu'un brouillon existe à cette adresse, juste caché.
-    if (!proposal || !VISIBLE_STATUSES.includes(proposal.status)) {
+    // Un visiteur normal ne voit QUE PUBLISHED/CLOSED — mais un admin
+    // doit pouvoir consulter (et donc éditer) un brouillon, sans quoi
+    // le formulaire d'édition n'aurait aucun moyen de charger les
+    // données existantes d'une proposition pas encore publiée.
+    // req.user n'existe que si optionalAuth a trouvé un JWT valide
+    // (voir middlewares/auth.js) — un visiteur anonyme n'a pas ce
+    // passe-droit, quoi qu'il arrive.
+    const isAdmin = req.user?.role === 'ADMIN';
+
+    if (!proposal || (!VISIBLE_STATUSES.includes(proposal.status) && !isAdmin)) {
       const error = new Error('Proposition introuvable');
       error.status = 404;
       error.code = 'NOT_FOUND';
