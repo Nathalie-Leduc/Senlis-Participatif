@@ -11,27 +11,10 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import prisma from '../src/lib/prisma.js';
-import { makeAdminUser, makeCitizen, buildUser, extractTokenFromEmail } from './helpers.js';
+import { makeAdminUser, makeCitizen, buildUser, extractTokenFromEmail, seedProposal } from './helpers.js';
 import { sendMailMock } from './setup.js';
 
 const API = '/api/v1/proposals';
-
-// Raccourci : crée une proposition directement en base (sans passer
-// par l'API), pour préparer le terrain d'un test sans dépendre du
-// contrôleur qu'on est justement en train de tester.
-function seedProposal(overrides = {}) {
-  return prisma.proposal.create({
-    data: {
-      slug: `proposition-${Math.random().toString(36).slice(2, 8)}`,
-      title: 'Piétonnisation du centre historique',
-      summary: 'Fermer le centre-ville à la circulation chaque samedi.',
-      content: 'Argumentaire complet avec chiffres INSEE et retours des commerçants...',
-      status: 'PUBLISHED',
-      publishedAt: new Date(),
-      ...overrides,
-    },
-  });
-}
 
 describe('Propositions — liste et détail publics', () => {
   it('liste uniquement les propositions PUBLISHED et CLOSED', async () => {
