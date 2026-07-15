@@ -23,6 +23,7 @@ import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import VoteButtons from '../components/VoteButtons/VoteButtons.jsx';
 import Confetti from '../components/Confetti/Confetti.jsx';
+import LazyMapView from '../components/MapView/LazyMapView.jsx';
 
 const PENDING_VOTE_KEY = 'senlis:pendingVote';
 
@@ -184,13 +185,16 @@ export default function PropositionDetail() {
         </p>
       )}
 
-      {/* ── Carte (arrive au Sprint 3) ───────────────────── */}
-      {(proposal.lat || proposal.geoJson) && (
-        <div style={{
-          background: '#E0F2E5', borderRadius: 20, padding: 20, marginBottom: 24,
-          textAlign: 'center', color: '#3A7A4D', fontSize: 14, fontWeight: 600,
-        }}>
-          🗺️ La carte du périmètre arrive au Sprint 3
+      {/* ── Carte ─────────────────────────────────────────── */}
+      {/* Les périmètres GeoJSON (tracé de rue fermée, zone
+          végétalisée...) arrivent avec S3-02 — ici, un simple
+          marqueur ponctuel sur les coordonnées de la proposition. */}
+      {proposal.lat && proposal.lng && (
+        <div style={{ marginBottom: 24 }}>
+          <LazyMapView
+            center={[proposal.lat, proposal.lng]}
+            markers={[{ id: proposal.id, lat: proposal.lat, lng: proposal.lng, label: proposal.title }]}
+          />
         </div>
       )}
 
