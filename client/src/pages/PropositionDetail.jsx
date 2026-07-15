@@ -186,14 +186,16 @@ export default function PropositionDetail() {
       )}
 
       {/* ── Carte ─────────────────────────────────────────── */}
-      {/* Les périmètres GeoJSON (tracé de rue fermée, zone
-          végétalisée...) arrivent avec S3-02 — ici, un simple
-          marqueur ponctuel sur les coordonnées de la proposition. */}
+      {/* Le périmètre GeoJSON (tracé exact d'une rue fermée, par
+          exemple) reste vide tant que S3-04 (saisie admin) n'existe
+          pas — mais la capacité de l'afficher est prête dès qu'un
+          admin en saisira un. */}
       {proposal.lat && proposal.lng && (
         <div style={{ marginBottom: 24 }}>
           <LazyMapView
             center={[proposal.lat, proposal.lng]}
             markers={[{ id: proposal.id, lat: proposal.lat, lng: proposal.lng, label: proposal.title }]}
+            perimeters={proposal.geoJson}
           />
         </div>
       )}

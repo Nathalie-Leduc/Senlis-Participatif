@@ -14,7 +14,7 @@
 // ouvrent une page où une carte apparaît réellement.
 // ══════════════════════════════════════════════════════════
 
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Link } from 'react-router-dom';
@@ -44,18 +44,38 @@ const cerfIcon = L.divIcon({
 // quand aucun marqueur précis n'est fourni (vue d'ensemble).
 const SENLIS_CENTER = [49.2058, 2.5847];
 
+// Style du tracé de périmètre (zone piétonne, par exemple) — vert
+// "tilleul" semi-transparent, cohérent avec la légende prévue au
+// wireframe (🟢 Périmètre piéton).
+const PERIMETER_STYLE = {
+  color: '#3A7A4D',
+  weight: 3,
+  fillColor: '#3A7A4D',
+  fillOpacity: 0.15,
+};
+
 /**
  * @param {[number, number]} center - [latitude, longitude] du centre initial
  * @param {number} zoom - niveau de zoom initial (plus grand = plus proche)
  * @param {Array<{id, lat, lng, label, slug?}>} markers - points à afficher
+ * @param {object|Array<object>} perimeters - un objet GeoJSON (Feature/FeatureCollection),
+ *   ou un tableau de plusieurs — le tracé d'une zone piétonne, par exemple.
+ *   Peut être absent : toutes les propositions n'ont pas forcément
+ *   de périmètre saisi (ça arrive avec S3-04, saisie admin).
  * @param {number|string} height - hauteur du conteneur (la largeur suit son parent)
  */
 export default function MapView({
   center = SENLIS_CENTER,
   zoom = 15,
   markers = [],
+  perimeters = [],
   height = 320,
 }) {
+  // On accepte un objet GeoJSON unique OU un tableau — plus simple
+  // pour qui appelle ce composant avec une seule proposition (page
+  // détail) que d'avoir à l'envelopper soi-même dans un tableau.
+  const perimeterList = Array.isArray(perimeters) ? perimeters : [perimeters];
+
   return (
     <MapContainer
       center={center}
@@ -72,6 +92,11 @@ export default function MapView({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+
+      {perimeterList.filter(Boolean).map((geoJson, i) => (
+        <GeoJSON key={i} data={geoJson} style={PERIMETER_STYLE} />
+      ))}
+
       {markers.map((m) => (
         <Marker key={m.id} position={[m.lat, m.lng]} icon={cerfIcon}>
           <Popup>
