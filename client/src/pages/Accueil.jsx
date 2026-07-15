@@ -7,12 +7,40 @@
 // données (propositions, enquêtes) aux sprints suivants.
 // ══════════════════════════════════════════════════════════
 
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
+import LazyMapView from '../components/MapView/LazyMapView.jsx';
 
 export default function Accueil() {
   const { isLogged } = useAuth();
+  const [proposalsTotal, setProposalsTotal] = useState(0);
+  const [markers, setMarkers] = useState([]);
+  const [mapLoaded, setMapLoaded] = useState(false);
+
+  // On récupère un lot de propositions publiques pour la mini-carte
+  // ET pour le compteur "propositions" du hero — une seule requête
+  // sert les deux affichages, pas besoin d'en faire deux séparées.
+  useEffect(() => {
+    api.get('/proposals?limit=50')
+      .then((data) => {
+        setProposalsTotal(data.pagination.total);
+        setMarkers(
+          data.items
+            .filter((p) => p.lat && p.lng) // toutes n'ont pas (encore) de localisation
+            .map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, label: p.title, slug: p.slug }))
+        );
+      })
+      .catch(() => {
+        // Page d'accueil : on échoue silencieusement plutôt que
+        // d'afficher une bannière d'erreur — un hero qui plante
+        // fait mauvaise impression, et le reste de la page reste
+        // utile même sans les chiffres/la carte.
+      })
+      .finally(() => setMapLoaded(true));
+  }, []);
 
   return (
     <>
@@ -48,8 +76,12 @@ export default function Accueil() {
               10 secondes et participez aux enquêtes qui comptent vraiment.
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+              {/* "participants" resterait à afficher un vrai chiffre le
+                  jour où une route dédiée existera (ex. total de citoyens
+                  vérifiés) — pas encore le cas, donc honnêteté d'abord :
+                  on ne fabrique pas un total qu'on ne peut pas vérifier. */}
               <div className="stat-pill"><span className="num">0</span> participants</div>
-              <div className="stat-pill"><span className="num">0</span> propositions</div>
+              <div className="stat-pill"><span className="num">{proposalsTotal}</span> propositions</div>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {isLogged ? (
@@ -57,7 +89,10 @@ export default function Accueil() {
               ) : (
                 <Link to="/inscription" className="btn btn-gold">Je participe !</Link>
               )}
-              <Link to="/carte" className="btn btn-ghost">Explorer la carte</Link>
+              {/* "/carte" n'existe pas comme page séparée dans le plan
+                  du site (14-sitemap.md) — la carte est une SECTION de
+                  cet accueil. Une ancre, pas une route. */}
+              <a href="#carte" className="btn btn-ghost">Explorer la carte</a>
             </div>
           </div>
 
@@ -101,6 +136,32 @@ export default function Accueil() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Carte ─────────────────────────────────────────── */}
+      {/* id="carte" : c'est la cible de l'ancre "Explorer la carte"
+          du hero, juste au-dessus — pas une route séparée. */}
+      <section id="carte" className="section-map" style={{ padding: '56px 20px 64px', background: '#F6F1E7' }}>
+        <div className="wrap" style={{ textAlign: 'center' }}>
+          <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 32, marginBottom: 8 }}>
+            🗺️ La carte interactive
+          </h2>
+          <p style={{ color: '#6B6257', marginBottom: 28, fontSize: 18 }}>
+            Visualisez les propositions sur la carte de Senlis
+          </p>
+
+          {markers.length > 0 ? (
+            <LazyMapView center={[49.2058, 2.5847]} zoom={14} markers={markers} height={380} />
+          ) : mapLoaded ? (
+            <p style={{ color: '#6B6257' }}>Aucune proposition localisée pour le moment.</p>
+          ) : (
+            <p style={{ color: '#6B6257' }}>Chargement de la carte…</p>
+          )}
+
+          {/* Les couches IRIS et parkings de report (voir wireframe)
+              arrivent avec S3-03 — pas encore de légende à 3 entrées
+              tant qu'il n'y a que les marqueurs de propositions. */}
         </div>
       </section>
 
