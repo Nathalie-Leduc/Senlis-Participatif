@@ -54,6 +54,32 @@ const PERIMETER_STYLE = {
   fillOpacity: 0.15,
 };
 
+// Style de la couche IRIS — chaque quartier en gris discret, SAUF
+// "Centre Ville" mis en évidence en doré : c'est précisément ce que
+// demande le cahier des charges ("permettant d'isoler le centre
+// historique"), pas juste afficher les 7 quartiers au même niveau.
+function irisStyle(feature) {
+  const isCentreVille = feature.properties?.nom_iris === 'Centre Ville';
+  return isCentreVille
+    ? { color: '#D4A84A', weight: 2, fillColor: '#D4A84A', fillOpacity: 0.25 }
+    : { color: '#948B7D', weight: 1, fillColor: '#948B7D', fillOpacity: 0.06 };
+}
+
+// Icône parking — même principe que cerfIcon (DivIcon en CSS pur,
+// pas d'image externe à résoudre), mais couleur et symbole distincts
+// pour qu'on ne confonde jamais un parking avec une proposition.
+const parkingIcon = L.divIcon({
+  className: '',
+  html: `<div style="
+    width: 30px; height: 30px; border-radius: 6px;
+    background: #1E5F7C; display: flex; align-items: center;
+    justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.3);
+    color: #fff; font-weight: 700; font-size: 14px;
+  ">P</div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
+
 /**
  * @param {[number, number]} center - [latitude, longitude] du centre initial
  * @param {number} zoom - niveau de zoom initial (plus grand = plus proche)
@@ -62,6 +88,9 @@ const PERIMETER_STYLE = {
  *   ou un tableau de plusieurs — le tracé d'une zone piétonne, par exemple.
  *   Peut être absent : toutes les propositions n'ont pas forcément
  *   de périmètre saisi (ça arrive avec S3-04, saisie admin).
+ * @param {object} iris - FeatureCollection GeoJSON des 7 quartiers IRIS de
+ *   Senlis (INSEE/IGN) — absent = couche non affichée.
+ * @param {Array<{id, lat, lng, label}>} parkings - parkings de report (exemple)
  * @param {number|string} height - hauteur du conteneur (la largeur suit son parent)
  */
 export default function MapView({
@@ -69,6 +98,8 @@ export default function MapView({
   zoom = 15,
   markers = [],
   perimeters = [],
+  iris = null,
+  parkings = [],
   height = 320,
 }) {
   // On accepte un objet GeoJSON unique OU un tableau — plus simple
@@ -92,6 +123,29 @@ export default function MapView({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+
+      {/* La couche IRIS est rendue AVANT le périmètre et les
+          marqueurs, pour rester "sous" eux visuellement — un
+          quartier grisé en fond, pas par-dessus une proposition. */}
+      {iris && (
+        <GeoJSON
+          data={iris}
+          style={irisStyle}
+          // Chaque quartier affiche son nom au clic — sans ça, un
+          // visiteur ne saurait pas ce que représentent ces zones.
+          onEachFeature={(feature, layer) => {
+            if (feature.properties?.nom_iris) {
+              layer.bindPopup(`<strong>${feature.properties.nom_iris}</strong>`);
+            }
+          }}
+        />
+      )}
+
+      {parkings.map((p) => (
+        <Marker key={p.id} position={[p.lat, p.lng]} icon={parkingIcon}>
+          <Popup><strong>🅿️ {p.label}</strong></Popup>
+        </Marker>
+      ))}
 
       {perimeterList.filter(Boolean).map((geoJson, i) => (
         <GeoJSON key={i} data={geoJson} style={PERIMETER_STYLE} />
