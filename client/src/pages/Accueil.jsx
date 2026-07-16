@@ -13,12 +13,16 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import LazyMapView from '../components/MapView/LazyMapView.jsx';
+import { PARKINGS_REPORT_EXEMPLE } from '../data/parkingsReport.js';
 
 export default function Accueil() {
   const { isLogged } = useAuth();
   const [proposalsTotal, setProposalsTotal] = useState(0);
   const [markers, setMarkers] = useState([]);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [iris, setIris] = useState(null);
+  const [showIris, setShowIris] = useState(true);
+  const [showParkings, setShowParkings] = useState(true);
 
   // On récupère un lot de propositions publiques pour la mini-carte
   // ET pour le compteur "propositions" du hero — une seule requête
@@ -40,6 +44,17 @@ export default function Accueil() {
         // utile même sans les chiffres/la carte.
       })
       .finally(() => setMapLoaded(true));
+
+    // Le fichier IRIS vit dans public/ — un simple fetch, jamais un
+    // import JS : ce n'est pas du code, ça n'a aucune raison de
+    // passer par le bundler (voir le commentaire dans le fichier
+    // lui-même sur ce choix). S'il manque (pas encore déposé), on
+    // affiche simplement la carte sans cette couche — l'échec est
+    // silencieux, comme pour les propositions.
+    fetch('/data/iris-senlis.geojson')
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setIris)
+      .catch(() => {});
   }, []);
 
   return (
@@ -147,21 +162,47 @@ export default function Accueil() {
           <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 32, marginBottom: 8 }}>
             🗺️ La carte interactive
           </h2>
-          <p style={{ color: '#6B6257', marginBottom: 28, fontSize: 18 }}>
-            Visualisez les propositions sur la carte de Senlis
+          <p style={{ color: '#6B6257', marginBottom: 20, fontSize: 18 }}>
+            Visualisez les propositions et les quartiers de Senlis
           </p>
 
-          {markers.length > 0 ? (
-            <LazyMapView center={[49.2058, 2.5847]} zoom={14} markers={markers} height={380} />
-          ) : mapLoaded ? (
-            <p style={{ color: '#6B6257' }}>Aucune proposition localisée pour le moment.</p>
+          {/* Légende à bascule — chaque case active/désactive une
+              couche. On ne montre le bouton d'une couche que si elle
+              a effectivement des données à afficher (inutile de
+              proposer de "cacher les parkings" s'il n'y en a aucun). */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+            {iris && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: '#26333A', cursor: 'pointer' }}>
+                <input type="checkbox" checked={showIris} onChange={(e) => setShowIris(e.target.checked)} />
+                🟡 Centre historique (IRIS INSEE)
+              </label>
+            )}
+            {PARKINGS_REPORT_EXEMPLE.length > 0 && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: '#26333A', cursor: 'pointer' }}>
+                <input type="checkbox" checked={showParkings} onChange={(e) => setShowParkings(e.target.checked)} />
+                🅿️ Parkings de report (exemple)
+              </label>
+            )}
+          </div>
+
+          {mapLoaded ? (
+            <LazyMapView
+              center={[49.2058, 2.5847]}
+              zoom={14}
+              markers={markers}
+              iris={showIris ? iris : null}
+              parkings={showParkings ? PARKINGS_REPORT_EXEMPLE : []}
+              height={380}
+            />
           ) : (
             <p style={{ color: '#6B6257' }}>Chargement de la carte…</p>
           )}
 
-          {/* Les couches IRIS et parkings de report (voir wireframe)
-              arrivent avec S3-03 — pas encore de légende à 3 entrées
-              tant qu'il n'y a que les marqueurs de propositions. */}
+          {markers.length === 0 && mapLoaded && (
+            <p style={{ color: '#6B6257', marginTop: 12, fontSize: 14 }}>
+              Aucune proposition localisée pour le moment.
+            </p>
+          )}
         </div>
       </section>
 
