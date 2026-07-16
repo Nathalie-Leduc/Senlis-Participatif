@@ -38,6 +38,16 @@ export default function AdminPropositionForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  // ── Image : traitée à PART du reste du formulaire ────────
+  // Pourquoi ? title/summary/content/lat/lng/geoJson partent tous
+  // dans le même corps JSON (POST/PATCH /proposals). L'image, elle,
+  // part dans une requête SÉPARÉE (multipart), et surtout : elle a
+  // besoin d'un ID de proposition qui n'existe pas encore en mode
+  // création tant que le premier appel n'a pas réussi. On la garde
+  // donc hors de `form`, dans son propre state.
+  const [imageFile, setImageFile] = useState(null); // le File choisi, pas encore envoyé
+  const [imagePreview, setImagePreview] = useState(null); // URL d'aperçu (locale OU déjà en ligne)
+
   // ── En mode édition, charger la proposition existante ────
   useEffect(() => {
     if (!isEdit) return;
@@ -62,6 +72,10 @@ export default function AdminPropositionForm() {
           // indenté pour que l'admin puisse le relire/modifier dans le textarea.
           geoJson: p.geoJson ? JSON.stringify(p.geoJson, null, 2) : '',
         });
+        // p.imagePath est déjà un chemin exploitable tel quel par un
+        // <img src="..."> (voir le proxy Vite /uploads) — pas de
+        // conversion nécessaire, contrairement au geoJson.
+        if (p.imagePath) setImagePreview(p.imagePath);
       })
       .catch((err) => setError(err.message || 'Impossible de charger cette proposition'))
       .finally(() => setLoading(false));
@@ -94,6 +108,29 @@ export default function AdminPropositionForm() {
     // reconverti sous le même nom) ne redéclencherait pas onChange,
     // car la valeur de l'input n'aurait pas changé de son point de vue.
     e.target.value = '';
+  };
+
+  // ── Sélection d'une image ────────────────────────────────
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // createObjectURL fabrique une URL locale (blob:...) qui pointe
+    // directement vers le fichier choisi sur l'ordinateur de l'admin —
+    // aucun aller-retour réseau pour afficher l'aperçu.
+    //
+    // revokeObjectURL sur l'ANCIEN aperçu avant d'en créer un nouveau :
+    // sans ça, chaque changement de fichier laisserait une URL blob
+    // orpheline en mémoire jusqu'à la fermeture de l'onglet — une
+    // petite fuite mémoire qui s'accumule si l'admin hésite entre
+    // plusieurs photos avant de valider.
+    if (imagePreview && imagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setError(null);
   };
 
   const handleSubmit = async (e) => {
@@ -141,11 +178,25 @@ export default function AdminPropositionForm() {
     };
 
     try {
+      let saved;
       if (isEdit) {
-        await api.patch(`/proposals/${proposalId}`, payload);
+        const data = await api.patch(`/proposals/${proposalId}`, payload);
+        saved = data.proposal;
       } else {
-        await api.post('/proposals', payload);
+        const data = await api.post('/proposals', payload);
+        saved = data.proposal;
       }
+
+      // L'image part APRÈS coup, une fois qu'on connaît à coup sûr
+      // l'id de la proposition (en création, il n'existait pas avant
+      // cette ligne). Si cet appel échoue, la proposition elle-même
+      // est déjà enregistrée — seule l'image manque, ce qui est un
+      // état récupérable (l'admin peut réessayer juste l'image en
+      // rouvrant le formulaire d'édition).
+      if (imageFile) {
+        await api.uploadProposalImage(saved.id, imageFile);
+      }
+
       navigate('/admin/propositions');
     } catch (err) {
       // Si l'API renvoie des détails de validation (Zod), on affiche
@@ -227,6 +278,28 @@ export default function AdminPropositionForm() {
             />
           </Field>
         </div>
+
+        <Field label="Image (optionnel)">
+          {imagePreview && (
+            <img
+              src={imagePreview}
+              alt="Aperçu"
+              style={{
+                width: '100%', maxWidth: 320, borderRadius: 12,
+                marginBottom: 10, display: 'block', objectFit: 'cover',
+              }}
+            />
+          )}
+          <input
+            type="file" accept="image/jpeg,image/png,image/webp"
+            onChange={handleImageChange}
+            style={{ fontSize: 13 }}
+          />
+          <p style={{ fontSize: 12, color: '#6B6257', margin: '4px 0 0' }}>
+            JPEG, PNG ou WebP, 5 Mo max — redimensionnée et compressée
+            automatiquement à l'enregistrement.
+          </p>
+        </Field>
 
         <Field label="Périmètre GeoJSON (optionnel)">
           <textarea

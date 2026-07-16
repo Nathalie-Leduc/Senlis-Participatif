@@ -18,10 +18,12 @@
 // ceux qui lisent ce fichier (dont ce commentaire !).
 // ══════════════════════════════════════════════════════════
 
-import { PrismaClient } from '@prisma/client';
+// On réutilise le même singleton que le reste de l'API (lib/prisma.js)
+// plutôt que d'instancier un PrismaClient à part : depuis Prisma 7,
+// créer un client demande un adapter (voir lib/prisma.js) — pas la
+// peine de dupliquer cette logique ici pour un script ponctuel.
+import prisma from '../src/lib/prisma.js';
 import argon2 from 'argon2';
-
-const prisma = new PrismaClient();
 
 async function main() {
   // ── Un compte admin, réutilisable à volonté ──────────────

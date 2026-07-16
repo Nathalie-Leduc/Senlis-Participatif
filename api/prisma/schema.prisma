@@ -18,7 +18,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -148,6 +147,13 @@ model Proposal {
   lat     Float?
   lng     Float?
   geoJson Json?
+
+  // Chemin RELATIF de l'image (ex : "/uploads/proposals/abc123.webp"),
+  // jamais l'URL complète : si le nom de domaine change un jour (mise
+  // en prod, changement d'hébergeur), on ne réécrit aucune ligne en base.
+  // Null tant qu'aucune image n'a été envoyée — c'est optionnel, comme
+  // lat/lng/geoJson.
+  imagePath String?
 
   // Si l'auteur supprime son compte (droit à l'effacement RGPD),
   // la proposition publique survit mais devient "anonyme" → SetNull.

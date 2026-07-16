@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "leaflet": "^1.9.4",
-    "nodemailer": "9.0.0",
+    "nodemailer": "^9.0.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-leaflet": "^5.0.0",

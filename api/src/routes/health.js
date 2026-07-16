@@ -8,10 +8,13 @@
 // ══════════════════════════════════════════════════════════════
 
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+// On réutilise le MÊME client que le reste de l'API (lib/prisma.js),
+// pas une instance séparée : Prisma 7 exige un adapter pour ouvrir
+// une connexion, et dupliquer sa création ici aurait ouvert un
+// second pool pg pour rien — deux connexions à gérer au lieu d'une.
+import prisma from '../lib/prisma.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get('/health', async (_req, res) => {
   try {
