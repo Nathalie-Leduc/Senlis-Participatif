@@ -15,6 +15,7 @@
 import { Router } from 'express';
 import { validate, validateQuery } from '../middlewares/validate.js';
 import { auth, isAdmin, requireVerifiedEmail, optionalAuth } from '../middlewares/auth.js';
+import { uploadImage } from '../middlewares/upload.js';
 import * as ctrl from '../controllers/proposalsController.js';
 import {
   createProposalSchema,
@@ -44,6 +45,12 @@ router.get('/:slug', optionalAuth, ctrl.getBySlug);
 router.post('/', auth, isAdmin, validate(createProposalSchema), ctrl.create);
 router.patch('/:id', auth, isAdmin, validate(updateProposalSchema), ctrl.update);
 router.delete('/:id', auth, isAdmin, ctrl.remove);
+
+// uploadImage (Multer) DOIT s'exécuter avant le contrôleur : c'est lui
+// qui lit le multipart/form-data et remplit req.file. Pas de validate()
+// Zod ici — Multer + le contrôleur font déjà leurs propres vérifications
+// (type MIME, présence du fichier).
+router.post('/:id/image', auth, isAdmin, uploadImage, ctrl.uploadImageHandler);
 
 // ── Vote (🔐, email vérifié) ─────────────────────────────
 // Même logique d'ordre : auth (qui es-tu) → requireVerifiedEmail

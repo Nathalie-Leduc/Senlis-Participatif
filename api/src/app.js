@@ -21,6 +21,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import express from 'express';
+import path from 'node:path';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -42,6 +43,12 @@ app.use(
 );
 
 app.use(express.json({ limit: '10kb' }));
+
+// ── Fichiers statiques (images uploadées) ────────────────────
+// Servi hors de /api/v1 : ce n'est pas une "ressource API" au sens
+// JSON habituel, mais un fichier brut qu'un <img src="..."> charge
+// directement — même logique que n'importe quel asset statique.
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Rate limiting global : 100 requêtes / minute / IP en production.
 //

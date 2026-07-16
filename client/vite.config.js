@@ -21,6 +21,12 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      // Même cible que /api : les images uploadées sont servies par
+      // la même API Express (voir app.js), pas un serveur à part.
+      '/uploads': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
   test: {

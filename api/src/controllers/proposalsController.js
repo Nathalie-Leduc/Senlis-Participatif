@@ -17,6 +17,7 @@
 
 import prisma from '../lib/prisma.js';
 import { generateUniqueSlug } from '../lib/slug.js';
+import { saveProposalImage, deleteProposalImage } from '../lib/imageProcessing.js';
 
 // Statuts visibles sans authentification — jamais DRAFT,
 // PENDING_REVIEW, REJECTED ou ARCHIVED côté public.
@@ -289,6 +290,57 @@ export async function update(req, res, next) {
   }
 }
 
+// ── POST /proposals/:id/image — uploader/remplacer l'image (admin) ──
+//
+// Route SÉPARÉE de create()/update() plutôt que fusionnée : ces
+// deux-là attendent un corps JSON (express.json()), alors qu'un
+// fichier arrive en multipart/form-data — deux formats de requête
+// différents ne peuvent pas partager le même point d'entrée.
+export async function uploadImageHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.proposal.findUnique({ where: { id } });
+
+    if (!existing) {
+      const error = new Error('Proposition introuvable');
+      error.status = 404;
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+
+    // req.file est posé par le middleware uploadImage (Multer) —
+    // absent si aucun fichier n'a été envoyé, ou si fileFilter l'a
+    // rejeté (dans ce cas errorHandler aurait déjà répondu avant
+    // d'arriver ici).
+    if (!req.file) {
+      const error = new Error('Aucun fichier reçu');
+      error.status = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+
+    const imagePath = await saveProposalImage(req.file.buffer);
+
+    // On supprime l'ANCIENNE image seulement APRÈS avoir écrit la
+    // nouvelle avec succès. Si saveProposalImage() avait échoué en
+    // cours de route, la proposition aurait perdu son image sans
+    // qu'aucune nouvelle ne vienne la remplacer — l'ordre inverse
+    // serait pire que ne rien faire.
+    if (existing.imagePath) {
+      await deleteProposalImage(existing.imagePath);
+    }
+
+    const proposal = await prisma.proposal.update({
+      where: { id },
+      data: { imagePath },
+    });
+
+    res.json({ proposal });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ── DELETE /proposals/:id — supprimer (admin) ───────────
 export async function remove(req, res, next) {
   try {
@@ -306,6 +358,14 @@ export async function remove(req, res, next) {
     }
 
     await prisma.proposal.delete({ where: { id } });
+
+    // Nettoyage APRÈS la suppression réussie en base : si delete()
+    // avait échoué, on ne veut pas avoir déjà effacé un fichier
+    // encore référencé par une ligne toujours existante.
+    if (existing.imagePath) {
+      await deleteProposalImage(existing.imagePath);
+    }
+
     res.status(204).end();
   } catch (err) {
     next(err);
