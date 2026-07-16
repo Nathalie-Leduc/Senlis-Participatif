@@ -20,6 +20,11 @@ import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
 const EMPTY_FORM = {
   title: '', summary: '', content: '', status: 'DRAFT',
   lat: '', lng: '', closesAt: '',
+  // On stocke le GeoJSON comme une CHAÎNE de caractères dans le state,
+  // même si côté API c'est un objet JSON. Raison : un <textarea> ne sait
+  // afficher/éditer que du texte — on convertit texte <-> objet aux deux
+  // portes d'entrée/sortie (chargement et soumission), jamais entre les deux.
+  geoJson: '',
 };
 
 export default function AdminPropositionForm() {
@@ -52,6 +57,10 @@ export default function AdminPropositionForm() {
           // renvoie une date ISO complète ("2026-08-01T00:00:00.000Z"),
           // on ne garde que les 10 premiers caractères.
           closesAt: p.closesAt ? p.closesAt.slice(0, 10) : '',
+          // p.geoJson arrive de l'API comme un vrai objet JS (Prisma désérialise
+          // la colonne Json automatiquement). On le re-transforme en texte
+          // indenté pour que l'admin puisse le relire/modifier dans le textarea.
+          geoJson: p.geoJson ? JSON.stringify(p.geoJson, null, 2) : '',
         });
       })
       .catch((err) => setError(err.message || 'Impossible de charger cette proposition'))
@@ -63,10 +72,58 @@ export default function AdminPropositionForm() {
     setError(null);
   };
 
+  // ── Import d'un fichier .geojson ─────────────────────────
+  // Analogie : c'est un copier-coller automatique. On ne fait AUCUNE
+  // validation ici — le fichier atterrit tel quel dans le textarea,
+  // exactement comme si l'admin l'avait collé à la main. Un seul
+  // chemin de validation (dans handleSubmit) au lieu de deux à
+  // maintenir en parallèle.
+  const handleGeoJsonFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setForm((prev) => ({ ...prev, geoJson: event.target.result }));
+      setError(null);
+    };
+    reader.readAsText(file);
+
+    // On vide l'input file : sans ça, réimporter EXACTEMENT le même
+    // fichier une seconde fois (par ex. après l'avoir corrigé puis
+    // reconverti sous le même nom) ne redéclencherait pas onChange,
+    // car la valeur de l'input n'aurait pas changé de son point de vue.
+    e.target.value = '';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSaving(true);
     setError(null);
+
+    // ── Validation du GeoJSON AVANT tout appel réseau ────────
+    // Pourquoi valider ici plutôt que de laisser l'API s'en charger ?
+    // Le schéma Zod accepte `z.any()` pour geoJson (voir proposals.js :
+    // la forme exacte n'est vérifiée nulle part côté serveur pour
+    // l'instant). Si on n'y touche pas ici, un JSON mal formé ferait
+    // planter silencieusement l'affichage de la carte bien plus tard,
+    // au moment où PropositionDetail.jsx essaierait de l'afficher —
+    // un peu comme découvrir un ingrédient périmé une fois le plat
+    // servi, plutôt qu'en le sortant du frigo.
+    let geoJsonValue;
+    if (form.geoJson.trim() !== '') {
+      try {
+        geoJsonValue = JSON.parse(form.geoJson);
+      } catch {
+        setError('Le GeoJSON n\'est pas un JSON valide (vérifie les guillemets, virgules et accolades).');
+        return;
+      }
+      if (typeof geoJsonValue !== 'object' || geoJsonValue === null || !geoJsonValue.type) {
+        setError('Le GeoJSON doit être un objet avec un champ "type" (ex : "Feature", "FeatureCollection", "Polygon").');
+        return;
+      }
+    }
+
+    setSaving(true);
 
     // On ne transmet que ce qui a une vraie valeur — un champ vide
     // ("") est envoyé comme "absent" (undefined), jamais comme une
@@ -79,6 +136,7 @@ export default function AdminPropositionForm() {
       status: form.status,
       lat: form.lat === '' ? undefined : Number(form.lat),
       lng: form.lng === '' ? undefined : Number(form.lng),
+      geoJson: geoJsonValue,
       closesAt: form.closesAt === '' ? undefined : form.closesAt,
     };
 
@@ -169,6 +227,27 @@ export default function AdminPropositionForm() {
             />
           </Field>
         </div>
+
+        <Field label="Périmètre GeoJSON (optionnel)">
+          <textarea
+            name="geoJson" value={form.geoJson} onChange={handleChange}
+            rows={6} placeholder='{"type": "Polygon", "coordinates": [...]}'
+            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: 13 }}
+          />
+          {/* Champ file "brut" : pas de style personnalisé, on garde le
+              rendu natif du navigateur pour ce type d'input — le personnaliser
+              demande de le masquer et de simuler un bouton, complexité pas
+              justifiée ici pour un usage admin ponctuel. */}
+          <input
+            type="file" accept=".json,.geojson,application/geo+json,application/json"
+            onChange={handleGeoJsonFile}
+            style={{ marginTop: 8, fontSize: 13 }}
+          />
+          <p style={{ fontSize: 12, color: '#6B6257', margin: '4px 0 0' }}>
+            Colle un objet GeoJSON (Feature, FeatureCollection ou géométrie brute)
+            ou importe un fichier .geojson/.json — même format que la couche IRIS.
+          </p>
+        </Field>
 
         <Field label="Date de clôture des votes (optionnel)">
           <input
