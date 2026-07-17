@@ -13,7 +13,15 @@
 // ════════════════════════════════════════════════════════════════════
 
 generator client {
+  // Le nouveau "prisma-client" génère du TypeScript par défaut — ce
+  // projet n'a aucun outillage TS (pas de tsx, pas de build), donc on
+  // reste sur l'ancien générateur, qui produit du JS directement
+  // exécutable par Node. Toujours supporté en Prisma 7 (juste marqué
+  // "à terme remplacé", pas encore retiré).
   provider = "prisma-client-js"
+  // Toujours obligatoire en v7 : plus de génération automatique dans
+  // node_modules.
+  output = "../src/generated/prisma"
 }
 
 datasource db {

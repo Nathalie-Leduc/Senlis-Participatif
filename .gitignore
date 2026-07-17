@@ -17,6 +17,11 @@ api/prisma/*.db
 # Images uploadées (contenu généré par les admins, pas du code)
 api/uploads/
 
+# Client Prisma généré (régénéré par "prisma generate", jamais commité —
+# comme node_modules, ce sont des fichiers reproductibles, pas du code
+# écrit à la main)
+api/src/generated/
+
 # IDE
 .vscode/
 .idea/

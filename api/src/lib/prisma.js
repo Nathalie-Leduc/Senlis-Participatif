@@ -16,7 +16,14 @@
 // "client" de Prisma 7, qui remplace l'ancien moteur "classic".
 // ══════════════════════════════════════════════════════════
 
-import pkg from '@prisma/client';
+// ── Spécificité Prisma 7 — emplacement du client généré ──────
+// Le client généré (par prisma-client-js) vit dans src/generated/prisma
+// plutôt que dans node_modules/@prisma/client (voir schema.prisma).
+// C'est un module CommonJS classique — l'import nommé direct peut être
+// mal détecté selon la forme exacte de son `module.exports`, donc on
+// garde le contournement `import pkg from ...` par sécurité (même
+// principe qu'avant, juste un chemin différent).
+import pkg from '../generated/prisma/index.js';
 const { PrismaClient } = pkg;
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
