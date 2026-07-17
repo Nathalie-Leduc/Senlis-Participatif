@@ -5,9 +5,11 @@
   "description": "API REST — Senlis Participatif",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "node src/index.js",
-    "seed": "node prisma/seed.js",
+    "dev": "node --env-file-if-exists=.env --watch src/index.js",
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "postinstall": "prisma generate",
+    "seed": "node --env-file-if-exists=.env prisma/seed.js",
+    "migrate:test": "dotenv -e .env.test -- npx prisma migrate deploy",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src/"
@@ -28,8 +30,9 @@
     "zod": "^3.24.4"
   },
   "devDependencies": {
-    "dotenv": "^17.2.0",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.19.0",
+    "dotenv": "^17.2.0",
     "prisma": "7.8.0",
     "supertest": "^7.1.0",
     "vitest": "^4.1.9"
