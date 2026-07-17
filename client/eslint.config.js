@@ -21,6 +21,8 @@ export default [
         fetch: 'readonly',
         localStorage: 'readonly',
         confirm: 'readonly',
+        FormData: 'readonly',
+        URL: 'readonly',
       },
     },
     rules: {

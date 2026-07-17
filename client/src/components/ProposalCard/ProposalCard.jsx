@@ -50,6 +50,29 @@ export default function ProposalCard({ proposal }) {
         marginBottom: 20,
       }}
     >
+      {/* ── Vignette (si une image a été ajoutée) ───────────── */}
+      {/* loading="lazy" : c'est le NAVIGATEUR qui décide de ne
+          télécharger cette image que quand elle approche de l'écran,
+          pas nous. Aucune librairie, aucun IntersectionObserver à
+          gérer à la main — contrairement à la jauge de vote plus bas,
+          qui a besoin d'un vrai minuteur d'animation (useScrollReveal).
+          Ici, on ne veut QUE éviter le téléchargement, pas déclencher
+          un effet visuel : le navigateur suffit.
+          Analogie : c'est un livreur qui attend de voir la maison au
+          bout de la rue avant de sortir le colis du camion — pas
+          besoin de lui donner des jumelles, il le fait tout seul. */}
+      {proposal.imagePath && (
+        <img
+          src={proposal.imagePath}
+          alt=""
+          loading="lazy"
+          style={{
+            width: '100%', height: 160, objectFit: 'cover',
+            borderRadius: 12, marginBottom: 14, display: 'block',
+          }}
+        />
+      )}
+
       {/* ── Badge de statut ─────────────────────────────── */}
       {proposal.status === 'PUBLISHED' ? (
         <span className="badge-live">{STATUS_LABELS.PUBLISHED}</span>

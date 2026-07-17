@@ -13,12 +13,19 @@
 // ════════════════════════════════════════════════════════════════════
 
 generator client {
+  // Le nouveau "prisma-client" génère du TypeScript par défaut — ce
+  // projet n'a aucun outillage TS (pas de tsx, pas de build), donc on
+  // reste sur l'ancien générateur, qui produit du JS directement
+  // exécutable par Node. Toujours supporté en Prisma 7 (juste marqué
+  // "à terme remplacé", pas encore retiré).
   provider = "prisma-client-js"
+  // Toujours obligatoire en v7 : plus de génération automatique dans
+  // node_modules.
+  output = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -148,6 +155,13 @@ model Proposal {
   lat     Float?
   lng     Float?
   geoJson Json?
+
+  // Chemin RELATIF de l'image (ex : "/uploads/proposals/abc123.webp"),
+  // jamais l'URL complète : si le nom de domaine change un jour (mise
+  // en prod, changement d'hébergeur), on ne réécrit aucune ligne en base.
+  // Null tant qu'aucune image n'a été envoyée — c'est optionnel, comme
+  // lat/lng/geoJson.
+  imagePath String?
 
   // Si l'auteur supprime son compte (droit à l'effacement RGPD),
   // la proposition publique survit mais devient "anonyme" → SetNull.

@@ -185,6 +185,25 @@ export default function PropositionDetail() {
         </p>
       )}
 
+      {/* ── Image ─────────────────────────────────────────── */}
+      {/* Pas de loading="lazy" ici, volontairement : cette image est
+          visible DÈS l'arrivée sur la page (en haut, avant tout
+          scroll) — la charger "paresseusement" ne ferait que retarder
+          quelque chose que l'utilisateur voit immédiatement de toute
+          façon. Le lazy loading n'a d'intérêt que pour ce qui est
+          hors-écran au chargement, comme les vignettes de la liste
+          (voir ProposalCard.jsx). */}
+      {proposal.imagePath && (
+        <img
+          src={proposal.imagePath}
+          alt={proposal.title}
+          style={{
+            width: '100%', maxHeight: 360, objectFit: 'cover',
+            borderRadius: 16, marginBottom: 20, display: 'block',
+          }}
+        />
+      )}
+
       {/* ── Carte ─────────────────────────────────────────── */}
       {/* Le périmètre GeoJSON (tracé exact d'une rue fermée, par
           exemple) reste vide tant que S3-04 (saisie admin) n'existe
