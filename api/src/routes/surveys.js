@@ -12,13 +12,14 @@
 
 import { Router } from 'express';
 import { validate, validateQuery } from '../middlewares/validate.js';
-import { auth, isAdmin, optionalAuth } from '../middlewares/auth.js';
+import { auth, isAdmin, optionalAuth, requireVerifiedEmail } from '../middlewares/auth.js';
 import * as ctrl from '../controllers/surveysController.js';
 import {
   createSurveySchema,
   updateSurveySchema,
   listSurveysQuerySchema,
   adminListSurveysQuerySchema,
+  submitResponseSchema,
 } from '../validators/surveys.js';
 
 const router = Router();
@@ -36,5 +37,14 @@ router.get('/:slug', optionalAuth, ctrl.getBySlug);
 router.post('/', auth, isAdmin, validate(createSurveySchema), ctrl.create);
 router.patch('/:id', auth, isAdmin, validate(updateSurveySchema), ctrl.update);
 router.delete('/:id', auth, isAdmin, ctrl.remove);
+
+// ── Réponse (🔐, email vérifié — même exigence que le vote) ──
+router.post(
+  '/:id/responses',
+  auth,
+  requireVerifiedEmail,
+  validate(submitResponseSchema),
+  ctrl.submitResponse,
+);
 
 export default router;
