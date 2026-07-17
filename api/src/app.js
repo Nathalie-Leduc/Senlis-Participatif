@@ -28,6 +28,7 @@ import rateLimit from 'express-rate-limit';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import proposalsRouter from './routes/proposals.js';
+import surveysRouter from './routes/surveys.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
@@ -79,8 +80,8 @@ app.use(globalLimiter);
 app.use('/api/v1', healthRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/proposals', proposalsRouter);
+app.use('/api/v1/surveys', surveysRouter);
 
-// Sprint 4 → app.use('/api/v1/surveys', surveysRouter);
 // Sprint 6 → app.use('/api/v1/comments', commentsRouter);
 
 // ── Gestionnaire d'erreurs ──────────────────────────────────
