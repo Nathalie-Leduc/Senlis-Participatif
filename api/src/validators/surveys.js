@@ -14,9 +14,16 @@ const questionType = z.enum([
   'TEXTE_LIBRE',
 ]);
 
-// Seuls ces deux types affichent une liste d'options (radio / cases à
-// cocher) — NOMBRE, OUI_NON et TEXTE_LIBRE n'en ont pas besoin.
+// Seuls ces types affichent une liste d'options (radio / cases à
+// cocher) — NOMBRE et TEXTE_LIBRE n'en ont pas besoin.
+// OUI_NON est un cas particulier : le schéma (voir Answer dans
+// schema.prisma) le représente aussi via optionId, pas un booléen
+// direct — donc une question OUI_NON a bien 2 options ("Oui"/"Non"),
+// mais l'admin n'est pas obligé de les taper à la main (voir
+// toNestedQuestionsCreate dans le contrôleur, qui les génère par
+// défaut si absentes).
 const OPTIONS_REQUIRED_TYPES = ['CHOIX_UNIQUE', 'CHOIX_MULTIPLE'];
+const OPTIONS_OPTIONAL_BINARY_TYPES = ['OUI_NON'];
 
 const questionOptionSchema = z.object({
   label: z.string().trim().min(1, "Le libellé de l'option est requis").max(200),
@@ -33,17 +40,33 @@ const questionSchema = z.object({
   required: z.boolean().optional(),
   options: z.array(questionOptionSchema).optional(),
 }).superRefine((q, ctx) => {
-  const needsOptions = OPTIONS_REQUIRED_TYPES.includes(q.type);
-
-  if (needsOptions && (!q.options || q.options.length < 2)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['options'],
-      message: `Une question de type ${q.type} doit proposer au moins 2 options`,
-    });
+  if (OPTIONS_REQUIRED_TYPES.includes(q.type)) {
+    if (!q.options || q.options.length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: `Une question de type ${q.type} doit proposer au moins 2 options`,
+      });
+    }
+    return;
   }
 
-  if (!needsOptions && q.options && q.options.length > 0) {
+  if (OPTIONS_OPTIONAL_BINARY_TYPES.includes(q.type)) {
+    // Ni interdites (le schéma en a besoin) ni obligatoires à la
+    // saisie (des "Oui"/"Non" par défaut suffisent la plupart du
+    // temps) — juste : si l'admin en fournit, il en faut EXACTEMENT 2.
+    if (q.options && q.options.length !== 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'Une question OUI_NON doit avoir exactement 2 options si vous les personnalisez (sinon "Oui"/"Non" par défaut)',
+      });
+    }
+    return;
+  }
+
+  // NOMBRE, TEXTE_LIBRE : jamais d'options.
+  if (q.options && q.options.length > 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['options'],
@@ -89,4 +112,35 @@ export const adminListSurveysQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),
   status: surveyStatus.optional(),
+});
+
+// ── Soumission de réponse (citoyen) ─────────────────────
+//
+// Ce schéma ne valide QUE la forme du payload (un questionId, et
+// EXACTEMENT un champ de valeur parmi les quatre). Il ne peut pas
+// valider le FOND (est-ce que ce questionId existe bien dans CETTE
+// enquête ? le type de la question correspond-il au champ rempli ?
+// l'option choisie appartient-elle à la bonne question ?) — cette
+// partie dépend des données de la base, pas juste de la forme du
+// JSON, donc elle vit dans le contrôleur (voir buildAnswerRows).
+const answerSchema = z.object({
+  questionId: z.string().uuid(),
+  optionId: z.string().uuid().optional(),           // CHOIX_UNIQUE / OUI_NON
+  optionIds: z.array(z.string().uuid()).optional(), // CHOIX_MULTIPLE
+  valueNumber: z.number().optional(),               // NOMBRE
+  valueText: z.string().trim().optional(),          // TEXTE_LIBRE
+}).superRefine((a, ctx) => {
+  const filled = ['optionId', 'optionIds', 'valueNumber', 'valueText']
+    .filter((key) => a[key] !== undefined);
+
+  if (filled.length !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Chaque réponse doit remplir exactement un champ parmi optionId, optionIds, valueNumber, valueText',
+    });
+  }
+});
+
+export const submitResponseSchema = z.object({
+  answers: z.array(answerSchema).min(1, 'Au moins une réponse est requise'),
 });

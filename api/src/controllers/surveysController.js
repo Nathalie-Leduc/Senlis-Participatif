@@ -48,16 +48,25 @@ const QUESTIONS_INCLUDE = {
 // client : ça élimine toute une classe d'erreurs (doublons, trous,
 // ordres qui ne commencent pas à 0) sans avoir à les valider.
 function toNestedQuestionsCreate(questions) {
-  return questions.map((q, index) => ({
-    label: q.label,
-    helpText: q.helpText,
-    type: q.type,
-    required: q.required ?? true,
-    order: index,
-    options: q.options
-      ? { create: q.options.map((o, optionIndex) => ({ label: o.label, order: optionIndex })) }
-      : undefined,
-  }));
+  return questions.map((q, index) => {
+    // OUI_NON a besoin de 2 options pour fonctionner (voir Answer
+    // dans schema.prisma), mais on ne veut pas obliger l'admin à
+    // taper "Oui"/"Non" à chaque fois — seulement s'il veut les
+    // personnaliser (ex. "Oui, systématiquement" / "Non, jamais").
+    const options = q.options
+      ?? (q.type === 'OUI_NON' ? [{ label: 'Oui' }, { label: 'Non' }] : undefined);
+
+    return {
+      label: q.label,
+      helpText: q.helpText,
+      type: q.type,
+      required: q.required ?? true,
+      order: index,
+      options: options
+        ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex })) }
+        : undefined,
+    };
+  });
 }
 
 // ── GET /surveys/admin — liste ADMIN, tous statuts confondus ───
@@ -262,6 +271,186 @@ export async function remove(req, res, next) {
     await prisma.survey.delete({ where: { id } });
 
     res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Aide : une question BLOQUANTE (invalide → 400 immédiat) ────
+function rejectAnswer(message) {
+  const error = new Error(message);
+  error.status = 400;
+  error.code = 'VALIDATION_ERROR';
+  throw error;
+}
+
+// Valide UNE réponse par rapport à SA question (celle désignée par
+// answer.questionId, déjà vérifiée comme appartenant à cette enquête
+// par l'appelant) et retourne les lignes Answer à créer. Un tableau
+// en retour, pas un objet : CHOIX_MULTIPLE peut produire plusieurs
+// lignes pour une seule réponse (une ligne par option cochée).
+function buildAnswerRows(question, answer) {
+  switch (question.type) {
+    case 'CHOIX_UNIQUE':
+    case 'OUI_NON': {
+      if (!answer.optionId) {
+        rejectAnswer(`« ${question.label} » attend une option unique (optionId)`);
+      }
+      const isValidOption = question.options.some((o) => o.id === answer.optionId);
+      if (!isValidOption) {
+        rejectAnswer(`L'option choisie n'appartient pas à la question « ${question.label} »`);
+      }
+      return [{ questionId: question.id, optionId: answer.optionId }];
+    }
+
+    case 'CHOIX_MULTIPLE': {
+      if (!answer.optionIds || answer.optionIds.length === 0) {
+        rejectAnswer(`« ${question.label} » attend au moins une option (optionIds)`);
+      }
+      const validIds = new Set(question.options.map((o) => o.id));
+      for (const optionId of answer.optionIds) {
+        if (!validIds.has(optionId)) {
+          rejectAnswer(`Une option choisie n'appartient pas à la question « ${question.label} »`);
+        }
+      }
+      // new Set() déduplique : cocher deux fois la même case dans le
+      // payload ne doit pas créer deux lignes identiques en base (la
+      // contrainte @@unique([responseId, questionId, optionId]) du
+      // schéma le rejetterait de toute façon, mais autant l'éviter
+      // proprement plutôt que de laisser Postgres lever une erreur).
+      const uniqueOptionIds = [...new Set(answer.optionIds)];
+      return uniqueOptionIds.map((optionId) => ({ questionId: question.id, optionId }));
+    }
+
+    case 'NOMBRE': {
+      if (typeof answer.valueNumber !== 'number') {
+        rejectAnswer(`« ${question.label} » attend un nombre (valueNumber)`);
+      }
+      return [{ questionId: question.id, valueNumber: answer.valueNumber }];
+    }
+
+    case 'TEXTE_LIBRE': {
+      const text = answer.valueText?.trim();
+      if (!text) {
+        // Un texte libre vide n'est une erreur QUE si la question est
+        // obligatoire — sinon "rien écrit" est une réponse valide.
+        if (question.required) {
+          rejectAnswer(`« ${question.label} » attend un texte (valueText)`);
+        }
+        return [];
+      }
+      return [{ questionId: question.id, valueText: text }];
+    }
+
+    default:
+      // Ne devrait jamais arriver (l'enum QuestionType couvre tous
+      // les cas) — filet de sécurité si le schéma évolue un jour.
+      rejectAnswer(`Type de question non pris en charge : ${question.type}`);
+  }
+}
+
+// ── POST /surveys/:id/responses — soumettre son bulletin (citoyen) ──
+//
+// Contrairement au vote (upsert, on peut changer d'avis), une réponse
+// d'enquête ne se modifie pas : on répond UNE fois, point. D'où la
+// vérification explicite + 409 plutôt qu'un upsert silencieux — la
+// contrainte @@unique([userId, surveyId]) du schéma empêcherait de
+// toute façon un doublon, mais un upsert masquerait qu'il y avait
+// déjà une réponse, ce qui serait trompeur pour un questionnaire
+// (le citoyen doit savoir qu'il a déjà participé, pas juste voir sa
+// nouvelle réponse silencieusement ignorée ou fusionnée).
+export async function submitResponse(req, res, next) {
+  try {
+    const { id: surveyId } = req.params;
+    const { answers } = req.body;
+    const userId = req.user.userId;
+
+    const survey = await prisma.survey.findUnique({
+      where: { id: surveyId },
+      include: { questions: { include: { options: true } } },
+    });
+
+    if (!survey) {
+      const error = new Error('Enquête introuvable');
+      error.status = 404;
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+
+    const now = new Date();
+    const isClosed = survey.status !== 'OPEN'
+      || (survey.opensAt && survey.opensAt > now)
+      || (survey.closesAt && survey.closesAt < now);
+
+    if (isClosed) {
+      const error = new Error("Cette enquête n'est pas ouverte aux réponses actuellement");
+      error.status = 403;
+      error.code = 'SURVEY_CLOSED';
+      throw error;
+    }
+
+    // 409 vérifié AVANT de valider le détail des réponses : inutile
+    // de faire tout le travail de validation si la personne a de
+    // toute façon déjà répondu.
+    const alreadyResponded = await prisma.surveyResponse.findUnique({
+      where: { userId_surveyId: { userId, surveyId } },
+    });
+    if (alreadyResponded) {
+      const error = new Error('Vous avez déjà répondu à cette enquête');
+      error.status = 409;
+      error.code = 'ALREADY_RESPONDED';
+      throw error;
+    }
+
+    // Chaque questionId envoyé doit appartenir à CETTE enquête — sans
+    // ce contrôle, rien n'empêcherait (erreur de front, ou appel API
+    // direct) de glisser la réponse à la question d'une AUTRE enquête.
+    const questionsById = new Map(survey.questions.map((q) => [q.id, q]));
+    for (const answer of answers) {
+      if (!questionsById.has(answer.questionId)) {
+        rejectAnswer(`La question ${answer.questionId} n'appartient pas à cette enquête`);
+      }
+    }
+
+    const answersByQuestionId = new Map(answers.map((a) => [a.questionId, a]));
+
+    // On parcourt les QUESTIONS de l'enquête (pas les réponses reçues) :
+    // c'est le seul sens qui permet de détecter une question OBLIGATOIRE
+    // restée sans réponse — l'inverse (parcourir les réponses) ne
+    // remarquerait jamais une absence.
+    const answerRows = [];
+    for (const question of survey.questions) {
+      const answer = answersByQuestionId.get(question.id);
+
+      if (!answer) {
+        if (question.required) {
+          rejectAnswer(`La question « ${question.label} » est obligatoire`);
+        }
+        continue; // question optionnelle non répondue : rien à créer
+      }
+
+      answerRows.push(...buildAnswerRows(question, answer));
+    }
+
+    // $transaction : le bulletin (SurveyResponse) et TOUTES ses lignes
+    // de réponse (Answer) doivent être créés ENSEMBLE ou pas du tout —
+    // un crash au milieu ne doit jamais laisser un bulletin à moitié
+    // rempli en base (le fameux "tout ou rien" du ticket).
+    const response = await prisma.$transaction(async (tx) => {
+      const surveyResponse = await tx.surveyResponse.create({
+        data: { surveyId, userId },
+      });
+
+      await tx.answer.createMany({
+        data: answerRows.map((row) => ({ ...row, responseId: surveyResponse.id })),
+      });
+
+      return surveyResponse;
+    });
+
+    res.status(201).json({
+      response: { id: response.id, submittedAt: response.submittedAt },
+    });
   } catch (err) {
     next(err);
   }
