@@ -276,7 +276,160 @@ export async function remove(req, res, next) {
   }
 }
 
-// ── Aide : une question BLOQUANTE (invalide → 400 immédiat) ────
+// ── GET /surveys/:slug/results — agrégats des réponses ──────
+//
+// Une seule requête groupBy par "famille" de question (à choix vs
+// numérique vs texte libre) plutôt qu'une requête par question —
+// même principe que getVoteAggregatesForMany pour les propositions :
+// une enquête à 10 questions ne doit pas faire 10 allers-retours
+// vers Postgres pour afficher sa page de résultats.
+//
+// Choix assumé : le pourcentage de chaque option est calculé sur
+// totalResponses (le nombre TOTAL de bulletins déposés), pas sur le
+// nombre de personnes ayant répondu à CETTE question précise. Plus
+// simple à calculer, et ça évite un piège avec CHOIX_MULTIPLE (une
+// personne peut cocher plusieurs options → compter "les répondants à
+// cette question" compterait chaque case cochée comme une personne
+// différente). Conséquence attendue et normale : les pourcentages
+// d'une question CHOIX_MULTIPLE peuvent dépasser 100% au total.
+const AGGREGATABLE_CHOICE_TYPES = ['CHOIX_UNIQUE', 'CHOIX_MULTIPLE', 'OUI_NON'];
+
+export async function getResults(req, res, next) {
+  try {
+    const { slug } = req.params;
+
+    const survey = await prisma.survey.findUnique({
+      where: { slug },
+      include: QUESTIONS_INCLUDE,
+    });
+
+    const isAdmin = req.user?.role === 'ADMIN';
+    if (!survey || (!VISIBLE_STATUSES.includes(survey.status) && !isAdmin)) {
+      const error = new Error('Enquête introuvable');
+      error.status = 404;
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+
+    const totalResponses = await prisma.surveyResponse.count({
+      where: { surveyId: survey.id },
+    });
+
+    const choiceQuestionIds = survey.questions
+      .filter((q) => AGGREGATABLE_CHOICE_TYPES.includes(q.type))
+      .map((q) => q.id);
+    const numberQuestionIds = survey.questions
+      .filter((q) => q.type === 'NOMBRE')
+      .map((q) => q.id);
+    const textQuestionIds = survey.questions
+      .filter((q) => q.type === 'TEXTE_LIBRE')
+      .map((q) => q.id);
+
+    // Promise.all : les trois familles de groupBy sont indépendantes,
+    // pas besoin d'attendre l'une pour lancer l'autre. Un tableau vide
+    // en `where.questionId.in` renverrait de toute façon [] — le if
+    // évite juste une requête Postgres inutile quand une enquête n'a
+    // aucune question de ce type-là.
+    const [optionCounts, numberStats, textCounts] = await Promise.all([
+      choiceQuestionIds.length
+        ? prisma.answer.groupBy({
+          by: ['questionId', 'optionId'],
+          where: { questionId: { in: choiceQuestionIds }, optionId: { not: null } },
+          _count: true,
+        })
+        : [],
+      numberQuestionIds.length
+        ? prisma.answer.groupBy({
+          by: ['questionId'],
+          where: { questionId: { in: numberQuestionIds } },
+          _count: { valueNumber: true },
+          _avg: { valueNumber: true },
+          _min: { valueNumber: true },
+          _max: { valueNumber: true },
+        })
+        : [],
+      textQuestionIds.length
+        ? prisma.answer.groupBy({
+          by: ['questionId'],
+          where: { questionId: { in: textQuestionIds } },
+          _count: { valueText: true },
+        })
+        : [],
+    ]);
+
+    // Index par questionId pour un accès direct au moment d'assembler
+    // le résultat final, plutôt que de re-scanner ces tableaux pour
+    // chaque question de l'enquête (Map imbriquée pour les options :
+    // question → option → compte).
+    const optionCountsByQuestion = new Map();
+    for (const row of optionCounts) {
+      if (!optionCountsByQuestion.has(row.questionId)) {
+        optionCountsByQuestion.set(row.questionId, new Map());
+      }
+      optionCountsByQuestion.get(row.questionId).set(row.optionId, row._count);
+    }
+    const numberStatsByQuestion = new Map(numberStats.map((row) => [row.questionId, row]));
+    const textCountsByQuestion = new Map(
+      textCounts.map((row) => [row.questionId, row._count.valueText]),
+    );
+
+    const questions = survey.questions.map((question) => {
+      const base = {
+        id: question.id,
+        label: question.label,
+        type: question.type,
+        required: question.required,
+      };
+
+      if (AGGREGATABLE_CHOICE_TYPES.includes(question.type)) {
+        const countsForQuestion = optionCountsByQuestion.get(question.id);
+        // Toutes les options à 0 par défaut — sinon une option jamais
+        // choisie n'apparaîtrait pas du tout dans le résultat, et le
+        // front devrait deviner qu'"absente" veut dire 0 (même logique
+        // que getVoteAggregatesForMany pour les propositions).
+        const options = question.options.map((option) => {
+          const count = countsForQuestion?.get(option.id) || 0;
+          return {
+            id: option.id,
+            label: option.label,
+            count,
+            percentage: totalResponses > 0
+              ? Math.round((count / totalResponses) * 1000) / 10
+              : 0,
+          };
+        });
+        return { ...base, options };
+      }
+
+      if (question.type === 'NOMBRE') {
+        const stats = numberStatsByQuestion.get(question.id);
+        return {
+          ...base,
+          stats: {
+            count: stats?._count.valueNumber || 0,
+            average: stats?._avg.valueNumber ?? null,
+            min: stats?._min.valueNumber ?? null,
+            max: stats?._max.valueNumber ?? null,
+          },
+        };
+      }
+
+      // TEXTE_LIBRE : pas de contenu brut exposé par ce point d'entrée
+      // public — juste combien de personnes ont répondu. Consulter les
+      // réponses complètes reste une fonctionnalité admin à part,
+      // hors périmètre de ce ticket.
+      return { ...base, totalAnswered: textCountsByQuestion.get(question.id) || 0 };
+    });
+
+    res.json({
+      survey: { id: survey.id, slug: survey.slug, title: survey.title, status: survey.status },
+      totalResponses,
+      questions,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
 function rejectAnswer(message) {
   const error = new Error(message);
   error.status = 400;
