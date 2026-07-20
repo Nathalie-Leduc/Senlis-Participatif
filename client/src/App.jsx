@@ -25,6 +25,8 @@ import Propositions from './pages/Propositions.jsx';
 import PropositionDetail from './pages/PropositionDetail.jsx';
 import AdminPropositions from './pages/AdminPropositions.jsx';
 import AdminPropositionForm from './pages/AdminPropositionForm.jsx';
+import AdminSurveys from './pages/AdminSurveys.jsx';
+import AdminSurveyForm from './pages/AdminSurveyForm.jsx';
 import Mascot from './components/Mascot/Mascot.jsx';
 
 // Page 404 avec mascotte perdue 🦌
@@ -79,9 +81,18 @@ export default function App() {
             <Route path="/admin/propositions/:slug/modifier" element={
               <ProtectedRoute adminOnly><AdminPropositionForm /></ProtectedRoute>
             } />
+            <Route path="/admin/enquetes" element={
+              <ProtectedRoute adminOnly><AdminSurveys /></ProtectedRoute>
+            } />
+            <Route path="/admin/enquetes/nouvelle" element={
+              <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>
+            } />
+            <Route path="/admin/enquetes/:slug/modifier" element={
+              <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>
+            } />
 
             {/* Sprint 3 → /carte */}
-            {/* Sprint 4 → /enquetes, /enquetes/:slug */}
+            {/* Sprint 4 → parcours répondant /enquetes, /enquetes/:slug (S4-05) */}
 
             {/* 404 — le cerf est perdu 🦌 */}
             <Route path="*" element={<NotFound />} />
