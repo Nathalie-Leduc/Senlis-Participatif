@@ -32,6 +32,7 @@ router.get('/', validateQuery(listSurveysQuerySchema), ctrl.list);
 router.get('/admin', auth, isAdmin, validateQuery(adminListSurveysQuerySchema), ctrl.listAdmin);
 
 router.get('/:slug', optionalAuth, ctrl.getBySlug);
+router.get('/:slug/results', optionalAuth, ctrl.getResults);
 
 // ── Routes admin (👑) ───────────────────────────────────
 router.post('/', auth, isAdmin, validate(createSurveySchema), ctrl.create);
