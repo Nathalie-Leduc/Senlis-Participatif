@@ -141,7 +141,20 @@ export async function getBySlug(req, res, next) {
       throw error;
     }
 
-    res.json({ survey });
+    // hasResponded : null pour un visiteur anonyme (on ne sait pas —
+    // différent de false, qui affirmerait "non" à tort). Permet au
+    // client d'afficher "Répondre" vs "Voir les résultats" sans faire
+    // tout le parcours pour se prendre un 409 à la toute fin.
+    let hasResponded = null;
+    if (req.user) {
+      const existing = await prisma.surveyResponse.findUnique({
+        where: { userId_surveyId: { userId: req.user.userId, surveyId: survey.id } },
+        select: { id: true },
+      });
+      hasResponded = !!existing;
+    }
+
+    res.json({ survey, hasResponded });
   } catch (err) {
     next(err);
   }

@@ -27,6 +27,10 @@ import AdminPropositions from './pages/AdminPropositions.jsx';
 import AdminPropositionForm from './pages/AdminPropositionForm.jsx';
 import AdminSurveys from './pages/AdminSurveys.jsx';
 import AdminSurveyForm from './pages/AdminSurveyForm.jsx';
+import Enquetes from './pages/Enquetes.jsx';
+import EnqueteDetail from './pages/EnqueteDetail.jsx';
+import EnqueteRepondre from './pages/EnqueteRepondre.jsx';
+import EnqueteResultats from './pages/EnqueteResultats.jsx';
 import Mascot from './components/Mascot/Mascot.jsx';
 
 // Page 404 avec mascotte perdue 🦌
@@ -67,6 +71,9 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/propositions" element={<Propositions />} />
             <Route path="/propositions/:slug" element={<PropositionDetail />} />
+            <Route path="/enquetes" element={<Enquetes />} />
+            <Route path="/enquetes/:slug" element={<EnqueteDetail />} />
+            <Route path="/enquetes/:slug/resultats" element={<EnqueteResultats />} />
 
             {/* Routes protégées */}
             <Route path="/mon-compte" element={
@@ -90,9 +97,15 @@ export default function App() {
             <Route path="/admin/enquetes/:slug/modifier" element={
               <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>
             } />
+            {/* adminOnly absent : n'importe quel citoyen CONNECTÉ peut
+                répondre — pas réservé aux admins. La vérification email
+                (UC-02), elle, est gérée DANS EnqueteRepondre, pas ici :
+                ProtectedRoute ne connaît que le rôle, pas emailVerified. */}
+            <Route path="/enquetes/:slug/repondre" element={
+              <ProtectedRoute><EnqueteRepondre /></ProtectedRoute>
+            } />
 
             {/* Sprint 3 → /carte */}
-            {/* Sprint 4 → parcours répondant /enquetes, /enquetes/:slug (S4-05) */}
 
             {/* 404 — le cerf est perdu 🦌 */}
             <Route path="*" element={<NotFound />} />
