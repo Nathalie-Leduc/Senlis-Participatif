@@ -71,6 +71,50 @@ export function extractTokenFromEmail(sendMailCallArgs) {
 }
 
 /**
+ * Crée une enquête directement en base (sans passer par l'API),
+ * avec un jeu de questions/options par défaut couvrant TOUS les
+ * types (OUI_NON, CHOIX_UNIQUE, NOMBRE) — pratique pour un test qui
+ * a juste besoin d'une enquête "qui marche" sans se soucier du détail.
+ *
+ * Comme seedProposal : overrides est fusionné à la fin, donc passer
+ * { questions: { create: [...] } } remplace ENTIÈREMENT le jeu de
+ * questions par défaut plutôt que de s'y ajouter — utile pour un
+ * test qui veut une seule question précise (ex. CHOIX_MULTIPLE).
+ */
+export function seedSurvey(overrides = {}) {
+  return prisma.survey.create({
+    data: {
+      slug: `enquete-${Math.random().toString(36).slice(2, 8)}`,
+      title: 'Enquête de test',
+      description: 'Description suffisamment longue pour passer la validation Zod.',
+      status: 'OPEN',
+      questions: {
+        create: [
+          {
+            label: 'Question OUI_NON de test',
+            type: 'OUI_NON',
+            required: true,
+            order: 0,
+            options: { create: [{ label: 'Oui', order: 0 }, { label: 'Non', order: 1 }] },
+          },
+          {
+            label: 'Question NOMBRE de test (optionnelle)',
+            type: 'NOMBRE',
+            required: false,
+            order: 1,
+          },
+        ],
+      },
+      ...overrides,
+    },
+    // include, pas juste create : la plupart des tests ont besoin
+    // tout de suite des id de questions/options générés (impossibles
+    // à connaître à l'avance) pour construire leurs payloads de vote.
+    include: { questions: { include: { options: true } } },
+  });
+}
+
+/**
  * Fabrique un citoyen inscrit ET vérifié, prêt à voter. Contrairement
  * à makeAdminUser(), pas de promotion en base — juste le parcours
  * normal d'un visiteur qui devient citoyen.

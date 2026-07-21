@@ -51,10 +51,23 @@ vi.mock('nodemailer', () => ({
 // tests (Lot 2), mais la table existe déjà (migration initiale)
 // — autant la nettoyer maintenant plutôt que de retomber dans
 // le même piège que pour Proposal le jour où on l'utilisera.
+// Answer/SurveyResponse et QuestionOption/Question suivent le
+// même principe pour les enquêtes (Sprint 4) : les tables filles
+// avant les tables mères.
 beforeEach(async () => {
+  // Answer/SurveyResponse AVANT Survey (et avant User, même si
+  // userId est SetNull côté schéma — autant nettoyer explicitement
+  // plutôt que de compter sur ce détail).
+  await prisma.answer.deleteMany();
+  await prisma.surveyResponse.deleteMany();
   await prisma.vote.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.proposal.deleteMany();
+  // QuestionOption puis Question AVANT Survey — mêmes contraintes
+  // de clé étrangère que pour les propositions ci-dessus.
+  await prisma.questionOption.deleteMany();
+  await prisma.question.deleteMany();
+  await prisma.survey.deleteMany();
   await prisma.authToken.deleteMany();
   await prisma.user.deleteMany();
 
