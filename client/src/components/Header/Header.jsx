@@ -39,12 +39,17 @@ export default function Header() {
         <nav style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <NavBtn to="/" active={isActive('/')}>Accueil</NavBtn>
           <NavBtn to="/propositions" active={isActive('/propositions')}>Propositions</NavBtn>
+          <NavBtn to="/enquetes" active={isActive('/enquetes')}>Enquêtes</NavBtn>
           {isAdmin && (
-            <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>
-              Admin
-            </NavBtn>
+            <>
+              <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>
+                Admin propositions
+              </NavBtn>
+              <NavBtn to="/admin/enquetes" active={isActive('/admin/enquetes')}>
+                Admin enquêtes
+              </NavBtn>
+            </>
           )}
-          {/* Sprint 4 → <NavBtn to="/enquetes">Enquêtes</NavBtn> */}
 
           {isLogged ? (
             <>
