@@ -187,6 +187,36 @@ export async function create(req, res, next) {
   }
 }
 
+// Compare les questions déjà en base à celles reçues dans la requête,
+// pour savoir si l'admin a RÉELLEMENT touché aux questions ou si le
+// formulaire renvoie juste, sans y toucher, ce qui était déjà là (le
+// constructeur envoie toujours l'état complet, même quand seul le
+// statut a changé — voir plus bas). Ignore délibérément les id (le
+// payload entrant n'en a pas) : seuls label/type/required/order et
+// les libellés d'options comptent pour dire "pareil" ou "différent".
+function questionsUnchanged(existingQuestions, incomingQuestions) {
+  if (existingQuestions.length !== incomingQuestions.length) return false;
+
+  return existingQuestions.every((existingQuestion, index) => {
+    const incoming = incomingQuestions[index];
+
+    if (existingQuestion.label !== incoming.label) return false;
+    if ((existingQuestion.helpText || '') !== (incoming.helpText || '')) return false;
+    if (existingQuestion.type !== incoming.type) return false;
+    if (existingQuestion.required !== (incoming.required ?? true)) return false;
+
+    const existingLabels = existingQuestion.options.map((o) => o.label);
+    // OUI_NON sans options fournies = "garder les options actuelles"
+    // (même contrat qu'à la création) — pas une vraie différence.
+    const incomingLabels = incoming.options?.length
+      ? incoming.options.map((o) => o.label)
+      : (existingQuestion.type === 'OUI_NON' ? existingLabels : []);
+
+    if (existingLabels.length !== incomingLabels.length) return false;
+    return existingLabels.every((label, i) => label === incomingLabels[i]);
+  });
+}
+
 // ── PATCH /surveys/:id — éditer (admin) ─────────────────
 //
 // Si `questions` est fourni, il REMPLACE l'intégralité du
@@ -201,7 +231,10 @@ export async function create(req, res, next) {
 export async function update(req, res, next) {
   try {
     const { id } = req.params;
-    const existing = await prisma.survey.findUnique({ where: { id } });
+    const existing = await prisma.survey.findUnique({
+      where: { id },
+      include: QUESTIONS_INCLUDE,
+    });
 
     if (!existing) {
       const error = new Error('Enquête introuvable');
@@ -212,13 +245,20 @@ export async function update(req, res, next) {
 
     const { questions, ...surveyFields } = req.body;
 
+    // Le formulaire admin envoie TOUJOURS le questionnaire complet,
+    // même quand seul le statut a changé — donc `questions` étant
+    // présent ne veut pas dire "l'admin a modifié les questions".
+    // On ne considère un VRAI changement (et donc le garde-fou
+    // ci-dessous) que si le contenu diffère réellement de l'existant.
+    const questionsActuallyChanged = questions && !questionsUnchanged(existing.questions, questions);
+
     // Garde-fou : Question a onDelete: Cascade vers Answer (voir
     // schema.prisma). Remplacer les questions d'une enquête qui a
     // déjà reçu des réponses effacerait ces réponses sans prévenir —
     // même logique de prudence que RGPD/onDelete ailleurs dans ce
     // projet. On bloque plutôt que de détruire silencieusement des
     // données de citoyens.
-    if (questions) {
+    if (questionsActuallyChanged) {
       const responseCount = await prisma.surveyResponse.count({ where: { surveyId: id } });
       if (responseCount > 0) {
         const error = new Error(
@@ -234,7 +274,7 @@ export async function update(req, res, next) {
     // de nouvelles" doit réussir ENSEMBLE ou pas du tout — sinon un
     // crash au milieu laisserait l'enquête sans AUCUNE question.
     const survey = await prisma.$transaction(async (tx) => {
-      if (questions) {
+      if (questionsActuallyChanged) {
         // Cascade se charge des QuestionOption liées.
         await tx.question.deleteMany({ where: { surveyId: id } });
       }
@@ -243,7 +283,7 @@ export async function update(req, res, next) {
         where: { id },
         data: {
           ...surveyFields,
-          ...(questions && { questions: { create: toNestedQuestionsCreate(questions) } }),
+          ...(questionsActuallyChanged && { questions: { create: toNestedQuestionsCreate(questions) } }),
         },
         include: QUESTIONS_INCLUDE,
       });
