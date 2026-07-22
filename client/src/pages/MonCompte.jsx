@@ -3,20 +3,31 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
+import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
 
 export default function MonCompte() {
   const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
-  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '' });
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
 
   const handleChangePassword = async () => {
     setError(null); setMessage(null);
+
+    if (pwForm.newPassword !== pwForm.newPasswordConfirm) {
+      setError('Les deux mots de passe ne correspondent pas');
+      return;
+    }
+
     try {
-      const data = await api.put('/auth/me/password', pwForm);
+      // newPasswordConfirm n'existe que pour cette vérification —
+      // l'API attend juste { currentPassword, newPassword }.
+      const { newPasswordConfirm, ...payload } = pwForm;
+      void newPasswordConfirm;
+      const data = await api.put('/auth/me/password', payload);
       setMessage(data.message);
-      setPwForm({ currentPassword: '', newPassword: '' });
+      setPwForm({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
     } catch (err) { setError(err.message); }
   };
 
@@ -55,10 +66,21 @@ export default function MonCompte() {
           <input type="password" value={pwForm.currentPassword} onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
             autoComplete="current-password" style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
         </label>
-        <label style={{ display: 'block', marginBottom: 16 }}>
+        <label style={{ display: 'block', marginBottom: 8 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Nouveau mot de passe</span>
           <input type="password" value={pwForm.newPassword} onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
-            autoComplete="new-password" minLength={8} style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
+            autoComplete="new-password" minLength={12}
+            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
+            title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
+            style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
+        </label>
+        <PasswordStrengthMeter password={pwForm.newPassword} />
+
+        <label style={{ display: 'block', margin: '16px 0 16px' }}>
+          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Confirmer le nouveau mot de passe</span>
+          <input type="password" value={pwForm.newPasswordConfirm} onChange={(e) => setPwForm({ ...pwForm, newPasswordConfirm: e.target.value })}
+            autoComplete="new-password"
+            style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
         </label>
         <button onClick={handleChangePassword} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Changer le mot de passe</button>
       </div>

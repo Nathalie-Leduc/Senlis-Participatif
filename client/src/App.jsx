@@ -8,7 +8,7 @@
 // sprints suivants — les <Link> dans la nav sont déjà prêts.
 // ══════════════════════════════════════════════════════════
 
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import Header from './components/Header/Header.jsx';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute.jsx';
@@ -31,6 +31,8 @@ import Enquetes from './pages/Enquetes.jsx';
 import EnqueteDetail from './pages/EnqueteDetail.jsx';
 import EnqueteRepondre from './pages/EnqueteRepondre.jsx';
 import EnqueteResultats from './pages/EnqueteResultats.jsx';
+import MentionsLegales from './pages/MentionsLegales.jsx';
+import PolitiqueConfidentialite from './pages/PolitiqueConfidentialite.jsx';
 import Mascot from './components/Mascot/Mascot.jsx';
 
 // Page 404 avec mascotte perdue 🦌
@@ -74,6 +76,8 @@ export default function App() {
             <Route path="/enquetes" element={<Enquetes />} />
             <Route path="/enquetes/:slug" element={<EnqueteDetail />} />
             <Route path="/enquetes/:slug/resultats" element={<EnqueteResultats />} />
+            <Route path="/mentions-legales" element={<MentionsLegales />} />
+            <Route path="/confidentialite" element={<PolitiqueConfidentialite />} />
 
             {/* Routes protégées */}
             <Route path="/mon-compte" element={
@@ -119,6 +123,11 @@ export default function App() {
         }}>
           <p><strong style={{ color: '#F0C45A' }}>Senlis Participatif</strong> · Plateforme citoyenne indépendante</p>
           <p style={{ marginTop: 4 }}>🦌 Aucun cerf n'a été blessé pendant la fabrication de ce site</p>
+          <p style={{ marginTop: 12 }}>
+            <Link to="/mentions-legales" style={{ color: 'rgba(255,255,255,0.75)' }}>Mentions légales</Link>
+            {' · '}
+            <Link to="/confidentialite" style={{ color: 'rgba(255,255,255,0.75)' }}>Politique de confidentialité</Link>
+          </p>
         </footer>
       </AuthProvider>
     </BrowserRouter>
