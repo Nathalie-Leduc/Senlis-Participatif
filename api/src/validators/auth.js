@@ -20,10 +20,25 @@ const email = z
   .toLowerCase()
   .email('Adresse email invalide');
 
+// Recommandations CNIL (délibération n° 2022-100, référentiel mots
+// de passe) : 12 caractères minimum si le mot de passe est la SEULE
+// mesure de sécurité (pas de 2FA en complément), avec au moins 3 des
+// 4 catégories de caractères — ici on demande les 4, plus strict
+// mais plus simple à expliquer côté UI qu'une règle "au moins 3 sur 4".
+//
+// .regex() plutôt que 4 .refine() séparés : Zod s'arrêterait à la
+// première règle échouée avec .refine(), masquant les autres —
+// .regex() avec lookaheads (?=...) vérifie les 4 conditions dans la
+// MÊME passe, donc le message d'erreur ci-dessous reste correct quel
+// que soit ce qui manque exactement.
 const password = z
   .string()
-  .min(8, 'Le mot de passe doit contenir au moins 8 caractères')
-  .max(128, 'Le mot de passe ne peut pas dépasser 128 caractères');
+  .min(12, 'Le mot de passe doit contenir au moins 12 caractères')
+  .max(128, 'Le mot de passe ne peut pas dépasser 128 caractères')
+  .regex(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/,
+    'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un caractère spécial',
+  );
 
 const pseudo = z
   .string()
