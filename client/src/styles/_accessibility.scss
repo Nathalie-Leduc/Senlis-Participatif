@@ -57,7 +57,11 @@ html.a11y-reduce-motion {
   position: fixed;
   right: 20px;
   bottom: 20px;
-  z-index: 200;
+  // Leaflet monte ses propres calques jusqu'à z-index 1000 (panneau de
+  // contrôles) — largement au-dessus des 200 qu'on avait mis ici.
+  // Un widget flottant "par-dessus tout le site" doit dépasser TOUT
+  // ce que le site peut afficher, cartes comprises.
+  z-index: 3000;
   width: 56px;
   height: 56px;
   border-radius: $radius-pill;
@@ -78,7 +82,7 @@ html.a11y-reduce-motion {
   position: fixed;
   right: 20px;
   bottom: 84px;
-  z-index: 200;
+  z-index: 3000;
   width: min(340px, calc(100vw - 40px));
   max-height: min(70vh, 640px);
   overflow-y: auto;
@@ -141,6 +145,12 @@ html.a11y-reduce-motion {
     min-height: 44px;
 
     &:hover { border-color: $nonette; }
+
+    &[aria-pressed='true'] {
+      background: $nonette;
+      border-color: $nonette;
+      color: $blanc;
+    }
   }
 }
 
