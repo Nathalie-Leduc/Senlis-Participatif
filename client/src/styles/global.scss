@@ -3,9 +3,11 @@
 @use 'animations';
 @use 'mascot';
 @use 'joy-layer';
+@use 'accessibility';
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: $font-body; font-size: $font-size-base; line-height: 1.6; color: $ardoise; background: $pierre; overflow-x: hidden; }
+:root { --a11y-font-scale: 1; }
+body { font-family: $font-body; font-size: calc(#{$font-size-base} * var(--a11y-font-scale)); line-height: 1.6; color: $ardoise; background: $pierre; overflow-x: hidden; }
 h1, h2, h3 { font-family: $font-display; line-height: 1.2; }
 a { color: $nonette; }
 :focus-visible { outline: 3px solid $nonette; outline-offset: 2px; border-radius: 4px; }
