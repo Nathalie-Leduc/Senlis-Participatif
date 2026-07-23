@@ -1,0 +1,201 @@
+// ══════════════════════════════════════════════════════════
+// Accessibilité — effets réels (S5-04)
+//
+// Les modes de contraste utilisent `filter` sur <html> : plus
+// simple et exhaustif qu'une deuxième feuille de couleurs à
+// maintenir en parallèle de la charte graphique, et ça touche
+// automatiquement tout élément ajouté plus tard sans y repenser.
+// Contrepartie : les images/vidéos sont contre-filtrées pour ne
+// pas ressortir avec des couleurs absurdes.
+// ══════════════════════════════════════════════════════════
+
+@use 'variables' as *;
+
+html.a11y-contrast-dark {
+  filter: invert(1) hue-rotate(180deg);
+
+  img, video, svg, [class*='mascot'] {
+    filter: invert(1) hue-rotate(180deg);
+  }
+}
+
+html.a11y-contrast-light {
+  filter: contrast(1.5) brightness(1.05);
+}
+
+html.a11y-contrast-mono {
+  filter: grayscale(1);
+}
+
+// La taille de texte est un multiplicateur appliqué à la taille de
+// base (voir global.scss, qui lit --a11y-font-scale) — plutôt que de
+// dupliquer $font-size-base ici, une seule source de vérité pour la
+// taille "normale".
+html.a11y-line-spacing {
+  body, p, li, blockquote { line-height: 2 !important; }
+}
+
+html.a11y-underline-links a {
+  text-decoration: underline !important;
+}
+
+// Bascule manuelle, en plus de @media (prefers-reduced-motion) déjà
+// présent dans global.scss — utile quand le réglage système n'est
+// pas activé mais que la personne veut quand même moins de mouvement
+// juste sur ce site.
+html.a11y-reduce-motion {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+// ── Le widget lui-même ───────────────────────────────────
+
+.a11y-toggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 200;
+  width: 56px;
+  height: 56px;
+  border-radius: $radius-pill;
+  border: none;
+  background: $nonette;
+  color: $blanc;
+  font-size: 26px;
+  box-shadow: $shadow-nonette;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover { background: #184D65; }
+}
+
+.a11y-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 84px;
+  z-index: 200;
+  width: min(340px, calc(100vw - 40px));
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+  background: $blanc;
+  border-radius: $radius-md;
+  box-shadow: $shadow-card-hover;
+  padding: 18px;
+  font-size: 15px; // taille fixe, volontairement PAS affectée par --a11y-font-scale :
+                    // le panneau qui règle la taille du texte ne doit pas lui-même
+                    // devenir illisible ou grandir sans limite en boucle.
+}
+
+.a11y-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+
+  h2 { font-family: $font-display; font-size: 20px; color: $ardoise; }
+}
+
+.a11y-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: $gris;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.a11y-section {
+  margin-bottom: 18px;
+
+  h3 {
+    font-size: 13px;
+    font-weight: 700;
+    color: $gris;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 8px;
+  }
+}
+
+.a11y-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  button {
+    text-align: left;
+    padding: 10px 14px;
+    border-radius: $radius-sm;
+    border: 2px solid #e3dcce;
+    background: $blanc;
+    color: $ardoise;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    min-height: 44px;
+
+    &:hover { border-color: $nonette; }
+  }
+}
+
+.a11y-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  button {
+    padding: 8px 14px;
+    border-radius: $radius-pill;
+    border: 2px solid #e3dcce;
+    background: $blanc;
+    color: $ardoise;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    min-height: 40px;
+
+    &[aria-pressed='true'] {
+      background: $nonette;
+      border-color: $nonette;
+      color: $blanc;
+    }
+
+    &:disabled { opacity: .4; cursor: not-allowed; }
+  }
+
+  span { font-weight: 700; color: $ardoise; min-width: 44px; text-align: center; }
+}
+
+.a11y-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: $ardoise;
+  margin-bottom: 8px;
+  cursor: pointer;
+
+  input { width: 20px; height: 20px; flex-shrink: 0; }
+}
+
+.a11y-reset {
+  width: 100%;
+  padding: 10px;
+  border-radius: $radius-sm;
+  border: 2px solid $brique;
+  background: $blanc;
+  color: $brique;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 44px;
+
+  &:hover { background: $brique-light; }
+}
