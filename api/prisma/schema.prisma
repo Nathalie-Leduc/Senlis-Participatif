@@ -69,8 +69,9 @@ enum Stance {
 
 // Jetons à usage unique envoyés par email
 enum TokenType {
-  VERIFY_EMAIL   // confirmation d'inscription
-  RESET_PASSWORD // mot de passe oublié
+  VERIFY_EMAIL     // confirmation d'inscription
+  RESET_PASSWORD   // mot de passe oublié
+  TWO_FACTOR_LOGIN // code de connexion à 6 chiffres (admin uniquement)
 }
 
 enum VoteValue {

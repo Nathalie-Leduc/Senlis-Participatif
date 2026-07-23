@@ -59,6 +59,11 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Le mot de passe est requis'),
 });
 
+export const verifyTwoFactorSchema = z.object({
+  challengeToken: z.string().min(1, 'Jeton de vérification manquant'),
+  code: z.string().regex(/^\d{6}$/, 'Le code doit contenir exactement 6 chiffres'),
+});
+
 export const verifyEmailSchema = z.object({
   token: z.string().min(1, 'Jeton manquant'),
 });
