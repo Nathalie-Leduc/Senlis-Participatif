@@ -130,3 +130,46 @@ export async function sendResetPasswordEmail(email, token) {
     `,
   });
 }
+
+/**
+ * Code de connexion à 6 chiffres (double authentification admin).
+ * Le code est affiché en GROS et espacé (letter-spacing) : il doit
+ * être lisible d'un coup d'œil pour être retapé, contrairement aux
+ * autres emails qui portent un lien cliquable.
+ */
+export async function sendTwoFactorCode(email, code) {
+  await sendEmail({
+    to: email,
+    subject: `${code} — votre code de connexion Senlis Participatif`,
+    html: `
+      <div style="font-family: 'Public Sans', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px;">
+        <h1 style="font-family: Georgia, serif; color: #26333A; font-size: 24px;">
+          Code de connexion 🔐
+        </h1>
+        <p style="color: #6B6257; font-size: 16px; line-height: 1.6;">
+          Voici votre code à saisir pour terminer la connexion à votre compte administrateur :
+        </p>
+        <p style="
+          font-family: 'Courier New', monospace;
+          font-size: 36px;
+          font-weight: 700;
+          letter-spacing: 8px;
+          color: #1E5F7C;
+          background: #E3EEF3;
+          padding: 16px 24px;
+          border-radius: 12px;
+          text-align: center;
+          margin: 20px 0;
+        ">${code}</p>
+        <p style="color: #6B6257; font-size: 14px;">
+          Ce code expire dans 10 minutes. Si vous n'êtes pas à l'origine de cette
+          tentative de connexion, changez votre mot de passe sans attendre.
+        </p>
+        <hr style="border: none; border-top: 1px solid #e3dcce; margin: 24px 0;" />
+        <p style="color: #B9B2A4; font-size: 12px;">
+          Senlis Participatif — Plateforme citoyenne indépendante
+        </p>
+      </div>
+    `,
+  });
+}

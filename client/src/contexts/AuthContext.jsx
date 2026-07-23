@@ -45,8 +45,21 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Connexion ──────────────────────────────────────────
+  // Si data.twoFactorRequired est vrai (compte admin), on ne stocke
+  // NI token NI user — l'appelant (Connexion.jsx) doit d'abord
+  // passer par verifyTwoFactor() avec le code reçu par email.
   const login = useCallback(async ({ email, password }) => {
     const data = await api.post('/auth/login', { email, password });
+    if (!data.twoFactorRequired) {
+      localStorage.setItem('token', data.token);
+      setUser(data.user);
+    }
+    return data;
+  }, []);
+
+  // ── Deuxième étape de connexion (2FA admin) ─────────────
+  const verifyTwoFactor = useCallback(async ({ challengeToken, code }) => {
+    const data = await api.post('/auth/2fa/verify', { challengeToken, code });
     localStorage.setItem('token', data.token);
     setUser(data.user);
     return data;
@@ -70,7 +83,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, isLogged, isAdmin, loading,
-      register, login, logout, refreshUser,
+      register, login, verifyTwoFactor, logout, refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

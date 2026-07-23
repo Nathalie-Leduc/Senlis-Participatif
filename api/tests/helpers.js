@@ -71,6 +71,27 @@ export function extractTokenFromEmail(sendMailCallArgs) {
 }
 
 /**
+ * Extrait le code 2FA (6 chiffres) depuis les arguments capturés
+ * par sendMailMock — on lit le SUJET de l'email, pas son HTML : le
+ * gabarit sendTwoFactorCode() (services/email.js) place le code en
+ * tête du sujet ("123456 — votre code de connexion..."), ce qui est
+ * bien plus simple et robuste à parser qu'un bloc HTML stylé.
+ *
+ * @param {{ subject: string }} sendMailCallArgs - sendMailMock.mock.calls[i][0]
+ */
+export function extractTwoFactorCodeFromEmail(sendMailCallArgs) {
+  const match = sendMailCallArgs.subject.match(/^(\d{6})/);
+
+  if (!match) {
+    throw new Error(
+      "Aucun code 2FA trouvé dans le sujet de l'email — sendMailMock a-t-il bien été appelé ?"
+    );
+  }
+
+  return match[1];
+}
+
+/**
  * Crée une enquête directement en base (sans passer par l'API),
  * avec un jeu de questions/options par défaut couvrant TOUS les
  * types (OUI_NON, CHOIX_UNIQUE, NOMBRE) — pratique pour un test qui
@@ -164,5 +185,15 @@ export async function makeAdminUser() {
     .post('/api/v1/auth/login')
     .send({ email: credentials.email, password: credentials.password });
 
-  return { user: loginRes.body.user, token: loginRes.body.token };
+  // Depuis S5-03, un compte ADMIN passe par la double authentification :
+  // login() ne renvoie qu'un jeton de DÉFI (+ envoie un code par email),
+  // jamais le vrai JWT directement. Il faut donc jouer aussi cette
+  // deuxième étape ici — sinon token/user restent undefined et TOUTE
+  // requête authentifiée suivante échoue en 401, silencieusement.
+  const code = extractTwoFactorCodeFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+  const verifyRes = await request(app)
+    .post('/api/v1/auth/2fa/verify')
+    .send({ challengeToken: loginRes.body.challengeToken, code });
+
+  return { user: verifyRes.body.user, token: verifyRes.body.token };
 }
