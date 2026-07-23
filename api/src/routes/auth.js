@@ -19,6 +19,7 @@ import {
   resetPasswordSchema,
   updateProfileSchema,
   changePasswordSchema,
+  verifyTwoFactorSchema,
 } from '../validators/auth.js';
 
 const router = Router();
@@ -39,6 +40,10 @@ const authLimiter = rateLimit({
 
 router.post('/register', authLimiter, validate(registerSchema), ctrl.register);
 router.post('/login', authLimiter, validate(loginSchema), ctrl.login);
+// Même limiteur que login : c'est la suite directe de la même
+// tentative de connexion, donc exposée au même risque de bruteforce
+// (deviner le code à 6 chiffres plutôt que le mot de passe).
+router.post('/2fa/verify', authLimiter, validate(verifyTwoFactorSchema), ctrl.verifyTwoFactor);
 router.post('/verify-email', validate(verifyEmailSchema), ctrl.verifyEmail);
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), ctrl.forgotPassword);
 router.post('/reset-password', validate(resetPasswordSchema), ctrl.resetPassword);

@@ -8,9 +8,11 @@
 
 import argon2 from 'argon2';
 import prisma from '../lib/prisma.js';
-import { signToken } from '../lib/jwt.js';
-import { createToken, verifyAndConsumeToken } from '../services/token.js';
-import { sendVerificationEmail, sendResetPasswordEmail } from '../services/email.js';
+import { signToken, signTwoFactorChallenge, verifyTwoFactorChallenge } from '../lib/jwt.js';
+import {
+  createToken, verifyAndConsumeToken, createTwoFactorCode, verifyTwoFactorCode,
+} from '../services/token.js';
+import { sendVerificationEmail, sendResetPasswordEmail, sendTwoFactorCode } from '../services/email.js';
 
 // ── POST /auth/register ─────────────────────────────────
 export async function register(req, res, next) {
@@ -101,7 +103,73 @@ export async function login(req, res, next) {
       throw error;
     }
 
+    // Tout est bon → mais un compte ADMIN ne reçoit pas son JWT
+    // tout de suite : on envoie d'abord un code par email, et on ne
+    // renvoie qu'un jeton de DÉFI (10 min, sans le rôle) — la vraie
+    // connexion n'a lieu qu'après /auth/2fa/verify. Un citoyen normal
+    // continue comme avant, sans cette étape.
+    if (user.role === 'ADMIN') {
+      const code = await createTwoFactorCode(user.id);
+      await sendTwoFactorCode(user.email, code);
+
+      const challengeToken = signTwoFactorChallenge(user);
+
+      return res.json({
+        twoFactorRequired: true,
+        challengeToken,
+      });
+    }
+
     // Tout est bon → JWT
+    const jwt = signToken(user);
+
+    res.json({
+      token: jwt,
+      user: {
+        id: user.id,
+        email: user.email,
+        pseudo: user.pseudo,
+        role: user.role,
+        emailVerified: user.emailVerified,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── POST /auth/2fa/verify ────────────────────────────────
+//
+// Deuxième étape de la connexion admin : le jeton de défi prouve
+// que le mot de passe était déjà correct (on ne redemande pas
+// email+password ici) ; le code prouve l'accès à la boîte mail.
+export async function verifyTwoFactor(req, res, next) {
+  try {
+    const { challengeToken, code } = req.body;
+
+    // Un jeton de défi invalide/expiré = 401 générique, sans
+    // détailler pourquoi — même logique anti-énumération que
+    // genericError() dans login().
+    let payload;
+    try {
+      payload = verifyTwoFactorChallenge(challengeToken);
+    } catch {
+      const error = new Error('Session de connexion expirée — reconnectez-vous');
+      error.status = 401;
+      error.code = 'CHALLENGE_EXPIRED';
+      throw error;
+    }
+
+    await verifyTwoFactorCode(payload.userId, code);
+
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    if (!user) {
+      const error = new Error('Compte introuvable');
+      error.status = 401;
+      error.code = 'UNAUTHORIZED';
+      throw error;
+    }
+
     const jwt = signToken(user);
 
     res.json({
