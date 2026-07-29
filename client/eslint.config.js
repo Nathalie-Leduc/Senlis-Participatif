@@ -30,4 +30,16 @@ export default [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   },
+  {
+    // vite.config.js (et tout futur *.config.js à la racine) s'exécute
+    // dans Node au moment du build/dev — jamais dans le navigateur.
+    // Le reste de ce fichier ne déclare QUE des globales navigateur
+    // (document, window...), donc `process` y était inconnu — même
+    // catégorie de problème que FormData plus tôt, mais dans l'autre
+    // sens (globale Node manquante plutôt que navigateur manquante).
+    files: ['*.config.js'],
+    languageOptions: {
+      globals: { process: 'readonly' },
+    },
+  },
 ];
