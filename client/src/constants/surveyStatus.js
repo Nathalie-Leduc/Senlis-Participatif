@@ -6,7 +6,9 @@
 
 export const STATUS_META = {
   DRAFT: { label: 'Brouillon', color: '#6B6257', bg: '#EFEBE2' },
-  OPEN: { label: 'Ouverte', color: '#3A7A4D', bg: '#E0F2E5' },
+  // Audit accessibilité (S5-05) : même correctif que proposalStatus.js
+  // — #3A7A4D sur #E0F2E5 échouait de justesse le contraste AA.
+  OPEN: { label: 'Ouverte', color: '#377349', bg: '#E0F2E5' },
   CLOSED: { label: 'Clôturée', color: '#1E5F7C', bg: '#E3EEF3' },
 };
 

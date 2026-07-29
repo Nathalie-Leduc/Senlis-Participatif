@@ -21,7 +21,10 @@
 // ══════════════════════════════════════════════════════════
 
 const OPTIONS = [
-  { value: 'POUR', label: 'Pour', icon: '✓', color: '#3A7A4D', bg: '#E0F2E5' },
+  // #377349 plutôt que #3A7A4D (tilleul standard) : audit accessibilité
+  // (S5-05) — le tilleul standard échoue de justesse le contraste AA
+  // (4,42:1) sur ce fond clair, une fois le bouton sélectionné.
+  { value: 'POUR', label: 'Pour', icon: '✓', color: '#377349', bg: '#E0F2E5' },
   { value: 'NEUTRE', label: 'Neutre', icon: '◯', color: '#6B6257', bg: '#EFEBE2' },
   { value: 'CONTRE', label: 'Contre', icon: '✗', color: '#A8442F', bg: '#FCEAE6' },
 ];
