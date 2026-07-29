@@ -110,7 +110,10 @@ export default function Enquetes() {
             >
               <span style={{
                 fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
-                color: survey.status === 'OPEN' ? '#3A7A4D' : '#1E5F7C',
+                // #377349 plutôt que #3A7A4D (tilleul standard) : audit
+                // accessibilité (S5-05), le tilleul standard échouait de
+                // justesse le contraste AA sur ce fond clair (4,42:1).
+                color: survey.status === 'OPEN' ? '#377349' : '#1E5F7C',
                 background: survey.status === 'OPEN' ? '#E0F2E5' : '#E3EEF3',
               }}>
                 {survey.status === 'OPEN' ? 'Ouverte' : 'Clôturée'}

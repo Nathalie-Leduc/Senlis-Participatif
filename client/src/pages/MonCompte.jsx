@@ -47,7 +47,9 @@ export default function MonCompte() {
         <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0' }}>Mon compte</h1>
       </div>
 
-      {message && <div style={{ background: '#E0F2E5', color: '#3A7A4D', padding: '12px 16px', borderRadius: 12, marginBottom: 16, fontSize: 15 }}>{message}</div>}
+      {/* #377349 plutôt que #3A7A4D : audit accessibilité (S5-05),
+          contraste AA insuffisant (4,42:1) sur ce fond clair. */}
+      {message && <div style={{ background: '#E0F2E5', color: '#377349', padding: '12px 16px', borderRadius: 12, marginBottom: 16, fontSize: 15 }}>{message}</div>}
       {error && <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 16, fontSize: 15 }}>{error}</div>}
 
       {/* Infos du profil */}
