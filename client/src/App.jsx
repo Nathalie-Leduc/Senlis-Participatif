@@ -11,7 +11,9 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { AccessibilityProvider } from './contexts/AccessibilityContext.jsx';
+import { ToastProvider } from './contexts/ToastContext.jsx';
 import AccessibilityWidget from './components/AccessibilityWidget/AccessibilityWidget.jsx';
+import MascotWidget from './components/MascotWidget/MascotWidget.jsx';
 import Header from './components/Header/Header.jsx';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute.jsx';
 
@@ -59,11 +61,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <AccessibilityProvider>
+      <ToastProvider>
       <AuthProvider>
         {/* Skip link : premier élément focusable (accessibilité) */}
         <a href="#main" className="skip-link">Aller au contenu</a>
 
         <AccessibilityWidget />
+        <MascotWidget />
 
         <Header />
 
@@ -135,6 +139,7 @@ export default function App() {
           </p>
         </footer>
       </AuthProvider>
+      </ToastProvider>
       </AccessibilityProvider>
     </BrowserRouter>
   );

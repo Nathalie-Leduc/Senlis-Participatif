@@ -14,15 +14,26 @@ import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import LazyMapView from '../components/MapView/LazyMapView.jsx';
 import { PARKINGS_REPORT_EXEMPLE } from '../data/parkingsReport.js';
+import useIsVisible from '../hooks/useIsVisible.js';
+import useCountUp from '../hooks/useCountUp.js';
 
 export default function Accueil() {
   const { isLogged } = useAuth();
   const [proposalsTotal, setProposalsTotal] = useState(0);
+  const [surveysTotal, setSurveysTotal] = useState(0);
   const [markers, setMarkers] = useState([]);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [iris, setIris] = useState(null);
   const [showIris, setShowIris] = useState(true);
   const [showParkings, setShowParkings] = useState(true);
+
+  // Les stat pills ne démarrent leur décompte que lorsqu'elles entrent
+  // réellement dans l'écran — sur un hero déjà visible au chargement
+  // (cas le plus fréquent), ça se déclenche donc quasi immédiatement ;
+  // ça évite surtout de lancer une animation invisible hors-écran.
+  const [statsRef, statsVisible] = useIsVisible({ threshold: 0.5 });
+  const animatedProposalsTotal = useCountUp(proposalsTotal, { start: statsVisible });
+  const animatedSurveysTotal = useCountUp(surveysTotal, { start: statsVisible });
 
   // On récupère un lot de propositions publiques pour la mini-carte
   // ET pour le compteur "propositions" du hero — une seule requête
@@ -44,6 +55,13 @@ export default function Accueil() {
         // utile même sans les chiffres/la carte.
       })
       .finally(() => setMapLoaded(true));
+
+    // Compteur d'enquêtes : juste le total de la pagination, on n'a
+    // besoin d'aucune des enquêtes elles-mêmes ici — limit=1 suffit,
+    // pas la peine de faire redescendre 50 enquêtes pour un chiffre.
+    api.get('/surveys?limit=1')
+      .then((data) => setSurveysTotal(data.pagination.total))
+      .catch(() => {});
 
     // Le fichier IRIS vit dans public/ — un simple fetch, jamais un
     // import JS : ce n'est pas du code, ça n'a aucune raison de
@@ -90,13 +108,16 @@ export default function Accueil() {
               Découvrez les propositions pour Senlis, votez en
               10 secondes et participez aux enquêtes qui comptent vraiment.
             </p>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+            <div ref={statsRef} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
               {/* "participants" resterait à afficher un vrai chiffre le
                   jour où une route dédiée existera (ex. total de citoyens
                   vérifiés) — pas encore le cas, donc honnêteté d'abord :
-                  on ne fabrique pas un total qu'on ne peut pas vérifier. */}
+                  on ne fabrique pas un total qu'on ne peut pas vérifier.
+                  Pas de compteur animé dessus non plus : animer un 0 fixe
+                  n'aurait aucun sens. */}
               <div className="stat-pill"><span className="num">0</span> participants</div>
-              <div className="stat-pill"><span className="num">{proposalsTotal}</span> propositions</div>
+              <div className="stat-pill"><span className="num">{animatedProposalsTotal}</span> propositions</div>
+              <div className="stat-pill"><span className="num">{animatedSurveysTotal}</span> enquêtes</div>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {isLogged ? (

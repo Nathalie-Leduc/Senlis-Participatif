@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/proposalStatus.js';
 
 const FILTERS = [
@@ -30,6 +31,7 @@ export default function AdminPropositions() {
   const [status, setStatus] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { showToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +59,7 @@ export default function AdminPropositions() {
     try {
       await api.delete(`/proposals/${proposal.id}`);
       setItems((prev) => prev.filter((p) => p.id !== proposal.id));
+      showToast(`« ${proposal.title} » a été supprimée`);
     } catch (err) {
       setError(err.message || 'La suppression a échoué');
     }

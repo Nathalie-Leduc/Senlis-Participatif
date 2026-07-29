@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import useScrollReveal from '../hooks/useScrollReveal.js';
 
 export default function EnqueteResultats() {
   const { slug } = useParams();
@@ -69,15 +70,7 @@ export default function EnqueteResultats() {
             {q.options && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {q.options.map((opt) => (
-                  <div key={opt.id}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-                      <span>{opt.label}</span>
-                      <span style={{ color: '#6B6257' }}>{opt.count} — {opt.percentage}%</span>
-                    </div>
-                    <div style={{ height: 10, borderRadius: 999, background: '#EFEBE2', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 999, background: '#1E5F7C', width: `${opt.percentage}%` }} />
-                    </div>
-                  </div>
+                  <ResultBar key={opt.id} option={opt} />
                 ))}
               </div>
             )}
@@ -102,6 +95,27 @@ export default function EnqueteResultats() {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Une barre de résultat, animée à l'entrée dans l'écran ────
+// Composant à part plutôt qu'un appel direct à useScrollReveal dans
+// le .map() ci-dessus : un Hook ne peut pas être appelé dans une
+// boucle — il faut un composant distinct, instancié une fois par
+// option, chacun avec son propre appel de Hook indépendant.
+function ResultBar({ option }) {
+  const ref = useScrollReveal('is-visible', { threshold: 0.3 });
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+        <span>{option.label}</span>
+        <span style={{ color: '#6B6257' }}>{option.count} — {option.percentage}%</span>
+      </div>
+      <div ref={ref} className="result-bar" style={{ '--w': `${option.percentage}%` }}>
+        <span />
       </div>
     </div>
   );

@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/surveyStatus.js';
 
 const FILTERS = [
@@ -23,6 +24,7 @@ export default function AdminSurveys() {
   const [status, setStatus] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { showToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,6 +49,7 @@ export default function AdminSurveys() {
     try {
       await api.delete(`/surveys/${survey.id}`);
       setItems((prev) => prev.filter((s) => s.id !== survey.id));
+      showToast(`« ${survey.title} » a été supprimée`);
     } catch (err) {
       // Ex. 409 SURVEY_HAS_RESPONSES si l'enquête a déjà des réponses —
       // le message renvoyé par l'API est déjà explicite, on l'affiche tel quel.
