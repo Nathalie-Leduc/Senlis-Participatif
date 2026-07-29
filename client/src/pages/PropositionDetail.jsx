@@ -19,11 +19,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import VoteButtons from '../components/VoteButtons/VoteButtons.jsx';
 import Confetti from '../components/Confetti/Confetti.jsx';
 import LazyMapView from '../components/MapView/LazyMapView.jsx';
+import useScrollReveal from '../hooks/useScrollReveal.js';
 
 const PENDING_VOTE_KEY = 'senlis:pendingVote';
 
@@ -37,8 +39,9 @@ export default function PropositionDetail() {
   const [myVote, setMyVote] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
+  const { showToast } = useToast();
   const [burst, setBurst] = useState(0); // incrémenté à chaque vote réussi → relance les confettis
+  const voteBarRef = useScrollReveal('is-visible', { threshold: 0.3 });
 
   // ── Charger la proposition ──────────────────────────────
   const load = useCallback(async () => {
@@ -75,13 +78,12 @@ export default function PropositionDetail() {
 
       setVotes(data.votes);
       setMyVote(isRetrait ? null : value);
-      setToast(isRetrait ? 'Vote retiré' : 'Merci pour votre participation !');
+      showToast(isRetrait ? 'Vote retiré' : 'Merci pour votre participation !');
       if (showConfetti) setBurst((b) => b + 1);
-      setTimeout(() => setToast(null), 3000);
     } catch (err) {
       setError(err.message || 'Le vote n\'a pas pu être enregistré');
     }
-  }, [proposal]);
+  }, [proposal, showToast]);
 
   // ── Rejouer un vote laissé en attente avant une connexion ──
   // Si on arrive sur cette page (après /connexion) et qu'un vote
@@ -153,20 +155,6 @@ export default function PropositionDetail() {
     <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
       <Confetti trigger={burst} />
 
-      {/* ── Toast de confirmation ────────────────────────── */}
-      {toast && (
-        <div
-          role="status"
-          style={{
-            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-            background: '#26333A', color: '#fff', padding: '12px 24px', borderRadius: 999,
-            fontWeight: 600, fontSize: 15, zIndex: 300, boxShadow: '0 8px 24px rgba(0,0,0,.2)',
-          }}
-        >
-          {toast}
-        </div>
-      )}
-
       {/* ── En-tête ──────────────────────────────────────── */}
       {proposal.status === 'PUBLISHED' ? (
         <span className="badge-live">En concertation</span>
@@ -236,7 +224,7 @@ export default function PropositionDetail() {
           Résultats
         </h2>
 
-        <div className="vote-bar is-visible" style={{ marginBottom: 10 }}>
+        <div ref={voteBarRef} className="vote-bar" style={{ marginBottom: 10 }}>
           <span className="pour" style={{ '--w': `${pct(votes.POUR)}%` }} />
           <span className="neutre" style={{ '--w': `${pct(votes.NEUTRE)}%` }} />
           <span className="contre" style={{ '--w': `${pct(votes.CONTRE)}%` }} />

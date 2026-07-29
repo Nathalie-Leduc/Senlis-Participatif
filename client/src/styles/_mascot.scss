@@ -25,3 +25,28 @@
   &::after { content: ''; position: absolute; bottom: -8px; left: 18px; border: 8px solid transparent; border-top-color: $nonette; border-bottom: 0; }
   @include motion { animation: bubbleFloat 3s ease-in-out infinite; }
 }
+
+// MascotWidget (guide-citoyen, coin bas-gauche) : la bulle par défaut
+// s'ancre par la DROITE et grandit vers la GAUCHE (right: -30px) —
+// correct pour un cerf déjà bien à l'intérieur de la page, mais un
+// widget collé au bord gauche de l'écran ferait déborder la bulle
+// hors de la fenêtre avec une phrase un peu longue. On ancre plutôt
+// par la GAUCHE (grandit vers la droite, où il y a de la place), et
+// on autorise le retour à la ligne avec une largeur plafonnée plutôt
+// que nowrap — la longueur d'une astuce ne devrait jamais dépendre
+// de "tenir sur une seule ligne" pour rester lisible.
+.mascot-guide .speech-bubble {
+  right: auto; left: 50px;
+  white-space: normal; width: max-content; max-width: 200px;
+  border-radius: $radius-md $radius-md 4px $radius-md;
+
+  // Pointe vers la GAUCHE (le cerf), pas vers le bas comme la bulle
+  // par défaut — on réécrit largeur/couleur des 4 côtés plutôt que de
+  // compter sur la cascade depuis la règle de base (qui met
+  // border-bottom à 0, ce qui casserait une pointe gauche/droite).
+  &::after {
+    top: 14px; left: -8px; bottom: auto;
+    border-width: 8px; border-style: solid;
+    border-color: transparent $nonette transparent transparent;
+  }
+}
