@@ -24,6 +24,10 @@ const DEFAULTS = {
   lineSpacing: false,
   underlineLinks: false,
   reduceMotion: false,
+  // Quel profil rapide est actuellement appliqué ('malvoyance' |
+  // 'dyslexie' | 'calme' | null) — permet à applyProfile() de savoir
+  // s'il faut appliquer le profil ou l'ANNULER (reclic sur le même).
+  activeProfile: null,
 };
 
 const AccessibilityContext = createContext(null);
@@ -52,6 +56,14 @@ export function AccessibilityProvider({ children }) {
     }
 
     root.style.setProperty('--a11y-font-scale', settings.fontScale);
+    // La variable CSS seule ne suffit pas : le projet compte 158
+    // déclarations `fontSize` en pixels FIXES posées en style inline
+    // sur les composants — elles ignorent complètement une variable
+    // héritée par `body`. `zoom` (implémenté par tous les navigateurs
+    // majeurs, Firefox y compris depuis 2024) agrandit la page ENTIÈRE
+    // comme le ferait le zoom natif du navigateur — indépendant de la
+    // façon dont chaque composant a écrit sa taille de police.
+    root.style.zoom = settings.fontScale === 1 ? '' : String(settings.fontScale);
     root.classList.toggle('a11y-line-spacing', settings.lineSpacing);
     root.classList.toggle('a11y-underline-links', settings.underlineLinks);
     root.classList.toggle('a11y-reduce-motion', settings.reduceMotion);
@@ -72,17 +84,27 @@ export function AccessibilityProvider({ children }) {
   // Un profil = plusieurs réglages appliqués d'un coup — un raccourci,
   // pas une catégorie à part : rien n'empêche de les affiner ensuite
   // un par un dans les sections détaillées du panneau.
+  //
+  // Recliquer sur le profil DÉJÀ actif l'annule entièrement (retour
+  // aux valeurs par défaut) plutôt que de réappliquer les mêmes
+  // réglages en boucle — setSettings((prev) => ...) plutôt que
+  // update() : on a besoin de lire prev.activeProfile pour décider,
+  // update() ne fait qu'ajouter un patch sans regarder l'état actuel.
   const applyProfile = useCallback((profile) => {
-    if (profile === 'malvoyance') {
-      update({ contrast: 'dark', fontScale: 1.3, underlineLinks: true });
-    }
-    if (profile === 'dyslexie') {
-      update({ lineSpacing: true, fontScale: 1.15, underlineLinks: true });
-    }
-    if (profile === 'calme') {
-      update({ reduceMotion: true, contrast: 'none' });
-    }
-  }, [update]);
+    setSettings((prev) => {
+      if (prev.activeProfile === profile) {
+        return { ...DEFAULTS };
+      }
+
+      const profileSettings = {
+        malvoyance: { contrast: 'dark', fontScale: 1.3, underlineLinks: true },
+        dyslexie: { lineSpacing: true, fontScale: 1.15, underlineLinks: true },
+        calme: { reduceMotion: true, contrast: 'none' },
+      }[profile];
+
+      return { ...prev, ...profileSettings, activeProfile: profile };
+    });
+  }, []);
 
   return (
     <AccessibilityContext.Provider value={{
