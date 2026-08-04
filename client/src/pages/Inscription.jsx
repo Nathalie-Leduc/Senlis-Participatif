@@ -11,7 +11,9 @@ import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordS
 export default function Inscription() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ pseudo: '', email: '', password: '', passwordConfirm: '', consent: false });
+  const [form, setForm] = useState({
+    pseudo: '', email: '', password: '', passwordConfirm: '', consent: false, situation: '',
+  });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -122,6 +124,23 @@ export default function Inscription() {
             placeholder="votreadresse@email.fr"
             style={inputStyle}
           />
+        </label>
+
+        <label style={{ display: 'block', marginBottom: 16 }}>
+          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Votre situation</span>
+          <select
+            name="situation" value={form.situation} onChange={handleChange}
+            required style={inputStyle}
+          >
+            <option value="" disabled>Choisissez votre situation</option>
+            <option value="CENTRE_RESIDENT">J&apos;habite le centre historique</option>
+            <option value="CENTRE_COMMERCANT">Je commerce/travaille dans le centre historique</option>
+            <option value="AUTRE_QUARTIER">J&apos;habite un autre quartier de Senlis</option>
+            <option value="HORS_SENLIS">Je ne réside pas à Senlis</option>
+          </select>
+          <p style={{ fontSize: 13, color: '#6B6257', marginTop: 4 }}>
+            Sert à cibler certaines enquêtes (ex. stationnement centre-ville) — jamais vérifié, modifiable à tout moment dans Mon compte.
+          </p>
         </label>
 
         <label style={{ display: 'block', marginBottom: 8 }}>

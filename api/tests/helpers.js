@@ -44,6 +44,10 @@ export function buildUser(overrides = {}) {
     email: `test${counter}@senlis-test.fr`,
     password: 'MotDePasse123!',
     pseudo: `testeur${counter}`,
+    // Obligatoire depuis S5-12 (situation citoyen) — CENTRE_RESIDENT
+    // par défaut, sans conséquence sur ce que les tests vérifient
+    // habituellement ; surchargeable comme n'importe quel autre champ.
+    situation: 'CENTRE_RESIDENT',
     ...overrides,
   };
 }

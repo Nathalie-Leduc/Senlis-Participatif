@@ -46,12 +46,22 @@ const pseudo = z
   .min(2, 'Le pseudo doit contenir au moins 2 caractères')
   .max(30, 'Le pseudo ne peut pas dépasser 30 caractères');
 
+// Même 4 valeurs que l'enum Prisma Situation — déclaratif, sans preuve
+// demandée (même logique de confiance que le pseudonymat). Sert à
+// confronter l'audience ciblée d'une enquête à qui y répond vraiment,
+// et au branchement de questions selon la situation déclarée.
+const situation = z.enum(
+  ['CENTRE_RESIDENT', 'CENTRE_COMMERCANT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
+  { errorMap: () => ({ message: 'Merci de préciser votre situation' }) },
+);
+
 // ── Schémas par endpoint ────────────────────────────────
 
 export const registerSchema = z.object({
   email,
   password,
   pseudo,
+  situation,
 });
 
 export const loginSchema = z.object({
@@ -80,6 +90,7 @@ export const resetPasswordSchema = z.object({
 export const updateProfileSchema = z.object({
   pseudo: pseudo.optional(),
   email: email.optional(),
+  situation: situation.optional(),
 });
 
 export const changePasswordSchema = z.object({

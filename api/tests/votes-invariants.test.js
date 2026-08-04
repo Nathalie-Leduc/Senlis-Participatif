@@ -90,7 +90,9 @@ describe('Invariants du vote — UC-02', () => {
 
   // ── Invariant : email non vérifié (2b) ──────────────────
   it("403 EMAIL_NOT_VERIFIED — un compte non vérifié ne peut jamais peser dans les résultats", async () => {
-    const credentials = { email: 'non-verifie@senlis-test.fr', password: 'MotDePasse123!', pseudo: 'nonverifie' };
+    const credentials = {
+      email: 'non-verifie@senlis-test.fr', password: 'MotDePasse123!', pseudo: 'nonverifie', situation: 'CENTRE_RESIDENT',
+    };
     await request(app).post('/api/v1/auth/register').send(credentials);
     // Pas de vérification d'email ici — volontairement.
 
