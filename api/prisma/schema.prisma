@@ -94,6 +94,19 @@ enum Audience {
   COMMERCANTS
 }
 
+// Situation déclarée du citoyen (auto-déclaratif, comme le pseudonymat —
+// aucune pièce justificative demandée, cohérent avec le reste du projet).
+// Sert à deux choses : confronter Survey.audience à qui répond vraiment,
+// et permettre le branchement de questions selon la situation déclarée
+// (ex. l'enquête stationnement, dont la 1re question oriente vers des
+// questions différentes pour un résident du centre vs. d'un autre quartier).
+enum Situation {
+  CENTRE_RESIDENT   // habite le centre historique
+  CENTRE_COMMERCANT // commerce/travaille dans le centre historique
+  AUTRE_QUARTIER    // habite un autre quartier de Senlis
+  HORS_SENLIS       // ne réside pas à Senlis
+}
+
 enum QuestionType {
   CHOIX_UNIQUE   // boutons radio  → ex : "Où garez-vous votre voiture ?"
   CHOIX_MULTIPLE // cases à cocher → ex : "Quels jours utilisez-vous la voiture ?"
@@ -116,6 +129,12 @@ model User {
   // minimisation de l'exposition des données personnelles)
   pseudo       String   @unique
   role         Role     @default(CITIZEN)
+
+  // Nullable : les comptes créés AVANT ce champ (admin de seed, comptes
+  // de test déjà existants) n'ont pas à être cassés par une migration —
+  // mais le formulaire d'inscription, lui, l'exigera pour tout NOUVEAU
+  // compte (validé côté Zod, pas au niveau du schéma).
+  situation Situation?
 
   // Barrière anti-comptes jetables : l'email doit être vérifié (jeton envoyé
   // à l'inscription) avant de voter ou répondre. Des comptes bidons qui
@@ -240,6 +259,10 @@ model Survey {
   description String       // contexte affiché en tête du questionnaire
   audience    Audience     @default(TOUS)
   status      SurveyStatus @default(DRAFT)
+  // Distinct du statut OPEN/CLOSED : une enquête peut être clôturée sans
+  // que ses résultats soient déjà publics — l'admin décide du moment où
+  // les rendre visibles à tous (avant, seul l'admin les voit).
+  resultsPublished Boolean @default(false)
   opensAt     DateTime?
   closesAt    DateTime?
 
@@ -257,10 +280,21 @@ model Question {
   required Boolean      @default(true)
   order    Int          // position dans le questionnaire
 
+  // Branchement conditionnel : si renseigné, cette question ne s'affiche
+  // QUE si le répondant a choisi cette option précise à une question
+  // antérieure (ex. l'enquête stationnement scindée en deux parcours
+  // selon la situation déclarée en 1re question). SetNull plutôt que
+  // Cascade : si l'option de déclenchement est supprimée, la question
+  // redevient simplement "toujours affichée" plutôt que d'être détruite
+  // en cascade — un admin qui retouche une question ne doit pas risquer
+  // de perdre une AUTRE question sans le vouloir.
+  showIfOptionId String?
+  showIfOption   QuestionOption? @relation("QuestionBranching", fields: [showIfOptionId], references: [id], onDelete: SetNull)
+
   surveyId String
   survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 
-  options QuestionOption[]
+  options QuestionOption[] @relation("QuestionOwnOptions")
   answers Answer[]
 
   // Pas deux questions au même rang dans une même enquête
@@ -273,9 +307,12 @@ model QuestionOption {
   order Int
 
   questionId String
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question   Question @relation("QuestionOwnOptions", fields: [questionId], references: [id], onDelete: Cascade)
 
   answers Answer[]
+  // Questions dont l'affichage dépend d'avoir choisi CETTE option
+  // (le côté "1" de la relation nommée QuestionBranching ci-dessus).
+  gatesQuestions Question[] @relation("QuestionBranching")
 
   @@unique([questionId, order])
 }
