@@ -9,8 +9,18 @@ export default function MonCompte() {
   const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
+  const [situation, setSituation] = useState(user?.situation || '');
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
+
+  const handleUpdateSituation = async () => {
+    setError(null); setMessage(null);
+    try {
+      await api.patch('/auth/me', { situation });
+      setMessage('Situation mise à jour.');
+      await refreshUser();
+    } catch (err) { setError(err.message); }
+  };
 
   const handleChangePassword = async () => {
     setError(null); setMessage(null);
@@ -58,6 +68,26 @@ export default function MonCompte() {
         <p style={{ fontSize: 16, marginBottom: 8 }}><strong>Pseudo :</strong> {user?.pseudo}</p>
         <p style={{ fontSize: 16, marginBottom: 8 }}><strong>Email :</strong> {user?.email}</p>
         <p style={{ fontSize: 16 }}><strong>Email vérifié :</strong> {user?.emailVerified ? '✅ Oui' : '❌ Non'}</p>
+
+        <label style={{ display: 'block', margin: '16px 0 8px' }}>
+          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Votre situation</span>
+          <select
+            value={situation} onChange={(e) => setSituation(e.target.value)}
+            style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
+          >
+            <option value="" disabled>Choisissez votre situation</option>
+            <option value="CENTRE_RESIDENT">J&apos;habite le centre historique</option>
+            <option value="CENTRE_COMMERCANT">Je commerce/travaille dans le centre historique</option>
+            <option value="AUTRE_QUARTIER">J&apos;habite un autre quartier de Senlis</option>
+            <option value="HORS_SENLIS">Je ne réside pas à Senlis</option>
+          </select>
+        </label>
+        <button
+          onClick={handleUpdateSituation} disabled={!situation || situation === user?.situation}
+          className="btn" style={{ background: '#EFEBE2', color: '#26333A' }}
+        >
+          Mettre à jour ma situation
+        </button>
       </div>
 
       {/* Changement de mot de passe */}
