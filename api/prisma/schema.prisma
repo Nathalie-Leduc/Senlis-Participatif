@@ -107,6 +107,21 @@ enum Situation {
   HORS_SENLIS       // ne réside pas à Senlis
 }
 
+// Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
+// historique — celui-ci est déjà couvert par Situation
+// (CENTRE_RESIDENT/CENTRE_COMMERCANT), pas la peine de le répéter
+// ici. Uniquement pertinent quand Situation = AUTRE_QUARTIER (menu
+// en cascade côté formulaire) : les citoyens du centre ou hors
+// Senlis n'ont pas à préciser lequel de ces 6 quartiers.
+enum Quartier {
+  BRICHEBAY
+  BON_SECOURS
+  VAL_AUNETTE_GATELIERE
+  ZONE_INDUSTRIELLE
+  VILLEVERT
+  JARDINIERS
+}
+
 enum QuestionType {
   CHOIX_UNIQUE   // boutons radio  → ex : "Où garez-vous votre voiture ?"
   CHOIX_MULTIPLE // cases à cocher → ex : "Quels jours utilisez-vous la voiture ?"
@@ -135,6 +150,10 @@ model User {
   // mais le formulaire d'inscription, lui, l'exigera pour tout NOUVEAU
   // compte (validé côté Zod, pas au niveau du schéma).
   situation Situation?
+  // Renseigné UNIQUEMENT quand situation = AUTRE_QUARTIER (menu en
+  // cascade côté formulaire) — null pour tous les autres cas, y
+  // compris les comptes créés avant ce champ.
+  quartier  Quartier?
 
   // Barrière anti-comptes jetables : l'email doit être vérifié (jeton envoyé
   // à l'inscription) avant de voter ou répondre. Des comptes bidons qui
