@@ -7,19 +7,28 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
+import { QUARTIER_OPTIONS } from '../constants/situation.js';
 
 export default function Inscription() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    pseudo: '', email: '', password: '', passwordConfirm: '', consent: false, situation: '',
+    pseudo: '', email: '', password: '', passwordConfirm: '', consent: false, situation: '', quartier: '',
   });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      // Le quartier précédemment choisi n'a plus de sens si on quitte
+      // "autre quartier" — sans ce reset, une valeur périmée resterait
+      // en mémoire et partirait quand même vers l'API.
+      ...(name === 'situation' && value !== 'AUTRE_QUARTIER' && { quartier: '' }),
+    }));
     setError(null);
   };
 
@@ -44,10 +53,12 @@ export default function Inscription() {
 
     try {
       // passwordConfirm et consent n'existent que pour ce formulaire —
-      // l'API ne connaît que pseudo/email/password.
-      const { passwordConfirm, consent, ...payload } = form;
+      // quartier n'est envoyé que s'il est vraiment renseigné (Zod
+      // refuserait une chaîne vide comme valeur d'enum).
+      const { passwordConfirm, consent, quartier, ...rest } = form;
       void passwordConfirm;
       void consent;
+      const payload = { ...rest, ...(quartier && { quartier }) };
       const data = await register(payload);
       setSuccess(data.message);
     } catch (err) {
@@ -142,6 +153,25 @@ export default function Inscription() {
             Sert à cibler certaines enquêtes (ex. stationnement centre-ville) — jamais vérifié, modifiable à tout moment dans Mon compte.
           </p>
         </label>
+
+        {/* Menu en cascade : affiché seulement pour "autre quartier",
+            pour que ces citoyens précisent lequel plutôt que de rester
+            dans une case fourre-tout — utile pour cibler de futures
+            enquêtes/propositions par quartier. */}
+        {form.situation === 'AUTRE_QUARTIER' && (
+          <label style={{ display: 'block', marginBottom: 16 }}>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Quel quartier ?</span>
+            <select
+              name="quartier" value={form.quartier} onChange={handleChange}
+              required style={inputStyle}
+            >
+              <option value="" disabled>Choisissez votre quartier</option>
+              {QUARTIER_OPTIONS.map((q) => (
+                <option key={q.value} value={q.value}>{q.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label style={{ display: 'block', marginBottom: 8 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe</span>
