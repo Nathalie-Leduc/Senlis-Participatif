@@ -93,6 +93,7 @@ export const updateSurveySchema = z.object({
   description: z.string().trim().min(10).optional(),
   audience: audience.optional(),
   status: surveyStatus.optional(),
+  resultsPublished: z.boolean().optional(),
   opensAt: z.coerce.date().optional(),
   closesAt: z.coerce.date().optional(),
   questions: z.array(questionSchema).min(1).optional(),

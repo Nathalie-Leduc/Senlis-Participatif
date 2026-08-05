@@ -25,6 +25,7 @@ const LIST_SELECT = {
   description: true,
   audience: true,
   status: true,
+  resultsPublished: true,
   opensAt: true,
   closesAt: true,
 };
@@ -347,6 +348,165 @@ export async function remove(req, res, next) {
 // d'une question CHOIX_MULTIPLE peuvent dépasser 100% au total.
 const AGGREGATABLE_CHOICE_TYPES = ['CHOIX_UNIQUE', 'CHOIX_MULTIPLE', 'OUI_NON'];
 
+// ── Agrégation des résultats — partagée entre la vue publique
+// (getResults) et la vue admin détaillée (getDetailedResults) ──
+//
+// `detailed` change deux choses : le contenu brut des réponses
+// TEXTE_LIBRE (jamais exposé publiquement) et la présence d'un
+// écart audience/situation déclarée (utile pour l'admin, dénué de
+// sens pour un visiteur qui n'a pas à connaître les autres citoyens).
+async function computeResults(survey, { detailed = false } = {}) {
+  const totalResponses = await prisma.surveyResponse.count({
+    where: { surveyId: survey.id },
+  });
+
+  const choiceQuestionIds = survey.questions
+    .filter((q) => AGGREGATABLE_CHOICE_TYPES.includes(q.type))
+    .map((q) => q.id);
+  const numberQuestionIds = survey.questions
+    .filter((q) => q.type === 'NOMBRE')
+    .map((q) => q.id);
+  const textQuestionIds = survey.questions
+    .filter((q) => q.type === 'TEXTE_LIBRE')
+    .map((q) => q.id);
+
+  const [optionCounts, numberStats, textCounts, rawTextAnswers, situationCounts] = await Promise.all([
+    choiceQuestionIds.length
+      ? prisma.answer.groupBy({
+        by: ['questionId', 'optionId'],
+        where: { questionId: { in: choiceQuestionIds }, optionId: { not: null } },
+        _count: true,
+      })
+      : [],
+    numberQuestionIds.length
+      ? prisma.answer.groupBy({
+        by: ['questionId'],
+        where: { questionId: { in: numberQuestionIds } },
+        _count: { valueNumber: true },
+        _avg: { valueNumber: true },
+        _min: { valueNumber: true },
+        _max: { valueNumber: true },
+      })
+      : [],
+    textQuestionIds.length
+      ? prisma.answer.groupBy({
+        by: ['questionId'],
+        where: { questionId: { in: textQuestionIds } },
+        _count: { valueText: true },
+      })
+      : [],
+    // Contenu brut du texte libre : demandé UNIQUEMENT par la vue
+    // admin détaillée — inutile de le charger (et de le renvoyer) pour
+    // la vue publique, qui n'affiche qu'un compte.
+    detailed && textQuestionIds.length
+      ? prisma.answer.findMany({
+        where: { questionId: { in: textQuestionIds }, valueText: { not: null } },
+        select: { questionId: true, valueText: true },
+      })
+      : [],
+    // Situation déclarée des répondants — pour confronter à
+    // Survey.audience (revue du cahier des charges, point 3).
+    // Uniquement pour la vue admin détaillée : la répartition des
+    // situations des AUTRES citoyens n'a rien à faire dans une vue
+    // publique.
+    detailed
+      ? prisma.surveyResponse.findMany({
+        where: { surveyId: survey.id },
+        select: { user: { select: { situation: true } } },
+      })
+      : [],
+  ]);
+
+  // Index par questionId pour un accès direct au moment d'assembler
+  // le résultat final, plutôt que de re-scanner ces tableaux pour
+  // chaque question de l'enquête (Map imbriquée pour les options :
+  // question → option → compte).
+  const optionCountsByQuestion = new Map();
+  for (const row of optionCounts) {
+    if (!optionCountsByQuestion.has(row.questionId)) {
+      optionCountsByQuestion.set(row.questionId, new Map());
+    }
+    optionCountsByQuestion.get(row.questionId).set(row.optionId, row._count);
+  }
+  const numberStatsByQuestion = new Map(numberStats.map((row) => [row.questionId, row]));
+  const textCountsByQuestion = new Map(
+    textCounts.map((row) => [row.questionId, row._count.valueText]),
+  );
+  const rawTextByQuestion = new Map();
+  for (const row of rawTextAnswers) {
+    if (!rawTextByQuestion.has(row.questionId)) rawTextByQuestion.set(row.questionId, []);
+    rawTextByQuestion.get(row.questionId).push(row.valueText);
+  }
+
+  const questions = survey.questions.map((question) => {
+    const base = {
+      id: question.id,
+      label: question.label,
+      type: question.type,
+      required: question.required,
+    };
+
+    if (AGGREGATABLE_CHOICE_TYPES.includes(question.type)) {
+      const countsForQuestion = optionCountsByQuestion.get(question.id);
+      const options = question.options.map((option) => {
+        const count = countsForQuestion?.get(option.id) || 0;
+        return {
+          id: option.id,
+          label: option.label,
+          count,
+          percentage: totalResponses > 0
+            ? Math.round((count / totalResponses) * 1000) / 10
+            : 0,
+        };
+      });
+      return { ...base, options };
+    }
+
+    if (question.type === 'NOMBRE') {
+      const stats = numberStatsByQuestion.get(question.id);
+      return {
+        ...base,
+        stats: {
+          count: stats?._count.valueNumber || 0,
+          average: stats?._avg.valueNumber ?? null,
+          min: stats?._min.valueNumber ?? null,
+          max: stats?._max.valueNumber ?? null,
+        },
+      };
+    }
+
+    // TEXTE_LIBRE : contenu brut réservé à la vue admin détaillée —
+    // la vue publique n'expose que le nombre de réponses (jamais leur
+    // contenu, qui pourrait identifier quelqu'un par recoupement).
+    return {
+      ...base,
+      totalAnswered: textCountsByQuestion.get(question.id) || 0,
+      ...(detailed && { answers: rawTextByQuestion.get(question.id) || [] }),
+    };
+  });
+
+  const result = {
+    survey: { id: survey.id, slug: survey.slug, title: survey.title, status: survey.status },
+    totalResponses,
+    questions,
+  };
+
+  if (detailed) {
+    // Écart audience ciblée / situation réellement déclarée — une
+    // enquête RESIDENTS qui reçoit majoritairement des réponses de
+    // gens HORS_SENLIS, ça se voit ici, pas ailleurs.
+    const situationBreakdown = {};
+    for (const { user } of situationCounts) {
+      const key = user?.situation || 'NON_RENSEIGNEE';
+      situationBreakdown[key] = (situationBreakdown[key] || 0) + 1;
+    }
+    result.audience = survey.audience;
+    result.situationBreakdown = situationBreakdown;
+  }
+
+  return result;
+}
+
 export async function getResults(req, res, next) {
   try {
     const { slug } = req.params;
@@ -364,121 +524,48 @@ export async function getResults(req, res, next) {
       throw error;
     }
 
-    const totalResponses = await prisma.surveyResponse.count({
-      where: { surveyId: survey.id },
-    });
-
-    const choiceQuestionIds = survey.questions
-      .filter((q) => AGGREGATABLE_CHOICE_TYPES.includes(q.type))
-      .map((q) => q.id);
-    const numberQuestionIds = survey.questions
-      .filter((q) => q.type === 'NOMBRE')
-      .map((q) => q.id);
-    const textQuestionIds = survey.questions
-      .filter((q) => q.type === 'TEXTE_LIBRE')
-      .map((q) => q.id);
-
-    // Promise.all : les trois familles de groupBy sont indépendantes,
-    // pas besoin d'attendre l'une pour lancer l'autre. Un tableau vide
-    // en `where.questionId.in` renverrait de toute façon [] — le if
-    // évite juste une requête Postgres inutile quand une enquête n'a
-    // aucune question de ce type-là.
-    const [optionCounts, numberStats, textCounts] = await Promise.all([
-      choiceQuestionIds.length
-        ? prisma.answer.groupBy({
-          by: ['questionId', 'optionId'],
-          where: { questionId: { in: choiceQuestionIds }, optionId: { not: null } },
-          _count: true,
-        })
-        : [],
-      numberQuestionIds.length
-        ? prisma.answer.groupBy({
-          by: ['questionId'],
-          where: { questionId: { in: numberQuestionIds } },
-          _count: { valueNumber: true },
-          _avg: { valueNumber: true },
-          _min: { valueNumber: true },
-          _max: { valueNumber: true },
-        })
-        : [],
-      textQuestionIds.length
-        ? prisma.answer.groupBy({
-          by: ['questionId'],
-          where: { questionId: { in: textQuestionIds } },
-          _count: { valueText: true },
-        })
-        : [],
-    ]);
-
-    // Index par questionId pour un accès direct au moment d'assembler
-    // le résultat final, plutôt que de re-scanner ces tableaux pour
-    // chaque question de l'enquête (Map imbriquée pour les options :
-    // question → option → compte).
-    const optionCountsByQuestion = new Map();
-    for (const row of optionCounts) {
-      if (!optionCountsByQuestion.has(row.questionId)) {
-        optionCountsByQuestion.set(row.questionId, new Map());
-      }
-      optionCountsByQuestion.get(row.questionId).set(row.optionId, row._count);
+    // Distinct du statut ouvert/clos : l'admin décide SÉPARÉMENT du
+    // moment où les résultats deviennent publics — voir
+    // Survey.resultsPublished (revue du cahier des charges).
+    // /surveys/:id/stats (getDetailedResults) reste la vue admin,
+    // jamais concernée par ce garde-fou.
+    if (!survey.resultsPublished && !isAdmin) {
+      const error = new Error("Les résultats de cette enquête n'ont pas encore été publiés par l'administration");
+      error.status = 403;
+      error.code = 'RESULTS_NOT_PUBLISHED';
+      throw error;
     }
-    const numberStatsByQuestion = new Map(numberStats.map((row) => [row.questionId, row]));
-    const textCountsByQuestion = new Map(
-      textCounts.map((row) => [row.questionId, row._count.valueText]),
-    );
 
-    const questions = survey.questions.map((question) => {
-      const base = {
-        id: question.id,
-        label: question.label,
-        type: question.type,
-        required: question.required,
-      };
+    const result = await computeResults(survey, { detailed: false });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
 
-      if (AGGREGATABLE_CHOICE_TYPES.includes(question.type)) {
-        const countsForQuestion = optionCountsByQuestion.get(question.id);
-        // Toutes les options à 0 par défaut — sinon une option jamais
-        // choisie n'apparaîtrait pas du tout dans le résultat, et le
-        // front devrait deviner qu'"absente" veut dire 0 (même logique
-        // que getVoteAggregatesForMany pour les propositions).
-        const options = question.options.map((option) => {
-          const count = countsForQuestion?.get(option.id) || 0;
-          return {
-            id: option.id,
-            label: option.label,
-            count,
-            percentage: totalResponses > 0
-              ? Math.round((count / totalResponses) * 1000) / 10
-              : 0,
-          };
-        });
-        return { ...base, options };
-      }
+// ── GET /surveys/:id/stats — résultats détaillés (admin) ──
+//
+// Distincte de getResults : jamais soumise au garde-fou
+// resultsPublished (l'admin voit toujours), contenu brut des
+// réponses TEXTE_LIBRE inclus, et écart audience/situation déclarée.
+export async function getDetailedResults(req, res, next) {
+  try {
+    const { id } = req.params;
 
-      if (question.type === 'NOMBRE') {
-        const stats = numberStatsByQuestion.get(question.id);
-        return {
-          ...base,
-          stats: {
-            count: stats?._count.valueNumber || 0,
-            average: stats?._avg.valueNumber ?? null,
-            min: stats?._min.valueNumber ?? null,
-            max: stats?._max.valueNumber ?? null,
-          },
-        };
-      }
-
-      // TEXTE_LIBRE : pas de contenu brut exposé par ce point d'entrée
-      // public — juste combien de personnes ont répondu. Consulter les
-      // réponses complètes reste une fonctionnalité admin à part,
-      // hors périmètre de ce ticket.
-      return { ...base, totalAnswered: textCountsByQuestion.get(question.id) || 0 };
+    const survey = await prisma.survey.findUnique({
+      where: { id },
+      include: QUESTIONS_INCLUDE,
     });
 
-    res.json({
-      survey: { id: survey.id, slug: survey.slug, title: survey.title, status: survey.status },
-      totalResponses,
-      questions,
-    });
+    if (!survey) {
+      const error = new Error('Enquête introuvable');
+      error.status = 404;
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+
+    const result = await computeResults(survey, { detailed: true });
+    res.json(result);
   } catch (err) {
     next(err);
   }

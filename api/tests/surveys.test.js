@@ -201,7 +201,11 @@ describe('Enquêtes — soumission de réponse', () => {
 
 describe('Enquêtes — agrégats (résultats)', () => {
   it('les résultats reflètent fidèlement plusieurs réponses réelles', async () => {
-    const survey = await seedSurvey();
+    // resultsPublished: true — sans ça, GET .../results renvoie 403
+    // depuis S5-14 (les résultats restent privés tant que l'admin ne
+    // les publie pas). Ce test vérifie l'AGRÉGATION elle-même, pas le
+    // garde-fou de publication (qui a ses propres tests dédiés).
+    const survey = await seedSurvey({ resultsPublished: true });
     const oui = survey.questions[0].options.find((o) => o.label === 'Oui');
     const non = survey.questions[0].options.find((o) => o.label === 'Non');
 
@@ -239,7 +243,7 @@ describe('Enquêtes — agrégats (résultats)', () => {
   }, 10000);
 
   it("une option jamais choisie apparaît quand même à 0, pas absente du résultat", async () => {
-    const survey = await seedSurvey();
+    const survey = await seedSurvey({ resultsPublished: true });
     const { token } = await makeCitizen();
     const oui = survey.questions[0].options.find((o) => o.label === 'Oui');
 
