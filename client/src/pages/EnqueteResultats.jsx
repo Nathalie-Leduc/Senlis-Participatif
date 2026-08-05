@@ -25,11 +25,15 @@ export default function EnqueteResultats() {
 
     api.get(`/surveys/${slug}/results`)
       .then(setResults)
-      .catch((err) => setError(
-        err.status === 404
-          ? "Cette enquête n'existe pas ou plus."
-          : (err.message || 'Impossible de charger les résultats'),
-      ))
+      .catch((err) => {
+        if (err.status === 404) {
+          setError("Cette enquête n'existe pas ou plus.");
+        } else if (err.code === 'RESULTS_NOT_PUBLISHED') {
+          setError("Les résultats de cette enquête n'ont pas encore été publiés par l'administration — revenez un peu plus tard !");
+        } else {
+          setError(err.message || 'Impossible de charger les résultats');
+        }
+      })
       .finally(() => setLoading(false));
   }, [slug]);
 

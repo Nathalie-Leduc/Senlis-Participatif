@@ -41,6 +41,7 @@ const PropositionDetail = lazy(() => import('./pages/PropositionDetail.jsx'));
 const AdminPropositions = lazy(() => import('./pages/AdminPropositions.jsx'));
 const AdminPropositionForm = lazy(() => import('./pages/AdminPropositionForm.jsx'));
 const AdminSurveys = lazy(() => import('./pages/AdminSurveys.jsx'));
+const AdminSurveyStats = lazy(() => import('./pages/AdminSurveyStats.jsx'));
 const AdminSurveyForm = lazy(() => import('./pages/AdminSurveyForm.jsx'));
 const Enquetes = lazy(() => import('./pages/Enquetes.jsx'));
 const EnqueteDetail = lazy(() => import('./pages/EnqueteDetail.jsx'));
@@ -132,6 +133,9 @@ export default function App() {
             } />
             <Route path="/admin/enquetes/:slug/modifier" element={
               <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>
+            } />
+            <Route path="/admin/enquetes/:id/stats" element={
+              <ProtectedRoute adminOnly><AdminSurveyStats /></ProtectedRoute>
             } />
             {/* adminOnly absent : n'importe quel citoyen CONNECTÉ peut
                 répondre — pas réservé aux admins. La vérification email
