@@ -819,17 +819,37 @@ export async function submitResponse(req, res, next) {
     // de réponse (Answer) doivent être créés ENSEMBLE ou pas du tout —
     // un crash au milieu ne doit jamais laisser un bulletin à moitié
     // rempli en base (le fameux "tout ou rien" du ticket).
-    const response = await prisma.$transaction(async (tx) => {
-      const surveyResponse = await tx.surveyResponse.create({
-        data: { surveyId, userId },
-      });
+    let response;
+    try {
+      response = await prisma.$transaction(async (tx) => {
+        const surveyResponse = await tx.surveyResponse.create({
+          data: { surveyId, userId },
+        });
 
-      await tx.answer.createMany({
-        data: answerRows.map((row) => ({ ...row, responseId: surveyResponse.id })),
-      });
+        await tx.answer.createMany({
+          data: answerRows.map((row) => ({ ...row, responseId: surveyResponse.id })),
+        });
 
-      return surveyResponse;
-    });
+        return surveyResponse;
+      });
+    } catch (txErr) {
+      // P2002 = contrainte unique (userId, surveyId) violée — la
+      // vérification alreadyResponded ci-dessus élimine le cas
+      // séquentiel, mais deux requêtes strictement SIMULTANÉES
+      // peuvent toutes les deux passer cette vérification avant que
+      // l'une des deux n'écrive réellement en base (la vraie course
+      // critique). Sans ce rattrapage, cette seconde requête
+      // remontait un 500 générique au lieu du même 409 que le cas
+      // séquentiel — la base protège bien contre le doublon, mais la
+      // réponse HTTP mentait sur la raison de l'échec.
+      if (txErr.code === 'P2002') {
+        const error = new Error('Vous avez déjà répondu à cette enquête');
+        error.status = 409;
+        error.code = 'ALREADY_RESPONDED';
+        throw error;
+      }
+      throw txErr;
+    }
 
     res.status(201).json({
       response: { id: response.id, submittedAt: response.submittedAt },
