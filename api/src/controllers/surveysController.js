@@ -70,6 +70,56 @@ function toNestedQuestionsCreate(questions) {
   });
 }
 
+// ── Résolution du branchement conditionnel (showIf) ─────
+//
+// Le nested create ci-dessus ne peut PAS poser showIfOptionId :
+// au moment où Prisma construit la requête, les options n'ont pas
+// encore d'id — elles sont créées dans la MÊME requête. On résout
+// donc les références par POSITION (order) dans un second passage,
+// une fois les vrais id générés et connus.
+async function resolveBranching(tx, surveyId, inputQuestions) {
+  const hasBranching = inputQuestions.some((q) => q.showIf);
+  if (!hasBranching) return;
+
+  const createdQuestions = await tx.question.findMany({
+    where: { surveyId },
+    include: { options: true },
+    orderBy: { order: 'asc' },
+  });
+
+  for (const [index, inputQuestion] of inputQuestions.entries()) {
+    if (!inputQuestion.showIf) continue;
+
+    // Une question ne peut dépendre que d'une question qui la
+    // PRÉCÈDE — jamais d'elle-même ni d'une question plus tardive
+    // (le répondant n'aurait pas encore répondu à celle-ci).
+    if (inputQuestion.showIf.questionOrder >= index) {
+      const error = new Error(
+        `La question ${index + 1} ne peut dépendre que d'une question qui la précède`,
+      );
+      error.status = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+
+    const targetQuestion = createdQuestions.find((q) => q.order === inputQuestion.showIf.questionOrder);
+    const targetOption = targetQuestion?.options.find((o) => o.order === inputQuestion.showIf.optionOrder);
+    const thisQuestion = createdQuestions[index];
+
+    if (!targetOption || !thisQuestion) {
+      const error = new Error(`Référence de branchement invalide pour la question ${index + 1}`);
+      error.status = 400;
+      error.code = 'VALIDATION_ERROR';
+      throw error;
+    }
+
+    await tx.question.update({
+      where: { id: thisQuestion.id },
+      data: { showIfOptionId: targetOption.id },
+    });
+  }
+}
+
 // ── GET /surveys/admin — liste ADMIN, tous statuts confondus ───
 export async function listAdmin(req, res, next) {
   try {
@@ -168,18 +218,26 @@ export async function create(req, res, next) {
 
     const slug = await generateUniqueSlug(title, prisma.survey);
 
-    const survey = await prisma.survey.create({
-      data: {
-        slug,
-        title,
-        description,
-        audience: audience || 'TOUS',
-        status: status || 'DRAFT',
-        opensAt,
-        closesAt,
-        questions: { create: toNestedQuestionsCreate(questions) },
-      },
-      include: QUESTIONS_INCLUDE,
+    // $transaction : la création ET la résolution du branchement
+    // doivent réussir ENSEMBLE — un crash entre les deux laisserait
+    // une enquête avec des questions mais un branchement à moitié posé.
+    const survey = await prisma.$transaction(async (tx) => {
+      const created = await tx.survey.create({
+        data: {
+          slug,
+          title,
+          description,
+          audience: audience || 'TOUS',
+          status: status || 'DRAFT',
+          opensAt,
+          closesAt,
+          questions: { create: toNestedQuestionsCreate(questions) },
+        },
+      });
+
+      await resolveBranching(tx, created.id, questions);
+
+      return tx.survey.findUnique({ where: { id: created.id }, include: QUESTIONS_INCLUDE });
     });
 
     res.status(201).json({ survey });
@@ -280,14 +338,19 @@ export async function update(req, res, next) {
         await tx.question.deleteMany({ where: { surveyId: id } });
       }
 
-      return tx.survey.update({
+      await tx.survey.update({
         where: { id },
         data: {
           ...surveyFields,
           ...(questionsActuallyChanged && { questions: { create: toNestedQuestionsCreate(questions) } }),
         },
-        include: QUESTIONS_INCLUDE,
       });
+
+      if (questionsActuallyChanged) {
+        await resolveBranching(tx, id, questions);
+      }
+
+      return tx.survey.findUnique({ where: { id }, include: QUESTIONS_INCLUDE });
     });
 
     res.json({ survey });
@@ -417,16 +480,19 @@ async function computeResults(survey, { detailed = false } = {}) {
       : [],
   ]);
 
-  // Index par questionId pour un accès direct au moment d'assembler
-  // le résultat final, plutôt que de re-scanner ces tableaux pour
-  // chaque question de l'enquête (Map imbriquée pour les options :
-  // question → option → compte).
+  // Map à plat questionId+optionId → compte (nested) ET optionId seul
+  // → compte (flat) — la version flat sert à retrouver combien de
+  // personnes ont vu une question BRANCHÉE (celles qui ont choisi
+  // l'option qui la déclenche), sans avoir à savoir à quelle question
+  // cette option appartient.
   const optionCountsByQuestion = new Map();
+  const countByOptionId = new Map();
   for (const row of optionCounts) {
     if (!optionCountsByQuestion.has(row.questionId)) {
       optionCountsByQuestion.set(row.questionId, new Map());
     }
     optionCountsByQuestion.get(row.questionId).set(row.optionId, row._count);
+    countByOptionId.set(row.optionId, row._count);
   }
   const numberStatsByQuestion = new Map(numberStats.map((row) => [row.questionId, row]));
   const textCountsByQuestion = new Map(
@@ -439,11 +505,24 @@ async function computeResults(survey, { detailed = false } = {}) {
   }
 
   const questions = survey.questions.map((question) => {
+    // Une question SANS branchement est vue par tout le monde : le
+    // dénominateur reste totalResponses, comme avant. Une question
+    // BRANCHÉE n'a été vue que par les répondants ayant choisi
+    // l'option qui la déclenche — utiliser totalResponses comme
+    // dénominateur ferait paraître ses pourcentages artificiellement
+    // bas (ex. 12 % au lieu de 80 % si seul un quart des répondants
+    // pouvait même voir la question).
+    const questionTotal = question.showIfOptionId
+      ? (countByOptionId.get(question.showIfOptionId) || 0)
+      : totalResponses;
+
     const base = {
       id: question.id,
       label: question.label,
       type: question.type,
       required: question.required,
+      showIfOptionId: question.showIfOptionId,
+      totalForQuestion: questionTotal,
     };
 
     if (AGGREGATABLE_CHOICE_TYPES.includes(question.type)) {
@@ -454,8 +533,8 @@ async function computeResults(survey, { detailed = false } = {}) {
           id: option.id,
           label: option.label,
           count,
-          percentage: totalResponses > 0
-            ? Math.round((count / totalResponses) * 1000) / 10
+          percentage: questionTotal > 0
+            ? Math.round((count / questionTotal) * 1000) / 10
             : 0,
         };
       });
@@ -713,6 +792,17 @@ export async function submitResponse(req, res, next) {
     // remarquerait jamais une absence.
     const answerRows = [];
     for (const question of survey.questions) {
+      // Question conditionnelle (showIfOptionId) jamais montrée au
+      // répondant : on cherche si l'option qui la déclenche a été
+      // choisie PARMI TOUTES les réponses soumises — inutile de
+      // connaître l'ordre des questions pour ça, l'id de l'option
+      // suffit à lui seul à retrouver la question qui la possède.
+      const gateSatisfied = !question.showIfOptionId
+        || answers.some((a) => a.optionId === question.showIfOptionId
+          || a.optionIds?.includes(question.showIfOptionId));
+
+      if (!gateSatisfied) continue; // jamais montrée : ni obligatoire, ni sa réponse éventuelle prise en compte
+
       const answer = answersByQuestionId.get(question.id);
 
       if (!answer) {

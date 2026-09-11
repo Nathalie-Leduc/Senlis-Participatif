@@ -29,6 +29,16 @@ const questionOptionSchema = z.object({
   label: z.string().trim().min(1, "Le libellé de l'option est requis").max(200),
 });
 
+// Référence par POSITION (order), pas par id réel : au moment où
+// l'admin construit une nouvelle enquête, les questions/options n'ont
+// pas encore d'id en base — elles seront créées dans la même requête.
+// Le contrôleur résout ces positions vers les vrais id APRÈS coup,
+// dans un second passage (voir resolveBranching).
+const showIfSchema = z.object({
+  questionOrder: z.number().int().min(0),
+  optionOrder: z.number().int().min(0),
+});
+
 // superRefine plutôt que deux champs séparés : la règle "options
 // obligatoires SI type = CHOIX_*" dépend de DEUX champs à la fois —
 // impossible à exprimer avec de simples .min()/.optional() sur un
@@ -39,6 +49,12 @@ const questionSchema = z.object({
   type: questionType,
   required: z.boolean().optional(),
   options: z.array(questionOptionSchema).optional(),
+  // Absent = toujours affichée. Présent = affichée seulement si le
+  // répondant a choisi CETTE option à une question ANTÉRIEURE (voir
+  // EnqueteRepondre.jsx côté client pour la logique d'affichage, et
+  // submitResponse côté contrôleur pour ne pas exiger de réponse à
+  // une question jamais montrée).
+  showIf: showIfSchema.optional(),
 }).superRefine((q, ctx) => {
   if (OPTIONS_REQUIRED_TYPES.includes(q.type)) {
     if (!q.options || q.options.length < 2) {

@@ -80,9 +80,14 @@ export default function AdminSurveyStats() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {results.questions.map((q) => (
           <div key={q.id} className="card-joyful" style={{ padding: 20 }}>
-            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 18, marginBottom: 14 }}>
+            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 18, marginBottom: 4 }}>
               {q.label}
             </h2>
+            {q.totalForQuestion !== results.totalResponses && (
+              <p style={{ color: '#6B6257', fontSize: 13, marginBottom: 10 }}>
+                Question branchée — posée à {q.totalForQuestion} répondant{q.totalForQuestion > 1 ? 's' : ''} concerné{q.totalForQuestion > 1 ? 's' : ''}
+              </p>
+            )}
 
             {q.options && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
