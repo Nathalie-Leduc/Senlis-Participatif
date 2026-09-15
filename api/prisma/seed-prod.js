@@ -112,69 +112,338 @@ async function main() {
     return;
   }
 
-  await prisma.survey.create({
-    data: {
-      slug: 'stationnement-centre-historique',
-      title: 'Stationnement et déplacements dans le centre historique',
-      description:
-        'Vos habitudes de déplacement et de stationnement à Senlis nous aident à mieux organiser l\'espace public.',
-      status: 'OPEN',
-      opensAt: new Date(),
-      questions: {
-        create: [
-          {
-            label: 'Vous arrive-t-il de circuler en voiture dans le centre historique ?',
-            type: 'OUI_NON',
-            required: true,
-            order: 0,
-            options: { create: [{ label: 'Oui', order: 0 }, { label: 'Non', order: 1 }] },
-          },
-          {
-            label: 'Où vous garez-vous le plus souvent ?',
-            type: 'CHOIX_UNIQUE',
-            required: true,
-            order: 1,
-            options: {
-              create: [
-                { label: 'Parking de la mairie', order: 0 },
-                { label: 'Voirie payante', order: 1 },
-                { label: 'Parking gratuit en périphérie', order: 2 },
-                { label: 'Je ne me gare jamais en centre-ville', order: 3 },
-              ],
-            },
-          },
-          {
-            label: 'Quels freins limitent votre usage du vélo en ville ?',
-            type: 'CHOIX_MULTIPLE',
-            required: false,
-            order: 2,
-            options: {
-              create: [
-                { label: 'Manque de pistes cyclables', order: 0 },
-                { label: 'Sécurité routière', order: 1 },
-                { label: 'Relief / distance', order: 2 },
-                { label: 'Aucun frein particulier', order: 3 },
-              ],
-            },
-          },
-          {
-            label: 'Combien de véhicules motorisés compte votre foyer ?',
-            type: 'NOMBRE',
-            required: true,
-            order: 3,
-          },
-          {
-            label: 'Une suggestion pour améliorer le stationnement en centre-ville ?',
-            type: 'TEXTE_LIBRE',
-            required: false,
-            order: 4,
-          },
-        ],
-      },
+  // Reconstruite en 4 parcours réels (revue approfondie du besoin :
+  // objectif final = végétaliser/rendre piéton le centre historique,
+  // donc comprendre PRÉCISÉMENT qui occupe les places de stationnement
+  // du centre et pourquoi, sans pour autant allonger le parcours de
+  // chaque répondant — chacun ne voit que les questions de SON profil,
+  // même si le total ci-dessous semble long sur le papier).
+  //
+  // showIf référence la POSITION (order) de la question/option qui
+  // déclenche l'affichage — les vrais id n'existent pas encore à ce
+  // stade, ils ne seront connus qu'après la création (voir la
+  // résolution après coup, plus bas).
+  //
+  // Limite assumée du moteur actuel : pas de répétition "par véhicule"
+  // (ex. "véhicule 1 : où ? véhicule 2 : où ?") — on demande combien
+  // de véhicules au total, puis QUELS emplacements sont utilisés
+  // parmi la liste (choix multiple), sans détail véhicule par
+  // véhicule. Une vraie fonctionnalité de "bloc répété" serait un
+  // chantier à part, hors de portée de cette révision.
+  const PARKING_OPTIONS = [
+    { label: 'Box ou parking sur ma propriété / mon commerce' },
+    { label: 'Box ou parking en location' },
+    { label: 'Parking public gratuit dans le centre-ville' },
+    { label: 'Parking payant dans le centre-ville, avec abonnement' },
+    { label: 'Parking payant dans le centre-ville, sans abonnement' },
+    { label: 'Parking gratuit autour du centre-ville' },
+    { label: 'Parking payant autour du centre-ville, avec abonnement' },
+    { label: 'Parking payant autour du centre-ville, sans abonnement' },
+  ];
+  const ACTIVITE_OPTIONS = [
+    { label: 'Commerce' },
+    { label: 'Banque, assurance ou agence (immobilière, voyages...)' },
+    { label: 'Cabinet médical ou paramédical' },
+    { label: 'Restaurant, bar ou tabac' },
+    { label: 'Service municipal (mairie, police...)' },
+    { label: 'École' },
+    { label: 'Autre activité' },
+  ];
+  const MOBILITE_OPTIONS = [
+    { label: 'TUS (bus gratuit de Senlis)' },
+    { label: 'Bus régional' },
+    { label: 'Voiture' },
+    { label: 'Vélo' },
+    { label: 'À pied' },
+    { label: 'Trottinette' },
+    { label: 'Covoiturage' },
+    { label: 'Autre' },
+  ];
+  // Les 6 mêmes quartiers IRIS que l'enum Quartier (S5-13) — le
+  // questionnaire ne relit pas ce champ de profil directement (une
+  // enquête reste indépendante du compte), mais reprend les mêmes
+  // libellés pour que les réponses restent comparables au reste du
+  // site plutôt que d'inventer une autre liste.
+  const QUARTIER_OU_VILLE_OPTIONS = [
+    { label: 'Brichebay' },
+    { label: 'Bon Secours' },
+    { label: "Val d'Aunette - La Gâtelière" },
+    { label: 'Zone industrielle' },
+    { label: 'Villevert' },
+    { label: 'Jardiniers' },
+    { label: 'Une autre ville' }, // dernier index — référencé plus bas
+  ];
+  const AUTRE_VILLE_INDEX = QUARTIER_OU_VILLE_OPTIONS.length - 1;
+
+  const questionsSpec = [
+    {
+      // order 0 — l'aiguillage principal, 4 profils bien distincts
+      label: 'Quel est votre lien avec le centre historique ?',
+      type: 'CHOIX_UNIQUE',
+      required: true,
+      options: [
+        { label: "J'habite dans le centre historique" },
+        { label: 'Je dirige/gère une activité du centre historique (commerce, profession libérale, service...)' },
+        { label: "Je suis salarié(e) d'une activité du centre historique" },
+        { label: "Je ne vis ni ne travaille dans le centre historique, mais j'y viens parfois" },
+      ],
     },
+
+    // ══ Parcours A — habitants du centre (showIf 0→option 0) ══
+    {
+      label: 'Combien de véhicules motorisés compte votre foyer ?',
+      type: 'NOMBRE',
+      required: true,
+      showIf: { questionOrder: 0, optionOrder: 0 },
+    },
+    {
+      label: 'Où sont garés vos véhicules ? (cochez tout ce qui s\'applique)',
+      type: 'CHOIX_MULTIPLE',
+      required: false,
+      showIf: { questionOrder: 0, optionOrder: 0 },
+      options: [...PARKING_OPTIONS, { label: "Je n'ai pas de véhicule" }],
+    },
+    {
+      label: 'Quels freins limitent votre usage du vélo pour vos déplacements quotidiens ?',
+      type: 'CHOIX_MULTIPLE',
+      required: false,
+      showIf: { questionOrder: 0, optionOrder: 0 },
+      options: [
+        { label: 'Manque de pistes cyclables' },
+        { label: 'Sécurité routière' },
+        { label: 'Relief / distance' },
+        { label: 'Aucun frein particulier' },
+      ],
+    },
+    {
+      label: 'Une suggestion pour améliorer le cadre de vie dans le centre-ville ?',
+      type: 'TEXTE_LIBRE',
+      required: false,
+      showIf: { questionOrder: 0, optionOrder: 0 },
+    },
+
+    // ══ Parcours B — patrons/gérants d'une activité (showIf 0→option 1) ══
+    {
+      // order 5 — le helpText porte la consigne demandée, visible
+      // uniquement dans CE parcours (pas pour les habitants/visiteurs
+      // pour qui ça n'a pas de sens).
+      label: "Quel type d'activité dirigez-vous ?",
+      helpText: "Merci de transmettre également ce questionnaire à vos salarié(e)s — leurs réponses comptent tout autant que les vôtres pour bien comprendre le stationnement au centre-ville.",
+      type: 'CHOIX_UNIQUE',
+      required: true,
+      showIf: { questionOrder: 0, optionOrder: 1 },
+      options: ACTIVITE_OPTIONS,
+    },
+    {
+      // order 6 — un OUI_NON simple comme porte d'entrée : évite le
+      // problème "dépend de l'option A OU B" (le moteur ne gère
+      // qu'UNE option déclenchante par question) en ne posant qu'UNE
+      // question binaire, dont "Non" ouvre ensuite tout le reste.
+      label: 'Résidez-vous dans le centre historique ?',
+      type: 'OUI_NON',
+      required: true,
+      showIf: { questionOrder: 0, optionOrder: 1 },
+    },
+    {
+      label: "D'où venez-vous ?",
+      type: 'CHOIX_UNIQUE',
+      required: true,
+      showIf: { questionOrder: 6, optionOrder: 1 }, // "Non" à la question précédente
+      options: QUARTIER_OU_VILLE_OPTIONS,
+    },
+    {
+      label: 'Quelle est cette ville ?',
+      type: 'TEXTE_LIBRE',
+      required: true,
+      showIf: { questionOrder: 7, optionOrder: AUTRE_VILLE_INDEX },
+    },
+    {
+      label: 'Comment venez-vous travailler le plus souvent ?',
+      type: 'CHOIX_UNIQUE',
+      required: true,
+      showIf: { questionOrder: 6, optionOrder: 1 },
+      options: MOBILITE_OPTIONS,
+    },
+    {
+      // order 10 — dépend de la RÉPONSE "Voiture" à la question de
+      // mobilité juste avant (chaînage sur 2 niveaux, comme au ticket
+      // S5-17 précédent).
+      label: 'Où garez-vous votre véhicule ? (cochez tout ce qui s\'applique)',
+      type: 'CHOIX_MULTIPLE',
+      required: false,
+      showIf: { questionOrder: 9, optionOrder: 2 }, // "Voiture"
+      options: PARKING_OPTIONS,
+    },
+    {
+      label: 'Utilisez-vous un ou plusieurs véhicules à des fins professionnelles (ex. livraisons) ?',
+      type: 'OUI_NON',
+      required: true,
+      showIf: { questionOrder: 0, optionOrder: 1 },
+    },
+    {
+      label: 'Combien de véhicules professionnels utilisez-vous ?',
+      type: 'NOMBRE',
+      required: true,
+      showIf: { questionOrder: 11, optionOrder: 0 }, // "Oui"
+    },
+    {
+      label: 'Où sont garés ces véhicules professionnels ? (cochez tout ce qui s\'applique)',
+      type: 'CHOIX_MULTIPLE',
+      required: false,
+      showIf: { questionOrder: 11, optionOrder: 0 },
+      options: PARKING_OPTIONS,
+    },
+    {
+      label: 'Une suggestion pour améliorer le stationnement autour de votre activité ?',
+      type: 'TEXTE_LIBRE',
+      required: false,
+      showIf: { questionOrder: 0, optionOrder: 1 },
+    },
+
+    // ══ Parcours C — salarié(e)s d'une activité (showIf 0→option 2) ══
+    // Même structure que le parcours B, sans le volet véhicules
+    // professionnels (ressource de l'activité, pas du salarié).
+    {
+      label: 'Dans quel type d\'activité travaillez-vous ?',
+      type: 'CHOIX_UNIQUE',
+      required: true,
+      showIf: { questionOrder: 0, optionOrder: 2 },
+      options: ACTIVITE_OPTIONS,
+    },
+    {
+      label: 'Résidez-vous dans le centre historique ?',
+      type: 'OUI_NON',
+      required: true,
+      showIf: { questionOrder: 0, optionOrder: 2 },
+    },
+    {
+      label: "D'où venez-vous ?",
+      type: 'CHOIX_UNIQUE',
+      required: true,
+      showIf: { questionOrder: 16, optionOrder: 1 },
+      options: QUARTIER_OU_VILLE_OPTIONS,
+    },
+    {
+      label: 'Quelle est cette ville ?',
+      type: 'TEXTE_LIBRE',
+      required: true,
+      showIf: { questionOrder: 17, optionOrder: AUTRE_VILLE_INDEX },
+    },
+    {
+      label: 'Comment venez-vous travailler le plus souvent ?',
+      type: 'CHOIX_UNIQUE',
+      required: true,
+      showIf: { questionOrder: 16, optionOrder: 1 },
+      options: MOBILITE_OPTIONS,
+    },
+    {
+      label: 'Où garez-vous votre véhicule ? (cochez tout ce qui s\'applique)',
+      type: 'CHOIX_MULTIPLE',
+      required: false,
+      showIf: { questionOrder: 19, optionOrder: 2 }, // "Voiture"
+      options: PARKING_OPTIONS,
+    },
+    {
+      label: 'Une suggestion pour améliorer votre trajet domicile-travail ?',
+      type: 'TEXTE_LIBRE',
+      required: false,
+      showIf: { questionOrder: 0, optionOrder: 2 },
+    },
+
+    // ══ Parcours D — visiteurs occasionnels (showIf 0→option 3) ══
+    {
+      label: 'Vous arrive-t-il de venir en voiture dans le centre historique ?',
+      type: 'OUI_NON',
+      required: true,
+      showIf: { questionOrder: 0, optionOrder: 3 },
+    },
+    {
+      label: 'Où vous garez-vous le plus souvent lors de ces visites ? (cochez tout ce qui s\'applique)',
+      type: 'CHOIX_MULTIPLE',
+      required: false,
+      showIf: { questionOrder: 22, optionOrder: 0 }, // "Oui"
+      options: PARKING_OPTIONS,
+    },
+    {
+      label: 'À quelle fréquence venez-vous dans le centre-ville ?',
+      type: 'CHOIX_UNIQUE',
+      required: false,
+      showIf: { questionOrder: 0, optionOrder: 3 },
+      options: [
+        { label: 'Tous les jours' },
+        { label: 'Plusieurs fois par semaine' },
+        { label: 'Occasionnellement' },
+        { label: 'Jamais' },
+      ],
+    },
+    {
+      label: 'Une suggestion pour rendre vos visites au centre-ville plus agréables ?',
+      type: 'TEXTE_LIBRE',
+      required: false,
+      showIf: { questionOrder: 0, optionOrder: 3 },
+    },
+  ];
+
+  // $transaction : création ET résolution du branchement doivent
+  // réussir ENSEMBLE — un crash entre les deux laisserait une
+  // enquête avec des questions mais un branchement à moitié posé
+  // (même principe que resolveBranching côté contrôleur admin).
+  await prisma.$transaction(async (tx) => {
+    const survey = await tx.survey.create({
+      data: {
+        slug: 'stationnement-centre-historique',
+        title: 'Stationnement et déplacements dans le centre historique',
+        description:
+          'Vos habitudes de déplacement et de stationnement à Senlis nous aident à mieux organiser l\'espace public — un centre-ville plus végétalisé, plus piéton, passe par mieux comprendre qui se gare où, et pourquoi.',
+        status: 'OPEN',
+        opensAt: new Date(),
+        questions: {
+          create: questionsSpec.map((q, index) => {
+            // Même logique que toNestedQuestionsCreate côté contrôleur
+            // admin : une question OUI_NON sans options explicites
+            // reçoit "Oui"/"Non" par défaut — sans ce filet, une
+            // question OUI_NON écrite sans `options` (le cas courant,
+            // pour rester lisible) n'aurait AUCUNE option en base, et
+            // toute question qui en dépend (showIf) n'aurait rien à
+            // référencer.
+            const options = q.options
+              ?? (q.type === 'OUI_NON' ? [{ label: 'Oui' }, { label: 'Non' }] : undefined);
+
+            return {
+              label: q.label,
+              helpText: q.helpText,
+              type: q.type,
+              required: q.required,
+              order: index,
+              options: options
+                ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex })) }
+                : undefined,
+            };
+          }),
+        },
+      },
+    });
+
+    const createdQuestions = await tx.question.findMany({
+      where: { surveyId: survey.id },
+      include: { options: true },
+      orderBy: { order: 'asc' },
+    });
+
+    for (const [index, spec] of questionsSpec.entries()) {
+      if (!spec.showIf) continue;
+
+      const targetQuestion = createdQuestions.find((q) => q.order === spec.showIf.questionOrder);
+      const targetOption = targetQuestion?.options.find((o) => o.order === spec.showIf.optionOrder);
+
+      await tx.question.update({
+        where: { id: createdQuestions[index].id },
+        data: { showIfOptionId: targetOption.id },
+      });
+    }
   });
 
-  console.log('✅ Enquête "Stationnement et déplacements dans le centre historique" créée (OPEN).');
+  console.log('✅ Enquête "Stationnement et déplacements dans le centre historique" créée (OPEN), en 4 parcours branchés.');
 }
 
 // N'exécute main() QUE si ce fichier est lancé directement
