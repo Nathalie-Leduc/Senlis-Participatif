@@ -8,7 +8,10 @@
 
 import argon2 from 'argon2';
 import prisma from '../lib/prisma.js';
-import { signToken, signTwoFactorChallenge, verifyTwoFactorChallenge } from '../lib/jwt.js';
+import {
+  signToken, signTwoFactorChallenge, verifyTwoFactorChallenge,
+  signTrustedDeviceToken, verifyTrustedDeviceToken,
+} from '../lib/jwt.js';
 import {
   createToken, verifyAndConsumeToken, createTwoFactorCode, verifyTwoFactorCode,
 } from '../services/token.js';
@@ -76,7 +79,7 @@ export async function verifyEmail(req, res, next) {
 // ── POST /auth/login ────────────────────────────────────
 export async function login(req, res, next) {
   try {
-    const { email, password } = req.body;
+    const { email, password, trustedDeviceToken } = req.body;
 
     // Cherche l'utilisateur — on n'indique PAS si c'est
     // l'email ou le mot de passe qui est faux (anti-bruteforce :
@@ -110,16 +113,34 @@ export async function login(req, res, next) {
     // renvoie qu'un jeton de DÉFI (10 min, sans le rôle) — la vraie
     // connexion n'a lieu qu'après /auth/2fa/verify. Un citoyen normal
     // continue comme avant, sans cette étape.
+    //
+    // Exception : un jeton "appareil de confiance" valide (ce
+    // navigateur a déjà passé le 2FA il y a moins d'1h, voir
+    // verifyTwoFactor ci-dessous) dispense de repasser par le défi
+    // email — le mot de passe reste toujours requis, seul le CODE
+    // est sauté.
     if (user.role === 'ADMIN') {
-      const code = await createTwoFactorCode(user.id);
-      await sendTwoFactorCode(user.email, code);
+      let trustedDevice = false;
+      if (trustedDeviceToken) {
+        try {
+          const payload = verifyTrustedDeviceToken(trustedDeviceToken);
+          trustedDevice = payload.userId === user.id;
+        } catch {
+          trustedDevice = false; // expiré, falsifié, ou absent : on retombe simplement sur le 2FA normal
+        }
+      }
 
-      const challengeToken = signTwoFactorChallenge(user);
+      if (!trustedDevice) {
+        const code = await createTwoFactorCode(user.id);
+        await sendTwoFactorCode(user.email, code);
 
-      return res.json({
-        twoFactorRequired: true,
-        challengeToken,
-      });
+        const challengeToken = signTwoFactorChallenge(user);
+
+        return res.json({
+          twoFactorRequired: true,
+          challengeToken,
+        });
+      }
     }
 
     // Tout est bon → JWT
@@ -175,8 +196,14 @@ export async function verifyTwoFactor(req, res, next) {
     }
 
     const jwt = signToken(user);
+    // Émis EN PLUS du jeton de session, jamais à sa place — voir le
+    // commentaire dans login() pour ce qu'il permet exactement (sauter
+    // le CODE, jamais le mot de passe) et sa durée de vie volontairement
+    // courte (1h par défaut).
+    const trustedDeviceToken = signTrustedDeviceToken(user);
 
     res.json({
+      trustedDeviceToken,
       token: jwt,
       user: {
         id: user.id,
