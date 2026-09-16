@@ -46,6 +46,9 @@ function emptyQuestion() {
     // formulaire. Doit correspondre à une option d'une question
     // ANTÉRIEURE au moment de l'envoi (voir buildPayload).
     showIf: null,
+    // 'VILLE_FR' | null — n'a de sens que pour une question
+    // TEXTE_LIBRE (voir le rendu de QuestionEditor plus bas).
+    uiHint: null,
   };
 }
 
@@ -102,6 +105,7 @@ export default function AdminSurveyForm() {
             // besoin de chercher à quelle question cette option
             // appartient, optionKey === showIfOptionId suffit.
             showIf: q.showIfOptionId ? { optionKey: q.showIfOptionId } : null,
+            uiHint: q.uiHint || null,
           })),
         });
       })
@@ -149,6 +153,10 @@ export default function AdminSurveyForm() {
               // forcer l'admin à en ajouter à la main — même logique
               // que côté API (défauts "Oui"/"Non" pour OUI_NON).
               options: (meta.needsOptions === true) ? [emptyOption(), emptyOption()] : [],
+              // uiHint n'a de sens que pour TEXTE_LIBRE (voir le
+              // validateur API) — en changer de type doit l'effacer,
+              // sinon l'envoi serait rejeté.
+              uiHint: newType === 'TEXTE_LIBRE' ? q.uiHint : null,
             };
           }
           // Une AUTRE question pouvait dépendre d'une option qui
@@ -252,6 +260,7 @@ export default function AdminSurveyForm() {
           helpText: q.helpText.trim() || undefined,
           type: q.type,
           required: q.required,
+          uiHint: q.type === 'TEXTE_LIBRE' ? (q.uiHint || undefined) : undefined,
         };
 
         // Résolution de la clé stable (optionKey) vers la POSITION
@@ -497,6 +506,17 @@ function QuestionEditor({
           Obligatoire
         </label>
       </div>
+
+      {question.type === 'TEXTE_LIBRE' && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#26333A' }}>
+          <input
+            type="checkbox" checked={question.uiHint === 'VILLE_FR'}
+            onChange={(e) => onChange({ uiHint: e.target.checked ? 'VILLE_FR' : null })}
+            style={{ width: 20, height: 20 }}
+          />
+          Suggestions de ville (France) pendant la saisie
+        </label>
+      )}
 
       {priorOptions.length > 0 && (
         <Field label="Afficher cette question seulement si...">

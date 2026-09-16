@@ -326,6 +326,14 @@ function QuestionInput({ question, answer, onChange }) {
       );
 
     case 'TEXTE_LIBRE':
+      if (question.uiHint === 'VILLE_FR') {
+        return (
+          <VilleAutocompleteInput
+            value={answer?.valueText || ''}
+            onChange={(valueText) => onChange({ valueText })}
+          />
+        );
+      }
       return (
         <textarea
           value={answer?.valueText || ''}
@@ -338,6 +346,83 @@ function QuestionInput({ question, answer, onChange }) {
     default:
       return null;
   }
+}
+
+// ── Suggestions de ville (France) — API officielle geo.api.gouv.fr ──
+//
+// Reste un simple TEXTE_LIBRE derrière le rideau : la valeur envoyée
+// est du texte normal, jamais un id ou une structure particulière —
+// si l'API est indisponible ou que la ville cherchée n'apparaît pas
+// dans les suggestions, la personne peut toujours taper librement,
+// rien ne bloque la saisie.
+function VilleAutocompleteInput({ value, onChange }) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    // Moins de 2 caractères : pas la peine d'interroger l'API pour
+    // une lettre isolée, trop de résultats pour être utiles.
+    if (value.trim().length < 2) {
+      setSuggestions([]);
+      return undefined;
+    }
+
+    // Anti-rebond : une seule requête une fois que la personne s'est
+    // arrêtée de taper depuis 300ms, pas une par lettre tapée.
+    const timeout = setTimeout(() => {
+      fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(value.trim())}&boost=population&limit=8&fields=nom,codesPostaux`)
+        .then((res) => (res.ok ? res.json() : []))
+        .then(setSuggestions)
+        .catch(() => setSuggestions([])); // API indisponible : la saisie libre reste toujours possible
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [value]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        // Délai avant de fermer : laisse le temps au clic sur une
+        // suggestion d'être traité avant que la liste ne disparaisse.
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Commencez à taper le nom de la ville..."
+        style={fieldStyle}
+        autoComplete="off"
+      />
+      {open && suggestions.length > 0 && (
+        <ul style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+          background: '#fff', border: '2px solid #e3dcce', borderRadius: 12,
+          marginTop: 4, padding: 4, listStyle: 'none', maxHeight: 220, overflowY: 'auto',
+          boxShadow: '0 8px 24px rgba(0,0,0,.1)',
+        }}
+        >
+          {suggestions.map((commune) => (
+            <li key={`${commune.nom}-${commune.codesPostaux?.[0] || ''}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(`${commune.nom} (${commune.codesPostaux?.[0] || ''})`);
+                  setSuggestions([]);
+                  setOpen(false);
+                }}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '10px 12px', background: 'none',
+                  border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 15,
+                }}
+              >
+                {commune.nom} <span style={{ color: '#6B6257', fontSize: 13 }}>{commune.codesPostaux?.[0]}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function optionButtonStyle(active) {

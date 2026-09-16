@@ -63,6 +63,7 @@ function toNestedQuestionsCreate(questions) {
       type: q.type,
       required: q.required ?? true,
       order: index,
+      uiHint: q.uiHint,
       options: options
         ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex })) }
         : undefined,

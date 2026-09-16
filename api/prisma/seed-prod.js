@@ -303,6 +303,7 @@ async function main() {
     label: 'Quelle est cette ville ?',
     type: 'TEXTE_LIBRE',
     required: true,
+    uiHint: 'VILLE_FR',
     showIf: { questionOrder: idxB3, optionOrder: AUTRE_VILLE_INDEX },
   });
   const idxB5 = addQuestion({
@@ -433,6 +434,7 @@ async function main() {
     label: 'Quelle est cette ville ?',
     type: 'TEXTE_LIBRE',
     required: true,
+    uiHint: 'VILLE_FR',
     showIf: { questionOrder: idxC3, optionOrder: AUTRE_VILLE_INDEX },
   });
   const idxC5 = addQuestion({
@@ -592,6 +594,7 @@ async function main() {
               type: q.type,
               required: q.required,
               order: index,
+              uiHint: q.uiHint,
               options: options
                 ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex })) }
                 : undefined,
