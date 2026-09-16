@@ -17,7 +17,7 @@ import { sendVerificationEmail, sendResetPasswordEmail, sendTwoFactorCode } from
 // ── POST /auth/register ─────────────────────────────────
 export async function register(req, res, next) {
   try {
-    const { email, password, pseudo } = req.body;
+    const { email, password, pseudo, situation, quartier } = req.body;
 
     // Vérifie si l'email est déjà pris
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -35,7 +35,9 @@ export async function register(req, res, next) {
 
     // Crée l'utilisateur (emailVerified = false par défaut)
     const user = await prisma.user.create({
-      data: { email, pseudo, passwordHash },
+      data: {
+        email, pseudo, passwordHash, situation, quartier,
+      },
     });
 
     // Génère et envoie le jeton de vérification par email
@@ -131,6 +133,8 @@ export async function login(req, res, next) {
         pseudo: user.pseudo,
         role: user.role,
         emailVerified: user.emailVerified,
+        situation: user.situation,
+        quartier: user.quartier,
       },
     });
   } catch (err) {
@@ -180,6 +184,8 @@ export async function verifyTwoFactor(req, res, next) {
         pseudo: user.pseudo,
         role: user.role,
         emailVerified: user.emailVerified,
+        situation: user.situation,
+        quartier: user.quartier,
       },
     });
   } catch (err) {
@@ -198,6 +204,8 @@ export async function me(req, res, next) {
         pseudo: true,
         role: true,
         emailVerified: true,
+        situation: true,
+        quartier: true,
         notifyNewProposal: true,
         notifySurveyClosed: true,
         createdAt: true,
@@ -220,7 +228,7 @@ export async function me(req, res, next) {
 // ── PATCH /auth/me ──────────────────────────────────────
 export async function updateProfile(req, res, next) {
   try {
-    const { pseudo, email } = req.body;
+    const { pseudo, email, situation, quartier } = req.body;
     const userId = req.user.userId;
 
     // Si l'email change, vérifier qu'il n'est pas déjà pris
@@ -241,8 +249,16 @@ export async function updateProfile(req, res, next) {
       data: {
         ...(pseudo && { pseudo }),
         ...(email && { email, emailVerified: false }),
+        ...(situation && { situation }),
+        ...(quartier && { quartier }),
+        // Si on bascule vers une situation autre que AUTRE_QUARTIER,
+        // le quartier précédemment choisi n'a plus de sens — effacé
+        // plutôt que laissé à traîner avec une valeur périmée.
+        ...(situation && situation !== 'AUTRE_QUARTIER' && { quartier: null }),
       },
-      select: { id: true, email: true, pseudo: true, role: true, emailVerified: true },
+      select: {
+        id: true, email: true, pseudo: true, role: true, emailVerified: true, situation: true, quartier: true,
+      },
     });
 
     // Si l'email a changé, renvoyer un jeton de vérification

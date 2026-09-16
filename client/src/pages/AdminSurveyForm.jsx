@@ -39,6 +39,13 @@ function emptyQuestion() {
     type: 'CHOIX_UNIQUE',
     required: true,
     options: [emptyOption(), emptyOption()],
+    // { optionKey } | null — optionKey seul suffit à retrouver la
+    // question ET l'option visées (clés UUID globalement uniques) ;
+    // référence par clé stable, jamais par position, pour survivre à
+    // l'ajout/suppression d'une autre question ailleurs dans le
+    // formulaire. Doit correspondre à une option d'une question
+    // ANTÉRIEURE au moment de l'envoi (voir buildPayload).
+    showIf: null,
   };
 }
 
@@ -89,6 +96,12 @@ export default function AdminSurveyForm() {
             options: q.options.length
               ? q.options.map((o) => ({ key: o.id, label: o.label }))
               : [emptyOption(), emptyOption()],
+            // showIfOptionId est un vrai id de base — comme les
+            // options réutilisent justement leur id comme clé React
+            // (juste au-dessus), la conversion est directe : pas
+            // besoin de chercher à quelle question cette option
+            // appartient, optionKey === showIfOptionId suffit.
+            showIf: q.showIfOptionId ? { optionKey: q.showIfOptionId } : null,
           })),
         });
       })
@@ -110,16 +123,42 @@ export default function AdminSurveyForm() {
     }));
   };
 
+  // showIf est { optionKey } | null — jamais { optionKey: '' }, sinon
+  // buildPayload chercherait une option dont la clé est une chaîne
+  // vide et ne la trouverait jamais.
+  const setQuestionShowIf = (questionKey, optionKey) => {
+    updateQuestion(questionKey, { showIf: optionKey ? { optionKey } : null });
+  };
+
   const handleQuestionTypeChange = (questionKey, newType) => {
     const meta = QUESTION_TYPE_META[newType];
-    updateQuestion(questionKey, {
-      type: newType,
-      // En passant à un type qui a besoin d'options mais qui n'en a
-      // pas encore assez (ex. venait de TEXTE_LIBRE), on repart d'un
-      // couple d'options vides plutôt que de forcer l'admin à en
-      // ajouter à la main — même logique que côté API (défauts
-      // "Oui"/"Non" pour OUI_NON).
-      options: (meta.needsOptions === true) ? [emptyOption(), emptyOption()] : [],
+    setForm((prev) => {
+      const target = prev.questions.find((q) => q.key === questionKey);
+      const oldOptionKeys = new Set((target?.options || []).map((o) => o.key));
+
+      return {
+        ...prev,
+        questions: prev.questions.map((q) => {
+          if (q.key === questionKey) {
+            return {
+              ...q,
+              type: newType,
+              // En passant à un type qui a besoin d'options mais qui
+              // n'en a pas encore assez (ex. venait de TEXTE_LIBRE),
+              // on repart d'un couple d'options vides plutôt que de
+              // forcer l'admin à en ajouter à la main — même logique
+              // que côté API (défauts "Oui"/"Non" pour OUI_NON).
+              options: (meta.needsOptions === true) ? [emptyOption(), emptyOption()] : [],
+            };
+          }
+          // Une AUTRE question pouvait dépendre d'une option qui
+          // vient d'être remplacée par le changement de type ci-dessus.
+          if (q.showIf && oldOptionKeys.has(q.showIf.optionKey)) {
+            return { ...q, showIf: null };
+          }
+          return q;
+        }),
+      };
     });
   };
 
@@ -128,10 +167,22 @@ export default function AdminSurveyForm() {
   };
 
   const removeQuestion = (questionKey) => {
-    setForm((prev) => ({
-      ...prev,
-      questions: prev.questions.filter((q) => q.key !== questionKey),
-    }));
+    setForm((prev) => {
+      const removed = prev.questions.find((q) => q.key === questionKey);
+      const removedOptionKeys = new Set((removed?.options || []).map((o) => o.key));
+
+      return {
+        ...prev,
+        questions: prev.questions
+          .filter((q) => q.key !== questionKey)
+          // Une AUTRE question pouvait dépendre d'une option de celle
+          // qu'on retire — sans ce nettoyage, elle garderait une
+          // référence à une option qui n'existe plus.
+          .map((q) => (q.showIf && removedOptionKeys.has(q.showIf.optionKey)
+            ? { ...q, showIf: null }
+            : q)),
+      };
+    });
   };
 
   // ── Options (imbriquées dans une question) ───────────────
@@ -158,10 +209,14 @@ export default function AdminSurveyForm() {
   const removeOption = (questionKey, optionKey) => {
     setForm((prev) => ({
       ...prev,
-      questions: prev.questions.map((q) => (q.key !== questionKey ? q : {
-        ...q,
-        options: q.options.filter((o) => o.key !== optionKey),
-      })),
+      questions: prev.questions
+        .map((q) => (q.key !== questionKey ? q : {
+          ...q,
+          options: q.options.filter((o) => o.key !== optionKey),
+        }))
+        // Même nettoyage que removeQuestion, mais pour une option
+        // isolée plutôt que toute la question.
+        .map((q) => (q.showIf?.optionKey === optionKey ? { ...q, showIf: null } : q)),
     }));
   };
 
@@ -171,6 +226,16 @@ export default function AdminSurveyForm() {
   // remplies) en payload strict attendu par createSurveySchema/
   // updateSurveySchema côté API.
   function buildPayload() {
+    // Même filtrage que celui appliqué plus bas à chaque question —
+    // recalculé ici pour que la résolution de showIf (question
+    // antérieure i, option à quel index) pointe vers le MÊME tableau
+    // que celui réellement envoyé pour la question i, jamais le
+    // tableau brut de l'UI (qui peut contenir une option vide au
+    // milieu, pas encore remplie).
+    const getFilledOptions = (q) => q.options
+      .map((o) => ({ key: o.key, label: o.label.trim() }))
+      .filter((o) => o.label !== '');
+
     return {
       title: form.title.trim(),
       description: form.description.trim(),
@@ -178,11 +243,9 @@ export default function AdminSurveyForm() {
       status: form.status,
       opensAt: form.opensAt || undefined,
       closesAt: form.closesAt || undefined,
-      questions: form.questions.map((q) => {
+      questions: form.questions.map((q, questionIndex) => {
         const meta = QUESTION_TYPE_META[q.type];
-        const filledOptions = q.options
-          .map((o) => ({ label: o.label.trim() }))
-          .filter((o) => o.label !== '');
+        const filledOptions = getFilledOptions(q);
 
         const base = {
           label: q.label.trim(),
@@ -191,8 +254,26 @@ export default function AdminSurveyForm() {
           required: q.required,
         };
 
+        // Résolution de la clé stable (optionKey) vers la POSITION
+        // attendue par l'API (questionOrder/optionOrder) — les vrais
+        // id n'existent pas encore pour une question tout juste créée
+        // dans ce formulaire, donc l'API ne peut raisonner que par
+        // position (voir resolveBranching côté contrôleur). On ne
+        // cherche que parmi les questions ANTÉRIEURES : le nettoyage
+        // fait par removeQuestion/removeOption/handleQuestionTypeChange
+        // garantit déjà qu'une référence encore présente ici est valide.
+        if (q.showIf) {
+          for (let i = 0; i < questionIndex; i += 1) {
+            const optionIndex = getFilledOptions(form.questions[i]).findIndex((o) => o.key === q.showIf.optionKey);
+            if (optionIndex !== -1) {
+              base.showIf = { questionOrder: i, optionOrder: optionIndex };
+              break;
+            }
+          }
+        }
+
         if (meta.needsOptions === true) {
-          return { ...base, options: filledOptions };
+          return { ...base, options: filledOptions.map(({ label }) => ({ label })) };
         }
 
         if (meta.needsOptions === 'optional') {
@@ -200,7 +281,7 @@ export default function AdminSurveyForm() {
           // envoie ; sinon on omet complètement le champ pour laisser
           // l'API générer "Oui"/"Non" par défaut (voir toNestedQuestionsCreate
           // côté contrôleur) plutôt que d'envoyer un tableau à moitié rempli.
-          return filledOptions.length === 2 ? { ...base, options: filledOptions } : base;
+          return filledOptions.length === 2 ? { ...base, options: filledOptions.map(({ label }) => ({ label })) } : base;
         }
 
         return base; // NOMBRE, TEXTE_LIBRE : jamais d'options
@@ -314,9 +395,19 @@ export default function AdminSurveyForm() {
                 question={question}
                 index={index}
                 canRemove={form.questions.length > 1}
+                // Une question ne peut dépendre QUE d'une question qui
+                // la précède (le répondant n'aurait pas encore répondu
+                // à une question plus tardive) — aplati en une seule
+                // liste "Q{n} : {libellé}" plutôt qu'un double menu en
+                // cascade, plus simple à utiliser pour choisir parmi
+                // une poignée d'options en tout et pour tout.
+                priorOptions={form.questions.slice(0, index).flatMap((q, i) => q.options
+                  .filter((o) => o.label.trim() !== '')
+                  .map((o) => ({ key: o.key, label: `Q${i + 1} : ${o.label.trim()}` })))}
                 onChange={(patch) => updateQuestion(question.key, patch)}
                 onTypeChange={(newType) => handleQuestionTypeChange(question.key, newType)}
                 onRemove={() => removeQuestion(question.key)}
+                onShowIfChange={(optionKey) => setQuestionShowIf(question.key, optionKey)}
                 onOptionChange={(optionKey, label) => updateOption(question.key, optionKey, label)}
                 onAddOption={() => addOption(question.key)}
                 onRemoveOption={(optionKey) => removeOption(question.key, optionKey)}
@@ -347,8 +438,8 @@ export default function AdminSurveyForm() {
 // logique d'affichage conditionnel des options selon le type devient
 // vite illisible mélangée avec le reste du formulaire parent.
 function QuestionEditor({
-  question, index, canRemove, onChange, onTypeChange, onRemove,
-  onOptionChange, onAddOption, onRemoveOption,
+  question, index, canRemove, priorOptions, onChange, onTypeChange, onRemove,
+  onShowIfChange, onOptionChange, onAddOption, onRemoveOption,
 }) {
   const meta = QUESTION_TYPE_META[question.type];
   const showOptions = meta.needsOptions === true || meta.needsOptions === 'optional';
@@ -406,6 +497,21 @@ function QuestionEditor({
           Obligatoire
         </label>
       </div>
+
+      {priorOptions.length > 0 && (
+        <Field label="Afficher cette question seulement si...">
+          <select
+            value={question.showIf?.optionKey || ''}
+            onChange={(e) => onShowIfChange(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">Toujours affichée</option>
+            {priorOptions.map((opt) => (
+              <option key={opt.key} value={opt.key}>{opt.label}</option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       {showOptions && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>

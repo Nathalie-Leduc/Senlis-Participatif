@@ -46,13 +46,47 @@ const pseudo = z
   .min(2, 'Le pseudo doit contenir au moins 2 caractères')
   .max(30, 'Le pseudo ne peut pas dépasser 30 caractères');
 
+// Même 4 valeurs que l'enum Prisma Situation — déclaratif, sans preuve
+// demandée (même logique de confiance que le pseudonymat). Sert à
+// confronter l'audience ciblée d'une enquête à qui y répond vraiment,
+// et au branchement de questions selon la situation déclarée.
+const situation = z.enum(
+  ['CENTRE_RESIDENT', 'CENTRE_COMMERCANT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
+  { errorMap: () => ({ message: 'Merci de préciser votre situation' }) },
+);
+
+// Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
+// historique (déjà couvert par Situation) — menu affiché en cascade
+// uniquement quand situation = AUTRE_QUARTIER, pour que ces citoyens
+// ne se sentent pas réduits à une case fourre-tout, et pour pouvoir
+// cibler de futures enquêtes/propositions par quartier précis.
+const quartier = z.enum(
+  ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  { errorMap: () => ({ message: 'Merci de préciser votre quartier' }) },
+);
+
+// superRefine plutôt que deux champs indépendants : la règle
+// "quartier obligatoire SI situation = AUTRE_QUARTIER" dépend de DEUX
+// champs à la fois — impossible à exprimer avec un simple .optional().
+function requireQuartierIfAutreQuartier(data, ctx) {
+  if (data.situation === 'AUTRE_QUARTIER' && !data.quartier) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['quartier'],
+      message: 'Merci de préciser votre quartier',
+    });
+  }
+}
+
 // ── Schémas par endpoint ────────────────────────────────
 
 export const registerSchema = z.object({
   email,
   password,
   pseudo,
-});
+  situation,
+  quartier: quartier.optional(),
+}).superRefine(requireQuartierIfAutreQuartier);
 
 export const loginSchema = z.object({
   email,
@@ -80,7 +114,9 @@ export const resetPasswordSchema = z.object({
 export const updateProfileSchema = z.object({
   pseudo: pseudo.optional(),
   email: email.optional(),
-});
+  situation: situation.optional(),
+  quartier: quartier.optional(),
+}).superRefine(requireQuartierIfAutreQuartier);
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Mot de passe actuel requis'),

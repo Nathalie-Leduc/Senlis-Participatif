@@ -57,6 +57,19 @@ export default function AdminSurveys() {
     }
   };
 
+  // Distinct du statut ouvert/clos : une enquête peut être clôturée
+  // sans que ses résultats soient déjà publics — l'admin choisit
+  // séparément le moment où les rendre visibles à tous.
+  const handleToggleResults = async (survey) => {
+    try {
+      const data = await api.patch(`/surveys/${survey.id}`, { resultsPublished: !survey.resultsPublished });
+      setItems((prev) => prev.map((s) => (s.id === survey.id ? { ...s, resultsPublished: data.survey.resultsPublished } : s)));
+      showToast(data.survey.resultsPublished ? 'Résultats publiés' : 'Résultats dépubliés');
+    } catch (err) {
+      setError(err.message || 'La mise à jour a échoué');
+    }
+  };
+
   return (
     <div className="wrap" style={{ padding: '32px 20px 60px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
@@ -117,7 +130,7 @@ export default function AdminSurveys() {
 
                 <span style={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{s.title}</span>
 
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <Link
                     to={`/admin/enquetes/${s.slug}/modifier`}
                     className="btn"
@@ -125,6 +138,24 @@ export default function AdminSurveys() {
                   >
                     Modifier
                   </Link>
+                  <Link
+                    to={`/admin/enquetes/${s.id}/stats`}
+                    className="btn"
+                    style={{ background: '#E3EEF3', color: '#1E5F7C', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                  >
+                    Résultats détaillés
+                  </Link>
+                  <button
+                    onClick={() => handleToggleResults(s)}
+                    className="btn"
+                    style={{
+                      background: s.resultsPublished ? '#E0F2E5' : '#EFEBE2',
+                      color: s.resultsPublished ? '#377349' : '#26333A',
+                      padding: '8px 16px', minHeight: 40, fontSize: 14,
+                    }}
+                  >
+                    {s.resultsPublished ? '✓ Résultats publiés' : 'Publier les résultats'}
+                  </button>
                   <button
                     onClick={() => handleDelete(s)}
                     className="btn"

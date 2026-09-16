@@ -25,11 +25,15 @@ export default function EnqueteResultats() {
 
     api.get(`/surveys/${slug}/results`)
       .then(setResults)
-      .catch((err) => setError(
-        err.status === 404
-          ? "Cette enquête n'existe pas ou plus."
-          : (err.message || 'Impossible de charger les résultats'),
-      ))
+      .catch((err) => {
+        if (err.status === 404) {
+          setError("Cette enquête n'existe pas ou plus.");
+        } else if (err.code === 'RESULTS_NOT_PUBLISHED') {
+          setError("Les résultats de cette enquête n'ont pas encore été publiés par l'administration — revenez un peu plus tard !");
+        } else {
+          setError(err.message || 'Impossible de charger les résultats');
+        }
+      })
       .finally(() => setLoading(false));
   }, [slug]);
 
@@ -62,9 +66,19 @@ export default function EnqueteResultats() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {results.questions.map((q) => (
           <div key={q.id} className="card-joyful" style={{ padding: 20 }}>
-            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 18, marginBottom: 14 }}>
+            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 18, marginBottom: 4 }}>
               {q.label}
             </h2>
+            {/* Une question branchée n'a été vue que par une partie des
+                répondants — le préciser évite de laisser croire que
+                "peu de gens ont répondu" alors que peu de gens ont
+                simplement VU la question (honnêteté statistique). */}
+            {q.totalForQuestion !== results.totalResponses && (
+              <p style={{ color: '#6B6257', fontSize: 13, marginBottom: 10 }}>
+                Question posée à {q.totalForQuestion} répondant{q.totalForQuestion > 1 ? 's' : ''} concerné{q.totalForQuestion > 1 ? 's' : ''}
+              </p>
+            )}
+            {q.totalForQuestion === results.totalResponses && <div style={{ marginBottom: 14 }} />}
 
             {/* CHOIX_UNIQUE / CHOIX_MULTIPLE / OUI_NON → une barre par option */}
             {q.options && (

@@ -132,8 +132,25 @@ export default function EnqueteRepondre() {
     );
   }
 
-  const question = survey.questions[step];
-  const total = survey.questions.length;
+  // Recalculée à chaque rendu (donc à chaque réponse donnée) : une
+  // question dont le déclencheur (showIfOptionId) n'a pas été choisi
+  // n'apparaît simplement jamais dans le parcours — pas ignorée en
+  // fin de course, absente dès le départ pour ce répondant précis.
+  const visibleQuestions = survey.questions.filter((q) => {
+    if (!q.showIfOptionId) return true;
+    return Object.values(answers).some(
+      (a) => a.optionId === q.showIfOptionId || a.optionIds?.includes(q.showIfOptionId),
+    );
+  });
+
+  const question = visibleQuestions[step];
+  if (!question) {
+    // Cas limite improbable (ex. la dernière question visible vient
+    // de disparaître suite à un retour en arrière) — on ramène
+    // simplement au début plutôt que de planter sur .label undefined.
+    return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
+  }
+  const total = visibleQuestions.length;
   const answer = answers[question.id];
   const answered = isAnswered(question, answer);
   const canAdvance = !question.required || answered;
@@ -149,11 +166,16 @@ export default function EnqueteRepondre() {
 
     // Dernière question : un SEUL envoi groupé pour tout le
     // bulletin — jamais un envoi par question au fil de l'eau.
+    // On ne soumet que les questions RÉELLEMENT visibles pour ce
+    // répondant — une question masquée par branchement ne doit
+    // jamais apparaître dans l'envoi, même si une réponse traîne
+    // encore en mémoire (ex. donnée puis rendue invisible en
+    // revenant modifier une réponse antérieure).
     setSubmitting(true);
     setError(null);
     try {
       const payload = {
-        answers: survey.questions
+        answers: visibleQuestions
           .map((q) => {
             const a = answers[q.id];
             if (!isAnswered(q, a)) return null;

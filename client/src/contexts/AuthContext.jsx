@@ -39,8 +39,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Inscription ────────────────────────────────────────
-  const register = useCallback(async ({ email, password, pseudo }) => {
-    const data = await api.post('/auth/register', { email, password, pseudo });
+  // On transmet tout ce que la page envoie (pas de filtrage explicite
+  // ici) — sinon chaque nouveau champ d'inscription (ex. situation)
+  // doit être ajouté à DEUX endroits : la page ET ce pont vers l'API,
+  // avec le risque de silencieusement en oublier un, comme ici.
+  const register = useCallback(async (payload) => {
+    const data = await api.post('/auth/register', payload);
     return data; // le message "vérifiez votre email"
   }, []);
 
