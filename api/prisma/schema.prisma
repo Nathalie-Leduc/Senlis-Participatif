@@ -299,6 +299,14 @@ model Question {
   required Boolean      @default(true)
   order    Int          // position dans le questionnaire
 
+  // Indicateur de rendu léger, uniquement pour TEXTE_LIBRE — évite de
+  // créer un type de question à part entière (VILLE_FR) juste pour un
+  // widget de saisie différent. Le stockage/la validation/l'agrégation
+  // restent identiques à n'importe quel TEXTE_LIBRE ; seul le CLIENT
+  // change de rendu (suggestions de ville via l'API officielle
+  // geo.api.gouv.fr au lieu d'un simple champ texte).
+  uiHint String?
+
   // Branchement conditionnel : si renseigné, cette question ne s'affiche
   // QUE si le répondant a choisi cette option précise à une question
   // antérieure (ex. l'enquête stationnement scindée en deux parcours

@@ -55,7 +55,20 @@ const questionSchema = z.object({
   // submitResponse côté contrôleur pour ne pas exiger de réponse à
   // une question jamais montrée).
   showIf: showIfSchema.optional(),
+  // Une seule valeur reconnue pour l'instant : 'VILLE_FR' (suggestions
+  // de commune via l'API officielle geo.api.gouv.fr côté client).
+  // z.literal plutôt que z.string() : toute AUTRE valeur est rejetée
+  // d'emblée, pas seulement ignorée silencieusement plus tard.
+  uiHint: z.literal('VILLE_FR').optional(),
 }).superRefine((q, ctx) => {
+  if (q.uiHint && q.type !== 'TEXTE_LIBRE') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['uiHint'],
+      message: 'uiHint "VILLE_FR" n\'a de sens que pour une question TEXTE_LIBRE',
+    });
+  }
+
   if (OPTIONS_REQUIRED_TYPES.includes(q.type)) {
     if (!q.options || q.options.length < 2) {
       ctx.addIssue({
