@@ -29,6 +29,7 @@ import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import proposalsRouter from './routes/proposals.js';
 import surveysRouter from './routes/surveys.js';
+import statsRouter from './routes/stats.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
@@ -81,6 +82,7 @@ app.use('/api/v1', healthRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/proposals', proposalsRouter);
 app.use('/api/v1/surveys', surveysRouter);
+app.use('/api/v1/stats', statsRouter);
 
 // Sprint 6 → app.use('/api/v1/comments', commentsRouter);
 
