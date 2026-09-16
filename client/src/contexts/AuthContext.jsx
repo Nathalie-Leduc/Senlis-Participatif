@@ -52,8 +52,21 @@ export function AuthProvider({ children }) {
   // Si data.twoFactorRequired est vrai (compte admin), on ne stocke
   // NI token NI user — l'appelant (Connexion.jsx) doit d'abord
   // passer par verifyTwoFactor() avec le code reçu par email.
+  // ── Connexion ──────────────────────────────────────────
+  // Si data.twoFactorRequired est vrai (compte admin), on ne stocke
+  // NI token NI user — l'appelant (Connexion.jsx) doit d'abord
+  // passer par verifyTwoFactor() avec le code reçu par email.
+  //
+  // trustedDeviceToken (s'il existe encore en localStorage, posé par
+  // un précédent verifyTwoFactor sur CE navigateur) est envoyé à
+  // chaque tentative — c'est lui qui permet à l'API de sauter le
+  // défi email si ce navigateur l'a déjà passé il y a moins d'1h.
+  // Ne coûte rien à envoyer même pour un citoyen normal ou un admin
+  // jamais encore vérifié : l'API l'ignore simplement s'il ne
+  // correspond à rien.
   const login = useCallback(async ({ email, password }) => {
-    const data = await api.post('/auth/login', { email, password });
+    const trustedDeviceToken = localStorage.getItem('trustedDeviceToken') || undefined;
+    const data = await api.post('/auth/login', { email, password, trustedDeviceToken });
     if (!data.twoFactorRequired) {
       localStorage.setItem('token', data.token);
       setUser(data.user);
@@ -65,6 +78,12 @@ export function AuthProvider({ children }) {
   const verifyTwoFactor = useCallback(async ({ challengeToken, code }) => {
     const data = await api.post('/auth/2fa/verify', { challengeToken, code });
     localStorage.setItem('token', data.token);
+    // Posé pour la PROCHAINE connexion sur ce navigateur (voir
+    // login() ci-dessus) — jamais utilisé pour la session en cours,
+    // qui repose entièrement sur data.token comme d'habitude.
+    if (data.trustedDeviceToken) {
+      localStorage.setItem('trustedDeviceToken', data.trustedDeviceToken);
+    }
     setUser(data.user);
     return data;
   }, []);
