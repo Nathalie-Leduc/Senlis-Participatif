@@ -63,7 +63,7 @@ export default function Accueil() {
     // pas la peine de faire redescendre 50 enquêtes pour un chiffre.
     api.get('/surveys?limit=1')
       .then((data) => setSurveysTotal(data.pagination.total))
-      .catch(() => {});
+      .catch((err) => console.error('Échec du chargement du total enquêtes :', err));
 
     // "Participants" = citoyens ayant réellement voté ou répondu à
     // une enquête au moins une fois — voir statsController.js pour
