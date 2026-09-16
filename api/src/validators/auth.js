@@ -91,6 +91,11 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email,
   password: z.string().min(1, 'Le mot de passe est requis'),
+  // Optionnel : présent seulement si ce navigateur a déjà passé le
+  // 2FA récemment (voir signTrustedDeviceToken) — n'importe quelle
+  // chaîne passe la validation ici, la vérification cryptographique
+  // réelle a lieu dans login() lui-même, pas ici.
+  trustedDeviceToken: z.string().optional(),
 });
 
 export const verifyTwoFactorSchema = z.object({

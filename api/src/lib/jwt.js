@@ -95,3 +95,46 @@ export function verifyTwoFactorChallenge(token) {
 
   return payload;
 }
+
+// ── Jeton "appareil de confiance" (2FA) ──────────────────
+//
+// Émis juste après un code 2FA correct, en plus du vrai jeton de
+// session — pas à la place. But : sur CE navigateur précis, ne plus
+// redemander de code pendant sa durée de vie, sans pour autant
+// prolonger la fenêtre où un JWT volé permettrait de se faire passer
+// pour un admin (ce jeton ne fait QUE dispenser du défi email à la
+// prochaine connexion, il ne donne accès à rien par lui-même — voir
+// son usage dans login(), jamais dans le middleware auth).
+// Durée volontairement courte et configurable (1h par défaut) :
+// c'est un compromis confort/sécurité, pas une "confiance" acquise
+// pour de bon.
+const TRUSTED_DEVICE_TTL = process.env.TRUSTED_DEVICE_TTL || '1h';
+
+/**
+ * @param {{ id: string }} user
+ * @returns {string} Jeton "appareil de confiance" signé
+ */
+export function signTrustedDeviceToken(user) {
+  return jwt.sign(
+    { userId: user.id, purpose: 'TRUSTED_DEVICE' },
+    SECRET,
+    { expiresIn: TRUSTED_DEVICE_TTL },
+  );
+}
+
+/**
+ * @param {string} token
+ * @returns {{ userId: string }}
+ * @throws {Error} Si le jeton est invalide, expiré, ou n'est pas un jeton "appareil de confiance"
+ */
+export function verifyTrustedDeviceToken(token) {
+  const payload = jwt.verify(token, SECRET);
+
+  if (payload.purpose !== 'TRUSTED_DEVICE') {
+    const error = new Error('Jeton invalide');
+    error.name = 'JsonWebTokenError';
+    throw error;
+  }
+
+  return payload;
+}
