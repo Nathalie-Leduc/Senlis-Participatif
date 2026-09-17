@@ -41,6 +41,7 @@ const PropositionDetail = lazy(() => import('./pages/PropositionDetail.jsx'));
 const AdminPropositions = lazy(() => import('./pages/AdminPropositions.jsx'));
 const AdminPropositionForm = lazy(() => import('./pages/AdminPropositionForm.jsx'));
 const AdminSurveys = lazy(() => import('./pages/AdminSurveys.jsx'));
+const AdminUsers = lazy(() => import('./pages/AdminUsers.jsx'));
 const AdminSurveyStats = lazy(() => import('./pages/AdminSurveyStats.jsx'));
 const AdminSurveyForm = lazy(() => import('./pages/AdminSurveyForm.jsx'));
 const Enquetes = lazy(() => import('./pages/Enquetes.jsx'));
@@ -127,6 +128,9 @@ export default function App() {
             } />
             <Route path="/admin/enquetes" element={
               <ProtectedRoute adminOnly><AdminSurveys /></ProtectedRoute>
+            } />
+            <Route path="/admin/comptes" element={
+              <ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes/nouvelle" element={
               <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>

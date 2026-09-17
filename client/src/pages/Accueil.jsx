@@ -17,6 +17,12 @@ import { PARKINGS_REPORT_EXEMPLE } from '../data/parkingsReport.js';
 import useIsVisible from '../hooks/useIsVisible.js';
 import useCountUp from '../hooks/useCountUp.js';
 
+// 0 et 1 = singulier, 2 et plus = pluriel (règle du français, pas du
+// pluriel anglais où seul 1 est singulier).
+function pluralize(count, singular, plural = `${singular}s`) {
+  return count <= 1 ? singular : plural;
+}
+
 export default function Accueil() {
   const { isLogged } = useAuth();
   const [proposalsTotal, setProposalsTotal] = useState(0);
@@ -50,12 +56,7 @@ export default function Accueil() {
             .map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, label: p.title, slug: p.slug }))
         );
       })
-      .catch(() => {
-        // Page d'accueil : on échoue silencieusement plutôt que
-        // d'afficher une bannière d'erreur — un hero qui plante
-        // fait mauvaise impression, et le reste de la page reste
-        // utile même sans les chiffres/la carte.
-      })
+      .catch((err) => console.error('Échec du chargement des propositions :', err))
       .finally(() => setMapLoaded(true));
 
     // Compteur d'enquêtes : juste le total de la pagination, on n'a
@@ -63,7 +64,7 @@ export default function Accueil() {
     // pas la peine de faire redescendre 50 enquêtes pour un chiffre.
     api.get('/surveys?limit=1')
       .then((data) => setSurveysTotal(data.pagination.total))
-      .catch(() => {});
+      .catch((err) => console.error('Échec du chargement du total enquêtes :', err));
 
     // "Participants" = citoyens ayant réellement voté ou répondu à
     // une enquête au moins une fois — voir statsController.js pour
@@ -71,7 +72,7 @@ export default function Accueil() {
     // là d'une route dédiée pour ce chiffre.
     api.get('/stats/participants')
       .then((data) => setParticipantsTotal(data.total))
-      .catch(() => {});
+      .catch((err) => console.error('Échec du chargement du total participants :', err));
 
     // Le fichier IRIS vit dans public/ — un simple fetch, jamais un
     // import JS : ce n'est pas du code, ça n'a aucune raison de
@@ -119,9 +120,9 @@ export default function Accueil() {
               10 secondes et participez aux enquêtes qui comptent vraiment.
             </p>
             <div ref={statsRef} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-              <div className="stat-pill"><span className="num">{animatedParticipantsTotal}</span> participants</div>
-              <div className="stat-pill"><span className="num">{animatedProposalsTotal}</span> propositions</div>
-              <div className="stat-pill"><span className="num">{animatedSurveysTotal}</span> enquêtes</div>
+              <div className="stat-pill"><span className="num">{animatedParticipantsTotal}</span> {pluralize(participantsTotal, 'participant')}</div>
+              <div className="stat-pill"><span className="num">{animatedProposalsTotal}</span> {pluralize(proposalsTotal, 'proposition')}</div>
+              <div className="stat-pill"><span className="num">{animatedSurveysTotal}</span> {pluralize(surveysTotal, 'enquête')}</div>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {isLogged ? (

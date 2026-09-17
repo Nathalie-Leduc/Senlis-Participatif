@@ -48,6 +48,9 @@ export default function Header() {
               <NavBtn to="/admin/enquetes" active={isActive('/admin/enquetes')}>
                 Admin enquêtes
               </NavBtn>
+              <NavBtn to="/admin/comptes" active={isActive('/admin/comptes')}>
+                Comptes
+              </NavBtn>
             </>
           )}
 
