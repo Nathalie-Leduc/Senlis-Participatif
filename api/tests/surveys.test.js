@@ -375,33 +375,23 @@ describe('Enquêtes — CRUD admin & consultation', () => {
 describe('Publication des résultats et vue détaillée admin', () => {
   it("403 RESULTS_NOT_PUBLISHED — un visiteur non connecté ne voit pas les résultats tant que ce n'est pas publié", async () => {
     const survey = await seedSurvey({ resultsPublished: false });
-
     const res = await request(app).get(`${API}/${survey.slug}/results`);
-
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('RESULTS_NOT_PUBLISHED');
   });
 
-  it("403 RESULTS_NOT_PUBLISHED — un citoyen connecté (non-admin) ne voit pas non plus les résultats tant que ce n'est pas publié", async () => {
+  it("403 RESULTS_NOT_PUBLISHED — un citoyen connecté (non-admin) ne voit pas non plus les résultats", async () => {
     const survey = await seedSurvey({ resultsPublished: false });
     const { token } = await makeCitizen();
-
-    const res = await request(app)
-      .get(`${API}/${survey.slug}/results`)
-      .set('Authorization', `Bearer ${token}`);
-
+    const res = await request(app).get(`${API}/${survey.slug}/results`).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('RESULTS_NOT_PUBLISHED');
   });
 
-  it("un admin voit les résultats même AVANT publication — le garde-fou ne s'applique jamais à lui", async () => {
+  it("un admin voit les résultats même AVANT publication", async () => {
     const survey = await seedSurvey({ resultsPublished: false });
     const { token } = await makeAdminUser();
-
-    const res = await request(app)
-      .get(`${API}/${survey.slug}/results`)
-      .set('Authorization', `Bearer ${token}`);
-
+    const res = await request(app).get(`${API}/${survey.slug}/results`).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
   });
 
@@ -415,29 +405,85 @@ describe('Publication des résultats et vue détaillée admin', () => {
     it('refuse à un citoyen non-admin', async () => {
       const survey = await seedSurvey();
       const { token } = await makeCitizen();
-      const res = await request(app)
-        .get(`${API}/${survey.id}/stats`)
-        .set('Authorization', `Bearer ${token}`);
+      const res = await request(app).get(`${API}/${survey.id}/stats`).set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(403);
     });
 
-    it("répond 200 pour un admin, MÊME si les résultats ne sont pas publiés (vue distincte du garde-fou public)", async () => {
+    it("répond 200 pour un admin, même si les résultats ne sont pas publiés", async () => {
       const survey = await seedSurvey({ resultsPublished: false });
       const { token } = await makeAdminUser();
-
-      const res = await request(app)
-        .get(`${API}/${survey.id}/stats`)
-        .set('Authorization', `Bearer ${token}`);
-
+      const res = await request(app).get(`${API}/${survey.id}/stats`).set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
     });
 
     it('404 pour une enquête inexistante', async () => {
       const { token } = await makeAdminUser();
-      const res = await request(app)
-        .get(`${API}/00000000-0000-0000-0000-000000000000/stats`)
-        .set('Authorization', `Bearer ${token}`);
+      const res = await request(app).get(`${API}/00000000-0000-0000-0000-000000000000/stats`).set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('Segmentation des résultats (S5-21)', () => {
+    it('segmente par une question OUI_NON — les effectifs de chaque segment correspondent aux vrais votants', async () => {
+      const survey = await seedSurvey();
+      const { token: adminToken } = await makeAdminUser();
+      const oui = survey.questions[0].options.find((o) => o.label === 'Oui');
+      const non = survey.questions[0].options.find((o) => o.label === 'Non');
+
+      for (const answer of [oui, oui, non]) {
+        const { token } = await makeCitizen();
+        await request(app)
+          .post(`${API}/${survey.id}/responses`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ answers: [{ questionId: survey.questions[0].id, optionId: answer.id }] });
+      }
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=${survey.questions[0].id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.segmentedBy.questionId).toBe(survey.questions[0].id);
+
+      const ouiSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Oui');
+      const nonSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Non');
+      expect(ouiSegment.totalResponses).toBe(2);
+      expect(nonSegment.totalResponses).toBe(1);
+      expect(ouiSegment.totalResponses + nonSegment.totalResponses).toBe(res.body.totalResponses);
+    });
+
+    it('400 INVALID_SEGMENT_QUESTION — refuse de segmenter par une question CHOIX_MULTIPLE', async () => {
+      const { token } = await makeAdminUser();
+      const created = await request(app)
+        .post(API)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          title: 'Enquête de test',
+          description: 'Description suffisamment longue pour passer la validation Zod.',
+          status: 'DRAFT',
+          questions: [
+            { label: 'Question CHOIX_MULTIPLE de test', type: 'CHOIX_MULTIPLE', required: false, options: [{ label: 'A' }, { label: 'B' }] },
+          ],
+        });
+      const surveyId = created.body.survey.id;
+      const questionId = created.body.survey.questions[0].id;
+
+      const res = await request(app)
+        .get(`${API}/${surveyId}/stats?segmentBy=${questionId}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_SEGMENT_QUESTION');
+    });
+
+    it("400 INVALID_SEGMENT_QUESTION — refuse un id de question qui n'appartient pas à cette enquête", async () => {
+      const survey = await seedSurvey();
+      const { token } = await makeAdminUser();
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=00000000-0000-0000-0000-000000000000`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_SEGMENT_QUESTION');
     });
   });
 });
@@ -445,7 +491,6 @@ describe('Publication des résultats et vue détaillée admin', () => {
 describe('uiHint — "ville avec suggestions" (S5-18)', () => {
   it('accepte uiHint "VILLE_FR" sur une question TEXTE_LIBRE', async () => {
     const { token } = await makeAdminUser();
-
     const res = await request(app)
       .post(API)
       .set('Authorization', `Bearer ${token}`)
@@ -457,14 +502,12 @@ describe('uiHint — "ville avec suggestions" (S5-18)', () => {
           { label: 'Quelle est cette ville ?', type: 'TEXTE_LIBRE', required: true, uiHint: 'VILLE_FR' },
         ],
       });
-
     expect(res.status).toBe(201);
     expect(res.body.survey.questions[0].uiHint).toBe('VILLE_FR');
   });
 
   it("rejette uiHint sur une question qui n'est pas TEXTE_LIBRE", async () => {
     const { token } = await makeAdminUser();
-
     const res = await request(app)
       .post(API)
       .set('Authorization', `Bearer ${token}`)
@@ -473,22 +516,14 @@ describe('uiHint — "ville avec suggestions" (S5-18)', () => {
         description: 'Description suffisamment longue pour passer la validation Zod.',
         status: 'DRAFT',
         questions: [
-          {
-            label: 'Question CHOIX_UNIQUE de test',
-            type: 'CHOIX_UNIQUE',
-            required: true,
-            uiHint: 'VILLE_FR',
-            options: [{ label: 'Oui' }, { label: 'Non' }],
-          },
+          { label: 'Question CHOIX_UNIQUE de test', type: 'CHOIX_UNIQUE', required: true, uiHint: 'VILLE_FR', options: [{ label: 'Oui' }, { label: 'Non' }] },
         ],
       });
-
     expect(res.status).toBe(400);
   });
 
   it('rejette toute valeur de uiHint autre que "VILLE_FR"', async () => {
     const { token } = await makeAdminUser();
-
     const res = await request(app)
       .post(API)
       .set('Authorization', `Bearer ${token}`)
@@ -500,7 +535,6 @@ describe('uiHint — "ville avec suggestions" (S5-18)', () => {
           { label: 'Quelle est cette ville ?', type: 'TEXTE_LIBRE', required: true, uiHint: 'AUTRE_CHOSE' },
         ],
       });
-
     expect(res.status).toBe(400);
   });
 });

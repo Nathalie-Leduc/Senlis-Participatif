@@ -419,9 +419,13 @@ const AGGREGATABLE_CHOICE_TYPES = ['CHOIX_UNIQUE', 'CHOIX_MULTIPLE', 'OUI_NON'];
 // TEXTE_LIBRE (jamais exposé publiquement) et la présence d'un
 // écart audience/situation déclarée (utile pour l'admin, dénué de
 // sens pour un visiteur qui n'a pas à connaître les autres citoyens).
-async function computeResults(survey, { detailed = false } = {}) {
+// responseIds (optionnel) restreint le calcul à un SOUS-ENSEMBLE des
+// bulletins de l'enquête — c'est ce qui permet la segmentation
+// (S5-21) sans dupliquer toute cette logique d'agrégation : null
+// veut dire "tout le monde", comme avant.
+async function computeResults(survey, { detailed = false, responseIds = null } = {}) {
   const totalResponses = await prisma.surveyResponse.count({
-    where: { surveyId: survey.id },
+    where: responseIds ? { id: { in: responseIds } } : { surveyId: survey.id },
   });
 
   const choiceQuestionIds = survey.questions
@@ -434,18 +438,24 @@ async function computeResults(survey, { detailed = false } = {}) {
     .filter((q) => q.type === 'TEXTE_LIBRE')
     .map((q) => q.id);
 
+  // Ajouté à chaque `where` d'Answer ci-dessous quand une
+  // segmentation est demandée — {} ne change rien à une requête
+  // Prisma, donc pas besoin de dupliquer chaque clause en deux
+  // versions (avec/sans filtre).
+  const responseFilter = responseIds ? { responseId: { in: responseIds } } : {};
+
   const [optionCounts, numberStats, textCounts, rawTextAnswers, situationCounts] = await Promise.all([
     choiceQuestionIds.length
       ? prisma.answer.groupBy({
         by: ['questionId', 'optionId'],
-        where: { questionId: { in: choiceQuestionIds }, optionId: { not: null } },
+        where: { questionId: { in: choiceQuestionIds }, optionId: { not: null }, ...responseFilter },
         _count: true,
       })
       : [],
     numberQuestionIds.length
       ? prisma.answer.groupBy({
         by: ['questionId'],
-        where: { questionId: { in: numberQuestionIds } },
+        where: { questionId: { in: numberQuestionIds }, ...responseFilter },
         _count: { valueNumber: true },
         _avg: { valueNumber: true },
         _min: { valueNumber: true },
@@ -455,7 +465,7 @@ async function computeResults(survey, { detailed = false } = {}) {
     textQuestionIds.length
       ? prisma.answer.groupBy({
         by: ['questionId'],
-        where: { questionId: { in: textQuestionIds } },
+        where: { questionId: { in: textQuestionIds }, ...responseFilter },
         _count: { valueText: true },
       })
       : [],
@@ -464,7 +474,7 @@ async function computeResults(survey, { detailed = false } = {}) {
     // la vue publique, qui n'affiche qu'un compte.
     detailed && textQuestionIds.length
       ? prisma.answer.findMany({
-        where: { questionId: { in: textQuestionIds }, valueText: { not: null } },
+        where: { questionId: { in: textQuestionIds }, valueText: { not: null }, ...responseFilter },
         select: { questionId: true, valueText: true },
       })
       : [],
@@ -475,7 +485,7 @@ async function computeResults(survey, { detailed = false } = {}) {
     // publique.
     detailed
       ? prisma.surveyResponse.findMany({
-        where: { surveyId: survey.id },
+        where: responseIds ? { id: { in: responseIds } } : { surveyId: survey.id },
         select: { user: { select: { situation: true } } },
       })
       : [],
@@ -628,9 +638,16 @@ export async function getResults(req, res, next) {
 // Distincte de getResults : jamais soumise au garde-fou
 // resultsPublished (l'admin voit toujours), contenu brut des
 // réponses TEXTE_LIBRE inclus, et écart audience/situation déclarée.
+//
+// ?segmentBy=<questionId> (optionnel, S5-21) : recalcule les mêmes
+// résultats séparément pour chaque option d'UNE question à choix
+// unique de l'enquête — ex. les résultats "pour les habitants du
+// centre" vs "pour les patrons/gérants" vs... — en plus du total
+// général, jamais à sa place.
 export async function getDetailedResults(req, res, next) {
   try {
     const { id } = req.params;
+    const { segmentBy } = req.query;
 
     const survey = await prisma.survey.findUnique({
       where: { id },
@@ -645,6 +662,65 @@ export async function getDetailedResults(req, res, next) {
     }
 
     const result = await computeResults(survey, { detailed: true });
+
+    if (segmentBy) {
+      const segmentQuestion = survey.questions.find((q) => q.id === segmentBy);
+      if (!segmentQuestion) {
+        const error = new Error('Question de segmentation introuvable sur cette enquête');
+        error.status = 400;
+        error.code = 'INVALID_SEGMENT_QUESTION';
+        throw error;
+      }
+      if (!['CHOIX_UNIQUE', 'OUI_NON'].includes(segmentQuestion.type)) {
+        // CHOIX_MULTIPLE exclu volontairement : un même répondant
+        // pourrait appartenir à PLUSIEURS segments à la fois, et les
+        // effectifs de chaque segment ne s'additionneraient plus au
+        // total général — trompeur pour un document destiné à la
+        // mairie. CHOIX_UNIQUE et OUI_NON partagent la même propriété
+        // qui rend la segmentation sûre : une seule réponse possible
+        // par bulletin.
+        const error = new Error('Seule une question à réponse UNIQUE (choix unique ou oui/non) peut servir à segmenter les résultats');
+        error.status = 400;
+        error.code = 'INVALID_SEGMENT_QUESTION';
+        throw error;
+      }
+
+      // Une seule requête pour retrouver, PAR OPTION de la question de
+      // segmentation, la liste des bulletins (responseId) concernés —
+      // plutôt qu'une requête par option, qui multiplierait les
+      // allers-retours base pour un nombre d'options pourtant réduit.
+      const segmentAnswers = await prisma.answer.findMany({
+        where: { questionId: segmentQuestion.id, optionId: { not: null } },
+        select: { optionId: true, responseId: true },
+      });
+      const responseIdsByOption = new Map();
+      for (const row of segmentAnswers) {
+        if (!responseIdsByOption.has(row.optionId)) responseIdsByOption.set(row.optionId, []);
+        responseIdsByOption.get(row.optionId).push(row.responseId);
+      }
+
+      result.segmentedBy = {
+        questionId: segmentQuestion.id,
+        questionLabel: segmentQuestion.label,
+        segments: await Promise.all(
+          segmentQuestion.options.map(async (option) => {
+            const responseIds = responseIdsByOption.get(option.id) || [];
+            // Segment vide (personne n'a choisi cette option) : pas la
+            // peine d'interroger la base pour un résultat qui sera de
+            // toute façon entièrement à zéro.
+            const segmentResult = responseIds.length
+              ? await computeResults(survey, { detailed: true, responseIds })
+              : { totalResponses: 0, questions: [] };
+            return {
+              optionId: option.id,
+              optionLabel: option.label,
+              ...segmentResult,
+            };
+          }),
+        ),
+      };
+    }
+
     res.json(result);
   } catch (err) {
     next(err);
