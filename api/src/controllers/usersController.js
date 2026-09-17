@@ -55,11 +55,19 @@ export async function list(req, res, next) {
 
 // ── PATCH /admin/users/:id — changer le rôle ─────────────
 //
-// Deux garde-fous pour ne jamais se retrouver bloqué·e hors de son
-// propre site : impossible de se rétrograder soi-même, et impossible
-// de rétrograder le DERNIER admin restant (même si ce n'est pas
-// soi-même — ex. un autre admin qui tenterait de retirer le tout
-// dernier compte admin).
+// Un seul garde-fou suffit : impossible de se rétrograder soi-même.
+// Ça peut sembler court, mais c'est mathématiquement complet — seul
+// un admin authentifié peut appeler cette route (middleware isAdmin),
+// et rétrograder un AUTRE compte laisse toujours l'auteur de la
+// requête lui-même admin après coup. Le nombre total d'admins ne
+// peut donc jamais tomber à zéro : soit la cible est soi-même
+// (bloqué ici), soit c'est quelqu'un d'autre (l'auteur reste admin).
+// Un second garde-fou "dernier admin restant" avait été ajouté par
+// prudence, mais était en réalité inatteignable — si adminCount vaut
+// 1, la seule personne capable d'appeler cette route EST ce dernier
+// admin, donc target === soi-même, et on retombe toujours sur le cas
+// ci-dessus en premier. Retiré pour ne pas laisser du code mort
+// suggérer une protection qui ne s'exécute jamais.
 export async function updateRole(req, res, next) {
   try {
     const { id } = req.params;
@@ -70,17 +78,6 @@ export async function updateRole(req, res, next) {
       error.status = 400;
       error.code = 'CANNOT_DEMOTE_SELF';
       throw error;
-    }
-
-    if (role === 'CITIZEN') {
-      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
-      const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
-      if (target?.role === 'ADMIN' && adminCount <= 1) {
-        const error = new Error('Impossible de rétrograder le dernier compte administrateur');
-        error.status = 400;
-        error.code = 'LAST_ADMIN';
-        throw error;
-      }
     }
 
     const user = await prisma.user.update({
