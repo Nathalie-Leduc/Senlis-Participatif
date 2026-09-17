@@ -12,11 +12,18 @@ import { useState, useEffect, useRef } from 'react';
 
 export default function useCountUp(target, { duration = 1200, start = false } = {}) {
   const [value, setValue] = useState(0);
-  const startedRef = useRef(false);
+  const lastTargetRef = useRef(null);
 
   useEffect(() => {
-    if (!start || startedRef.current) return undefined;
-    startedRef.current = true;
+    if (!start) return undefined;
+    // Ne rejoue l'animation que si la cible a VRAIMENT changé depuis
+    // la dernière fois — pas juste "déjà démarré une fois" (l'ancien
+    // verrou), qui bloquait à tort quand la visibilité arrivait avant
+    // les vraies données : l'animation démarrait avec target=0 (la
+    // valeur initiale, avant la réponse de l'API), se figeait là, et
+    // ignorait ensuite la vraie valeur reçue juste après.
+    if (lastTargetRef.current === target) return undefined;
+    lastTargetRef.current = target;
 
     // Personne ne devrait avoir à SUBIR une animation qu'iel a
     // explicitement demandé d'éviter — le nombre final s'affiche
