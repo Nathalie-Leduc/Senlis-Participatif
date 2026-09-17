@@ -371,3 +371,136 @@ describe('Enquêtes — CRUD admin & consultation', () => {
     expect(stillThere).not.toBeNull();
   });
 });
+
+describe('Publication des résultats et vue détaillée admin', () => {
+  it("403 RESULTS_NOT_PUBLISHED — un visiteur non connecté ne voit pas les résultats tant que ce n'est pas publié", async () => {
+    const survey = await seedSurvey({ resultsPublished: false });
+
+    const res = await request(app).get(`${API}/${survey.slug}/results`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('RESULTS_NOT_PUBLISHED');
+  });
+
+  it("403 RESULTS_NOT_PUBLISHED — un citoyen connecté (non-admin) ne voit pas non plus les résultats tant que ce n'est pas publié", async () => {
+    const survey = await seedSurvey({ resultsPublished: false });
+    const { token } = await makeCitizen();
+
+    const res = await request(app)
+      .get(`${API}/${survey.slug}/results`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('RESULTS_NOT_PUBLISHED');
+  });
+
+  it("un admin voit les résultats même AVANT publication — le garde-fou ne s'applique jamais à lui", async () => {
+    const survey = await seedSurvey({ resultsPublished: false });
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .get(`${API}/${survey.slug}/results`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  describe('GET /surveys/:id/stats — vue détaillée', () => {
+    it('refuse sans authentification', async () => {
+      const survey = await seedSurvey();
+      const res = await request(app).get(`${API}/${survey.id}/stats`);
+      expect(res.status).toBe(401);
+    });
+
+    it('refuse à un citoyen non-admin', async () => {
+      const survey = await seedSurvey();
+      const { token } = await makeCitizen();
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(403);
+    });
+
+    it("répond 200 pour un admin, MÊME si les résultats ne sont pas publiés (vue distincte du garde-fou public)", async () => {
+      const survey = await seedSurvey({ resultsPublished: false });
+      const { token } = await makeAdminUser();
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+    });
+
+    it('404 pour une enquête inexistante', async () => {
+      const { token } = await makeAdminUser();
+      const res = await request(app)
+        .get(`${API}/00000000-0000-0000-0000-000000000000/stats`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(404);
+    });
+  });
+});
+
+describe('uiHint — "ville avec suggestions" (S5-18)', () => {
+  it('accepte uiHint "VILLE_FR" sur une question TEXTE_LIBRE', async () => {
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          { label: 'Quelle est cette ville ?', type: 'TEXTE_LIBRE', required: true, uiHint: 'VILLE_FR' },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.survey.questions[0].uiHint).toBe('VILLE_FR');
+  });
+
+  it("rejette uiHint sur une question qui n'est pas TEXTE_LIBRE", async () => {
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          {
+            label: 'Question CHOIX_UNIQUE de test',
+            type: 'CHOIX_UNIQUE',
+            required: true,
+            uiHint: 'VILLE_FR',
+            options: [{ label: 'Oui' }, { label: 'Non' }],
+          },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejette toute valeur de uiHint autre que "VILLE_FR"', async () => {
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          { label: 'Quelle est cette ville ?', type: 'TEXTE_LIBRE', required: true, uiHint: 'AUTRE_CHOSE' },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+  });
+});
