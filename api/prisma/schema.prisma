@@ -102,24 +102,34 @@ enum Audience {
 // questions différentes pour un résident du centre vs. d'un autre quartier).
 enum Situation {
   CENTRE_RESIDENT   // habite le centre historique
-  CENTRE_COMMERCANT // commerce/travaille dans le centre historique
   AUTRE_QUARTIER    // habite un autre quartier de Senlis
   HORS_SENLIS       // ne réside pas à Senlis
 }
 
 // Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
-// historique — celui-ci est déjà couvert par Situation
-// (CENTRE_RESIDENT/CENTRE_COMMERCANT), pas la peine de le répéter
-// ici. Uniquement pertinent quand Situation = AUTRE_QUARTIER (menu
-// en cascade côté formulaire) : les citoyens du centre ou hors
-// Senlis n'ont pas à préciser lequel de ces 6 quartiers.
+// historique — celui-ci est déjà couvert par Situation.CENTRE_RESIDENT,
+// pas la peine de le répéter ici. Uniquement pertinent quand
+// Situation = AUTRE_QUARTIER (menu en cascade côté formulaire) : les
+// citoyens du centre ou hors Senlis n'ont pas à préciser lequel de
+// ces 6 quartiers.
 enum Quartier {
+  CENTRE_HISTORIQUE // uniquement pour le lieu de TRAVAIL (voir User.travailleQuartier) —
+                    // pour la résidence, Situation.CENTRE_RESIDENT couvre déjà ce cas,
+                    // pas la peine de la répéter ici pour cet usage-là.
   BRICHEBAY
   BON_SECOURS
   VAL_AUNETTE_GATELIERE
   ZONE_INDUSTRIELLE
   VILLEVERT
   JARDINIERS
+}
+
+// COMMERCANT = dirige/gère l'activité, SALARIE = y travaille sans la
+// diriger — seulement significatif quand User.travailleQuartier est
+// renseigné (sinon la personne ne travaille pas à Senlis).
+enum TravailType {
+  COMMERCANT
+  SALARIE
 }
 
 enum QuestionType {
@@ -154,6 +164,21 @@ model User {
   // cascade côté formulaire) — null pour tous les autres cas, y
   // compris les comptes créés avant ce champ.
   quartier  Quartier?
+
+  // Axe INDÉPENDANT de situation/quartier ci-dessus : où l'on RÉSIDE
+  // n'a rien à voir avec où l'on TRAVAILLE — une personne peut
+  // résider dans un quartier et travailler dans un autre, ou ne pas
+  // travailler à Senlis du tout. travailleQuartier reste null tant
+  // que la question n'a jamais été posée (comptes existants) OU que
+  // la personne a répondu ne pas travailler à Senlis — les deux cas
+  // sont indiscernables au niveau du champ, ce qui est acceptable ici
+  // (aucune action ne dépend de la distinction entre "jamais demandé"
+  // et "a répondu non").
+  travailleQuartier Quartier?
+  // Seulement significatif quand travailleQuartier est renseigné —
+  // sinon toujours null (pas de sens à préciser un type de travail
+  // pour quelqu'un qui ne travaille pas à Senlis).
+  travailType       TravailType?
 
   // Barrière anti-comptes jetables : l'email doit être vérifié (jeton envoyé
   // à l'inscription) avant de voter ou répondre. Des comptes bidons qui

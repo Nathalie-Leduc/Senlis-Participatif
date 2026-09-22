@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
-import { QUARTIER_OPTIONS } from '../constants/situation.js';
+import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 
 export default function MonCompte() {
   const { user, logout, refreshUser } = useAuth();
@@ -12,6 +12,9 @@ export default function MonCompte() {
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
   const [situation, setSituation] = useState(user?.situation || '');
   const [quartier, setQuartier] = useState(user?.quartier || '');
+  const [travailleASenlis, setTravailleASenlis] = useState(Boolean(user?.travailleQuartier));
+  const [travailleQuartier, setTravailleQuartier] = useState(user?.travailleQuartier || '');
+  const [travailType, setTravailType] = useState(user?.travailType || '');
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
 
@@ -23,8 +26,15 @@ export default function MonCompte() {
       // refuserait une chaîne vide) — et seulement pertinent pour
       // "autre quartier" de toute façon.
       if (situation === 'AUTRE_QUARTIER' && quartier) payload.quartier = quartier;
+      // Même principe pour l'axe travail, indépendant de situation —
+      // TOUJOURS envoyé (jamais omis), y compris explicitement null
+      // quand la case est décochée : un champ absent du corps ne
+      // change rien côté serveur, alors qu'un null efface vraiment
+      // une valeur précédente (voir updateProfile côté contrôleur).
+      payload.travailleQuartier = travailleASenlis ? (travailleQuartier || null) : null;
+      payload.travailType = travailleASenlis ? (travailType || null) : null;
       await api.patch('/auth/me', payload);
-      setMessage('Situation mise à jour.');
+      setMessage('Profil mis à jour.');
       await refreshUser();
     } catch (err) { setError(err.message); }
   };
@@ -91,7 +101,6 @@ export default function MonCompte() {
           >
             <option value="" disabled>Choisissez votre situation</option>
             <option value="CENTRE_RESIDENT">J&apos;habite le centre historique</option>
-            <option value="CENTRE_COMMERCANT">Je commerce/travaille dans le centre historique</option>
             <option value="AUTRE_QUARTIER">J&apos;habite un autre quartier de Senlis</option>
             <option value="HORS_SENLIS">Je ne réside pas à Senlis</option>
           </select>
@@ -112,13 +121,60 @@ export default function MonCompte() {
           </label>
         )}
 
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 12px', fontSize: 15 }}>
+          <input
+            type="checkbox" checked={travailleASenlis}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setTravailleASenlis(checked);
+              if (!checked) { setTravailleQuartier(''); setTravailType(''); }
+            }}
+            style={{ width: 20, height: 20, flexShrink: 0 }}
+          />
+          <span>Je travaille ou dirige une activité à Senlis</span>
+        </label>
+
+        {travailleASenlis && (
+          <>
+            <label style={{ display: 'block', margin: '0 0 16px' }}>
+              <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Dans quel quartier ?</span>
+              <select
+                value={travailleQuartier} onChange={(e) => setTravailleQuartier(e.target.value)}
+                style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
+              >
+                <option value="" disabled>Choisissez le quartier</option>
+                {TRAVAIL_QUARTIER_OPTIONS.map((q) => (
+                  <option key={q.value} value={q.value}>{q.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: 'block', margin: '0 0 16px' }}>
+              <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>À ce titre...</span>
+              <select
+                value={travailType} onChange={(e) => setTravailType(e.target.value)}
+                style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
+              >
+                <option value="" disabled>Précisez</option>
+                {TRAVAIL_TYPE_OPTIONS.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+
         <button
           onClick={handleUpdateSituation}
           disabled={!situation || (situation === 'AUTRE_QUARTIER' && !quartier)
-            || (situation === user?.situation && quartier === (user?.quartier || ''))}
+            || (travailleASenlis && (!travailleQuartier || !travailType))
+            || (situation === user?.situation && quartier === (user?.quartier || '')
+              && travailleASenlis === Boolean(user?.travailleQuartier)
+              && travailleQuartier === (user?.travailleQuartier || '')
+              && travailType === (user?.travailType || ''))}
           className="btn" style={{ background: '#EFEBE2', color: '#26333A' }}
         >
-          Mettre à jour ma situation
+          Mettre à jour mon profil
         </button>
       </div>
 

@@ -156,6 +156,8 @@ export async function login(req, res, next) {
         emailVerified: user.emailVerified,
         situation: user.situation,
         quartier: user.quartier,
+        travailleQuartier: user.travailleQuartier,
+        travailType: user.travailType,
       },
     });
   } catch (err) {
@@ -213,6 +215,8 @@ export async function verifyTwoFactor(req, res, next) {
         emailVerified: user.emailVerified,
         situation: user.situation,
         quartier: user.quartier,
+        travailleQuartier: user.travailleQuartier,
+        travailType: user.travailType,
       },
     });
   } catch (err) {
@@ -233,6 +237,8 @@ export async function me(req, res, next) {
         emailVerified: true,
         situation: true,
         quartier: true,
+        travailleQuartier: true,
+        travailType: true,
         notifyNewProposal: true,
         notifySurveyClosed: true,
         createdAt: true,
@@ -255,7 +261,7 @@ export async function me(req, res, next) {
 // ── PATCH /auth/me ──────────────────────────────────────
 export async function updateProfile(req, res, next) {
   try {
-    const { pseudo, email, situation, quartier } = req.body;
+    const { pseudo, email, situation, quartier, travailleQuartier, travailType } = req.body;
     const userId = req.user.userId;
 
     // Si l'email change, vérifier qu'il n'est pas déjà pris
@@ -282,9 +288,20 @@ export async function updateProfile(req, res, next) {
         // le quartier précédemment choisi n'a plus de sens — effacé
         // plutôt que laissé à traîner avec une valeur périmée.
         ...(situation && situation !== 'AUTRE_QUARTIER' && { quartier: null }),
+        // travailleQuartier/travailType : axe indépendant, sans
+        // "situation parente" à surveiller — le CLIENT doit donc
+        // explicitement envoyer null pour effacer (ex. la personne
+        // décoche "je travaille à Senlis"), distinct d'un champ tout
+        // simplement absent du corps de la requête (ne rien changer).
+        // `!== undefined` plutôt qu'un simple `truthy` : un null
+        // explicite doit passer, contrairement à un champ jamais
+        // envoyé.
+        ...(travailleQuartier !== undefined && { travailleQuartier }),
+        ...(travailType !== undefined && { travailType }),
       },
       select: {
-        id: true, email: true, pseudo: true, role: true, emailVerified: true, situation: true, quartier: true,
+        id: true, email: true, pseudo: true, role: true, emailVerified: true,
+        situation: true, quartier: true, travailleQuartier: true, travailType: true,
       },
     });
 

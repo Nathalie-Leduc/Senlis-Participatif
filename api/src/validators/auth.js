@@ -51,7 +51,7 @@ const pseudo = z
 // confronter l'audience ciblée d'une enquête à qui y répond vraiment,
 // et au branchement de questions selon la situation déclarée.
 const situation = z.enum(
-  ['CENTRE_RESIDENT', 'CENTRE_COMMERCANT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
+  ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
   { errorMap: () => ({ message: 'Merci de préciser votre situation' }) },
 );
 
@@ -65,6 +65,18 @@ const quartier = z.enum(
   { errorMap: () => ({ message: 'Merci de préciser votre quartier' }) },
 );
 
+// Même enum Prisma que quartier ci-dessus, mais CENTRE_HISTORIQUE en
+// plus — a du sens comme lieu de TRAVAIL (contrairement à la
+// résidence, où Situation.CENTRE_RESIDENT couvre déjà ce cas).
+const travailleQuartier = z.enum(
+  ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  { errorMap: () => ({ message: 'Merci de préciser le quartier de travail' }) },
+);
+const travailType = z.enum(
+  ['COMMERCANT', 'SALARIE'],
+  { errorMap: () => ({ message: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)' }) },
+);
+
 // superRefine plutôt que deux champs indépendants : la règle
 // "quartier obligatoire SI situation = AUTRE_QUARTIER" dépend de DEUX
 // champs à la fois — impossible à exprimer avec un simple .optional().
@@ -74,6 +86,17 @@ function requireQuartierIfAutreQuartier(data, ctx) {
       code: z.ZodIssueCode.custom,
       path: ['quartier'],
       message: 'Merci de préciser votre quartier',
+    });
+  }
+  // Même logique, sur l'axe travail : travailType n'a de sens QUE
+  // si un quartier de travail a été renseigné (indépendant de
+  // situation/quartier ci-dessus — résidence et travail sont deux
+  // questions distinctes).
+  if (data.travailleQuartier && !data.travailType) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['travailType'],
+      message: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)',
     });
   }
 }
@@ -86,6 +109,8 @@ export const registerSchema = z.object({
   pseudo,
   situation,
   quartier: quartier.optional(),
+  travailleQuartier: travailleQuartier.optional(),
+  travailType: travailType.optional(),
 }).superRefine(requireQuartierIfAutreQuartier);
 
 export const loginSchema = z.object({
@@ -121,6 +146,12 @@ export const updateProfileSchema = z.object({
   email: email.optional(),
   situation: situation.optional(),
   quartier: quartier.optional(),
+  // .nullable() en plus de .optional() : ici, contrairement à
+  // l'inscription, il faut pouvoir distinguer "absent du tout" (ne
+  // touche pas au champ) de "explicitement null" (efface la valeur —
+  // ex. la personne décoche "je travaille à Senlis" après coup).
+  travailleQuartier: travailleQuartier.nullable().optional(),
+  travailType: travailType.nullable().optional(),
 }).superRefine(requireQuartierIfAutreQuartier);
 
 export const changePasswordSchema = z.object({
