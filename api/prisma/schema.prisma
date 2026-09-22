@@ -332,6 +332,18 @@ model Question {
   // geo.api.gouv.fr au lieu d'un simple champ texte).
   uiHint String?
 
+  // Si renseigné, une réponse à cette question met AUSSI à jour le
+  // champ correspondant du profil du répondant (voir syncValue sur
+  // QuestionOption ci-dessous, et l'application réelle dans
+  // submitResponse). Réutilisable par n'importe quelle future
+  // enquête, pas seulement celle-ci — une seule valeur parmi les 4
+  // champs qui existent aujourd'hui sur User pour ça.
+  // Uniquement significatif sur une question CHOIX_UNIQUE : le
+  // validateur Zod l'interdit ailleurs (une réponse à choix multiple
+  // ou libre ne peut pas s'écrire proprement dans un champ à valeur
+  // unique).
+  syncsToProfile String? // 'situation' | 'quartier' | 'travailleQuartier' | 'travailType'
+
   // Branchement conditionnel : si renseigné, cette question ne s'affiche
   // QUE si le répondant a choisi cette option précise à une question
   // antérieure (ex. l'enquête stationnement scindée en deux parcours
@@ -357,6 +369,16 @@ model QuestionOption {
   id    String @id @default(uuid())
   label String // ex : "Box ou garage privé", "Voirie payante", "Parking gratuit externe"
   order Int
+
+  // Valeur exacte à écrire dans le champ profil visé par
+  // Question.syncsToProfile QUAND cette option précise est choisie —
+  // ex. "CENTRE_RESIDENT" si le libellé de l'option est "Je réside
+  // dans le centre historique". Un libellé d'enquête en français
+  // n'a aucune raison de correspondre mot pour mot à une valeur
+  // d'enum ; ce champ fait le pont entre les deux explicitement,
+  // plutôt que de deviner par correspondance de texte (fragile,
+  // casserait au moindre admin qui reformule un libellé).
+  syncValue String?
 
   questionId String
   question   Question @relation("QuestionOwnOptions", fields: [questionId], references: [id], onDelete: Cascade)
