@@ -64,8 +64,9 @@ function toNestedQuestionsCreate(questions) {
       required: q.required ?? true,
       order: index,
       uiHint: q.uiHint,
+      syncsToProfile: q.syncsToProfile,
       options: options
-        ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex })) }
+        ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex, syncValue: o.syncValue })) }
         : undefined,
     };
   });
@@ -926,6 +927,37 @@ export async function submitResponse(req, res, next) {
         throw error;
       }
       throw txErr;
+    }
+
+    // Synchronisation profil (S5-XX) : pour chaque question flaguée
+    // syncsToProfile, si le répondant a choisi une option avec un
+    // syncValue, ce champ du COMPTE est mis à jour en plus du
+    // bulletin lui-même — jamais à sa place. Volontairement APRÈS la
+    // transaction ci-dessus : le bulletin est la donnée qui compte
+    // vraiment pour l'enquête, un souci sur la synchro du profil ne
+    // doit jamais faire échouer la soumission elle-même.
+    const profileUpdate = {};
+    for (const question of survey.questions) {
+      if (!question.syncsToProfile) continue;
+      const answer = answersByQuestionId.get(question.id);
+      if (!answer?.optionId) continue;
+      const option = question.options.find((o) => o.id === answer.optionId);
+      if (option?.syncValue) profileUpdate[question.syncsToProfile] = option.syncValue;
+    }
+    // Même garde-fou que updateProfile (authController.js) : si la
+    // situation change pour autre chose qu'AUTRE_QUARTIER SANS que
+    // cette même enquête ne resynchronise aussi le quartier, l'ancien
+    // quartier n'aurait plus de sens et resterait périmé en base.
+    if (profileUpdate.situation && profileUpdate.situation !== 'AUTRE_QUARTIER' && !profileUpdate.quartier) {
+      profileUpdate.quartier = null;
+    }
+    if (Object.keys(profileUpdate).length) {
+      await prisma.user.update({ where: { id: userId }, data: profileUpdate }).catch((err) => {
+        // Une erreur ici (ex. valeur invalide malgré la validation
+        // Zod côté création d'enquête) ne doit jamais faire échouer
+        // une soumission par ailleurs valide — juste consignée.
+        console.error('Échec de la synchronisation profil après soumission :', err);
+      });
     }
 
     res.status(201).json({

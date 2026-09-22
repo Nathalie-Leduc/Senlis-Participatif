@@ -538,3 +538,126 @@ describe('uiHint — "ville avec suggestions" (S5-18)', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('Synchronisation profil depuis une réponse (syncsToProfile)', () => {
+  it('répondre à une question flaguée met à jour le champ correspondant du profil', async () => {
+    const { token: adminToken } = await makeAdminUser();
+    const created = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'OPEN',
+        questions: [
+          {
+            label: 'Où résidez-vous ?',
+            type: 'CHOIX_UNIQUE',
+            required: true,
+            syncsToProfile: 'situation',
+            options: [
+              { label: 'Je réside dans le centre historique', syncValue: 'CENTRE_RESIDENT' },
+              { label: 'Je ne réside pas à Senlis', syncValue: 'HORS_SENLIS' },
+            ],
+          },
+        ],
+      });
+    const survey = created.body.survey;
+    const centreOption = survey.questions[0].options.find((o) => o.syncValue === 'CENTRE_RESIDENT');
+
+    const { token: citizenToken, user } = await makeCitizen();
+    const res = await request(app)
+      .post(`${API}/${survey.id}/responses`)
+      .set('Authorization', `Bearer ${citizenToken}`)
+      .send({ answers: [{ questionId: survey.questions[0].id, optionId: centreOption.id }] });
+
+    expect(res.status).toBe(201);
+
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(updated.situation).toBe('CENTRE_RESIDENT');
+  });
+
+  it("une option sans syncValue ne modifie rien sur le profil", async () => {
+    const { token: adminToken } = await makeAdminUser();
+    const created = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'OPEN',
+        questions: [
+          {
+            label: 'Où résidez-vous ?',
+            type: 'CHOIX_UNIQUE',
+            required: true,
+            syncsToProfile: 'situation',
+            options: [
+              { label: 'Je réside dans le centre historique', syncValue: 'CENTRE_RESIDENT' },
+              { label: 'Je préfère ne pas répondre' }, // pas de syncValue
+            ],
+          },
+        ],
+      });
+    const survey = created.body.survey;
+    const noSyncOption = survey.questions[0].options.find((o) => !o.syncValue);
+
+    const { token: citizenToken, user } = await makeCitizen();
+    // buildUser() fixe déjà une situation par défaut à l'inscription
+    // (registerSchema l'exige) — on capture sa VRAIE valeur de départ
+    // plutôt que de supposer null, pour vérifier qu'elle reste bien
+    // INCHANGÉE après coup, peu importe ce qu'elle valait avant.
+    const before = await prisma.user.findUnique({ where: { id: user.id } });
+
+    await request(app)
+      .post(`${API}/${survey.id}/responses`)
+      .set('Authorization', `Bearer ${citizenToken}`)
+      .send({ answers: [{ questionId: survey.questions[0].id, optionId: noSyncOption.id }] });
+
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(updated.situation).toBe(before.situation);
+  });
+
+  it('400 — syncsToProfile refusé sur une question qui n\'est pas CHOIX_UNIQUE', async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          {
+            label: 'Question OUI_NON de test', type: 'OUI_NON', required: true, syncsToProfile: 'situation',
+          },
+        ],
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("400 — syncValue refusé s'il ne correspond à aucune valeur valide pour le champ ciblé", async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          {
+            label: 'Où résidez-vous ?',
+            type: 'CHOIX_UNIQUE',
+            required: true,
+            syncsToProfile: 'situation',
+            options: [
+              { label: 'Un libellé quelconque', syncValue: 'VALEUR_QUI_NEXISTE_PAS' },
+              { label: 'Un autre' },
+            ],
+          },
+        ],
+      });
+    expect(res.status).toBe(400);
+  });
+});

@@ -27,7 +27,24 @@ const OPTIONS_OPTIONAL_BINARY_TYPES = ['OUI_NON'];
 
 const questionOptionSchema = z.object({
   label: z.string().trim().min(1, "Le libellé de l'option est requis").max(200),
+  // Cohérence avec Question.syncsToProfile vérifiée plus bas
+  // (SYNC_VALID_VALUES) — accepté ici comme simple chaîne, la vraie
+  // validation dépend de la question PARENTE, impossible à exprimer
+  // au niveau d'une option isolée.
+  syncValue: z.string().trim().min(1).optional(),
 });
+
+// Une seule liste de valeurs valides par champ profil ciblé — la
+// même que les enums Prisma correspondants (Situation, Quartier,
+// TravailType). Dupliquée ici plutôt qu'importée : les validateurs
+// Zod du projet restent volontairement indépendants du client Prisma
+// généré (voir les autres enums de ce fichier, ex. questionType).
+const SYNC_VALID_VALUES = {
+  situation: ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
+  quartier: ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  travailleQuartier: ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  travailType: ['COMMERCANT', 'SALARIE'],
+};
 
 // Référence par POSITION (order), pas par id réel : au moment où
 // l'admin construit une nouvelle enquête, les questions/options n'ont
@@ -60,6 +77,11 @@ const questionSchema = z.object({
   // z.literal plutôt que z.string() : toute AUTRE valeur est rejetée
   // d'emblée, pas seulement ignorée silencieusement plus tard.
   uiHint: z.literal('VILLE_FR').optional(),
+  // Si renseigné, une réponse à cette question met AUSSI à jour ce
+  // champ du profil du répondant — voir SYNC_VALID_VALUES plus haut
+  // pour les valeurs attendues sur chaque option, et submitResponse
+  // côté contrôleur pour l'application réelle.
+  syncsToProfile: z.enum(['situation', 'quartier', 'travailleQuartier', 'travailType']).optional(),
 }).superRefine((q, ctx) => {
   if (q.uiHint && q.type !== 'TEXTE_LIBRE') {
     ctx.addIssue({
@@ -67,6 +89,30 @@ const questionSchema = z.object({
       path: ['uiHint'],
       message: 'uiHint "VILLE_FR" n\'a de sens que pour une question TEXTE_LIBRE',
     });
+  }
+
+  if (q.syncsToProfile) {
+    // CHOIX_UNIQUE seulement : un champ profil ne peut recevoir
+    // qu'UNE valeur, une question à choix multiple ou libre n'a pas
+    // de réponse unique à y écrire proprement.
+    if (q.type !== 'CHOIX_UNIQUE') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['syncsToProfile'],
+        message: 'syncsToProfile n\'a de sens que pour une question CHOIX_UNIQUE',
+      });
+    } else {
+      const validValues = SYNC_VALID_VALUES[q.syncsToProfile];
+      (q.options || []).forEach((opt, index) => {
+        if (opt.syncValue && !validValues.includes(opt.syncValue)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['options', index, 'syncValue'],
+            message: `syncValue doit être l'une de : ${validValues.join(', ')}`,
+          });
+        }
+      });
+    }
   }
 
   if (OPTIONS_REQUIRED_TYPES.includes(q.type)) {
