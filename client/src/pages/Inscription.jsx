@@ -7,13 +7,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
-import { QUARTIER_OPTIONS } from '../constants/situation.js';
+import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 
 export default function Inscription() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     pseudo: '', email: '', password: '', passwordConfirm: '', consent: false, situation: '', quartier: '',
+    // travailleAsenlis n'existe que pour l'affichage (afficher/masquer
+    // la cascade) — jamais envoyé tel quel à l'API, voir handleSubmit.
+    travailleASenlis: false, travailleQuartier: '', travailType: '',
   });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -30,6 +33,17 @@ export default function Inscription() {
       ...(name === 'situation' && value !== 'AUTRE_QUARTIER' && { quartier: '' }),
     }));
     setError(null);
+  };
+
+  const handleTravailleToggle = (e) => {
+    const checked = e.target.checked;
+    setForm((prev) => ({
+      ...prev,
+      travailleASenlis: checked,
+      // Même logique que le reset de quartier ci-dessus : une valeur
+      // périmée ne doit jamais survivre au décochage de la case.
+      ...(!checked && { travailleQuartier: '', travailType: '' }),
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -52,13 +66,22 @@ export default function Inscription() {
     setLoading(true);
 
     try {
-      // passwordConfirm et consent n'existent que pour ce formulaire —
-      // quartier n'est envoyé que s'il est vraiment renseigné (Zod
+      // passwordConfirm, consent et travailleASenlis n'existent que
+      // pour ce formulaire — quartier/travailleQuartier/travailType
+      // ne sont envoyés que s'ils sont vraiment renseignés (Zod
       // refuserait une chaîne vide comme valeur d'enum).
-      const { passwordConfirm, consent, quartier, ...rest } = form;
+      const {
+        passwordConfirm, consent, quartier, travailleASenlis, travailleQuartier, travailType, ...rest
+      } = form;
       void passwordConfirm;
       void consent;
-      const payload = { ...rest, ...(quartier && { quartier }) };
+      void travailleASenlis;
+      const payload = {
+        ...rest,
+        ...(quartier && { quartier }),
+        ...(travailleQuartier && { travailleQuartier }),
+        ...(travailType && { travailType }),
+      };
       const data = await register(payload);
       setSuccess(data.message);
     } catch (err) {
@@ -145,7 +168,6 @@ export default function Inscription() {
           >
             <option value="" disabled>Choisissez votre situation</option>
             <option value="CENTRE_RESIDENT">J&apos;habite le centre historique</option>
-            <option value="CENTRE_COMMERCANT">Je commerce/travaille dans le centre historique</option>
             <option value="AUTRE_QUARTIER">J&apos;habite un autre quartier de Senlis</option>
             <option value="HORS_SENLIS">Je ne réside pas à Senlis</option>
           </select>
@@ -171,6 +193,49 @@ export default function Inscription() {
               ))}
             </select>
           </label>
+        )}
+
+        {/* Axe indépendant de la situation ci-dessus : on peut
+            résider n'importe où et travailler à Senlis, ou l'inverse.
+            Jamais obligatoire — beaucoup de comptes n'ont simplement
+            aucun lien professionnel avec Senlis. */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, fontSize: 15 }}>
+          <input
+            type="checkbox" checked={form.travailleASenlis}
+            onChange={handleTravailleToggle}
+            style={{ width: 20, height: 20, flexShrink: 0 }}
+          />
+          <span>Je travaille ou dirige une activité à Senlis</span>
+        </label>
+
+        {form.travailleASenlis && (
+          <>
+            <label style={{ display: 'block', marginBottom: 16 }}>
+              <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Dans quel quartier ?</span>
+              <select
+                name="travailleQuartier" value={form.travailleQuartier} onChange={handleChange}
+                required style={inputStyle}
+              >
+                <option value="" disabled>Choisissez le quartier</option>
+                {TRAVAIL_QUARTIER_OPTIONS.map((q) => (
+                  <option key={q.value} value={q.value}>{q.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: 'block', marginBottom: 16 }}>
+              <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>À ce titre...</span>
+              <select
+                name="travailType" value={form.travailType} onChange={handleChange}
+                required style={inputStyle}
+              >
+                <option value="" disabled>Précisez</option>
+                {TRAVAIL_TYPE_OPTIONS.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </label>
+          </>
         )}
 
         <label style={{ display: 'block', marginBottom: 8 }}>
