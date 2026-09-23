@@ -7,6 +7,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
+import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 
 export default function Inscription() {
@@ -160,6 +161,29 @@ export default function Inscription() {
           />
         </label>
 
+        <label style={{ display: 'block', marginBottom: 8 }}>
+          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe</span>
+          <PasswordInput
+            name="password" value={form.password} onChange={handleChange}
+            autoComplete="new-password" required minLength={12}
+            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
+            title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
+            placeholder="12 caractères minimum"
+            style={inputStyle}
+          />
+        </label>
+        <PasswordStrengthMeter password={form.password} />
+
+        <label style={{ display: 'block', margin: '16px 0 24px' }}>
+          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Confirmer le mot de passe</span>
+          <PasswordInput
+            name="passwordConfirm" value={form.passwordConfirm} onChange={handleChange}
+            autoComplete="new-password" required
+            placeholder="Retapez le même mot de passe"
+            style={inputStyle}
+          />
+        </label>
+
         <label style={{ display: 'block', marginBottom: 16 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Votre situation</span>
           <select
@@ -237,29 +261,6 @@ export default function Inscription() {
             </label>
           </>
         )}
-
-        <label style={{ display: 'block', marginBottom: 8 }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe</span>
-          <input
-            type="password" name="password" value={form.password} onChange={handleChange}
-            autoComplete="new-password" required minLength={12}
-            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
-            title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
-            placeholder="12 caractères minimum"
-            style={inputStyle}
-          />
-        </label>
-        <PasswordStrengthMeter password={form.password} />
-
-        <label style={{ display: 'block', margin: '16px 0 24px' }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Confirmer le mot de passe</span>
-          <input
-            type="password" name="passwordConfirm" value={form.passwordConfirm} onChange={handleChange}
-            autoComplete="new-password" required
-            placeholder="Retapez le même mot de passe"
-            style={inputStyle}
-          />
-        </label>
 
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, fontSize: 14, color: '#26333A' }}>
           <input

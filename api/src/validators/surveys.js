@@ -92,16 +92,20 @@ const questionSchema = z.object({
   }
 
   if (q.syncsToProfile) {
-    // CHOIX_UNIQUE seulement : un champ profil ne peut recevoir
-    // qu'UNE valeur, une question à choix multiple ou libre n'a pas
-    // de réponse unique à y écrire proprement.
-    if (q.type !== 'CHOIX_UNIQUE') {
+    // CHOIX_UNIQUE : un champ profil ne peut recevoir qu'UNE valeur,
+    // choisie parmi les options via syncValue. OUI_NON est un cas à
+    // part : ses options n'ont jamais de syncValue (rien à écrire
+    // depuis "Oui"/"Non" eux-mêmes) — ça sert uniquement à PRÉ-
+    // REMPLIR côté client quand le champ est déjà connu (vrai
+    // uniquement dans le sens positif : "Non" est indiscernable de
+    // "jamais demandé", voir EnqueteRepondre.jsx).
+    if (!['CHOIX_UNIQUE', 'OUI_NON'].includes(q.type)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['syncsToProfile'],
-        message: 'syncsToProfile n\'a de sens que pour une question CHOIX_UNIQUE',
+        message: 'syncsToProfile n\'a de sens que pour une question CHOIX_UNIQUE ou OUI_NON',
       });
-    } else {
+    } else if (q.type === 'CHOIX_UNIQUE') {
       const validValues = SYNC_VALID_VALUES[q.syncsToProfile];
       (q.options || []).forEach((opt, index) => {
         if (opt.syncValue && !validValues.includes(opt.syncValue)) {
