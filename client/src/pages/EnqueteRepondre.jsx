@@ -45,6 +45,16 @@ function isAnswered(question, answer) {
   }
 }
 
+// Phrasé spécifique par champ profil — plus naturel qu'une formule
+// générique unique ("D'après votre profil : ...") pour chacun de ces
+// quatre champs bien identifiés.
+const PROFILE_PREFILL_LABELS = {
+  situation: 'Vous résidez :',
+  quartier: 'Votre quartier :',
+  travailleQuartier: 'Vous travaillez dans :',
+  travailType: 'À ce titre, vous êtes :',
+};
+
 export default function EnqueteRepondre() {
   const { slug } = useParams();
   const { user } = useAuth();
@@ -56,6 +66,13 @@ export default function EnqueteRepondre() {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  // Une question pré-remplie depuis le profil s'affiche en lecture
+  // seule (voir plus bas) — ce drapeau permet de basculer vers le
+  // champ interactif normal si la personne clique sur "Modifier".
+  // Remis à false à chaque question pour ne pas rester "ouvert" en
+  // avançant dans le parcours.
+  const [overrideCurrentQuestion, setOverrideCurrentQuestion] = useState(false);
+  useEffect(() => setOverrideCurrentQuestion(false), [step]);
 
   useEffect(() => {
     setLoading(true);
@@ -76,10 +93,39 @@ export default function EnqueteRepondre() {
           return;
         }
         setSurvey(data.survey);
+
+        // Pré-remplissage depuis le profil (S5-XX) : si cette
+        // question synchronise un champ dont on connaît DÉJÀ la
+        // valeur pour ce citoyen (ex. sa situation, déjà déclarée),
+        // pas la peine de la lui redemander — voir le rendu en lecture
+        // seule plus bas, qui reprend cette réponse pré-remplie sauf
+        // si la personne clique sur "Modifier".
+        const prefilled = {};
+        for (const q of data.survey.questions) {
+          if (!q.syncsToProfile) continue;
+          const currentValue = user[q.syncsToProfile];
+          if (!currentValue) continue;
+
+          if (q.type === 'OUI_NON') {
+            // Cas particulier : les options Oui/Non n'ont jamais de
+            // syncValue (rien à leur associer), donc pas de
+            // correspondance à chercher — un champ profil renseigné
+            // veut dire "Oui" avec certitude. L'inverse serait faux :
+            // un champ VIDE ne prouve pas "Non", seulement "jamais
+            // demandé" (voir le commentaire sur cette question dans
+            // seed-prod.js) — on ne préremplit donc JAMAIS le "Non".
+            prefilled[q.id] = { optionId: q.options[0].id }; // "Oui" toujours en premier
+            continue;
+          }
+
+          const matchingOption = q.options?.find((o) => o.syncValue === currentValue);
+          if (matchingOption) prefilled[q.id] = { optionId: matchingOption.id };
+        }
+        if (Object.keys(prefilled).length) setAnswers(prefilled);
       })
       .catch((err) => setError(err.message || 'Impossible de charger cette enquête'))
       .finally(() => setLoading(false));
-  }, [slug]);
+  }, [slug, user]);
 
   const setAnswer = (questionId, value) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -235,11 +281,56 @@ export default function EnqueteRepondre() {
           <p style={{ color: '#6B6257', fontSize: 14, marginBottom: 16 }}>{question.helpText}</p>
         )}
 
-        <QuestionInput
-          question={question}
-          answer={answer}
-          onChange={(value) => setAnswer(question.id, value)}
-        />
+        {(() => {
+          // Pré-rempli depuis le profil : la valeur est déjà connue,
+          // pas la peine de la redemander — affichée en lecture seule,
+          // avec la possibilité de revenir au champ normal si elle ne
+          // correspond plus (ex. déménagement récent, profil pas à
+          // jour).
+          const currentProfileValue = question.syncsToProfile ? user[question.syncsToProfile] : null;
+          // OUI_NON : ses options n'ont jamais de syncValue (rien à
+          // leur associer) — un champ profil renseigné veut dire
+          // "Oui" avec certitude, sans avoir besoin de chercher une
+          // correspondance. Jamais l'inverse : un champ VIDE ne
+          // prouve pas "Non" (voir le commentaire dans seed-prod.js).
+          const prefilledOption = !currentProfileValue
+            ? null
+            : question.type === 'OUI_NON'
+              ? question.options[0] // "Oui" toujours en premier
+              : question.options?.find((o) => o.syncValue === currentProfileValue);
+
+          if (prefilledOption && !overrideCurrentQuestion) {
+            return (
+              <div>
+                <p style={{ fontSize: 17 }}>
+                  {question.type === 'OUI_NON' ? (
+                    <>{question.label} <strong>{prefilledOption.label}</strong></>
+                  ) : (
+                    <>{PROFILE_PREFILL_LABELS[question.syncsToProfile] || 'D\'après votre profil :'} <strong>{prefilledOption.label}</strong></>
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setOverrideCurrentQuestion(true)}
+                  style={{
+                    background: 'none', border: 'none', padding: 0, marginTop: 8,
+                    color: '#1E5F7C', fontSize: 14, textDecoration: 'underline', cursor: 'pointer',
+                  }}
+                >
+                  Ce n&apos;est plus exact ? Modifier
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <QuestionInput
+              question={question}
+              answer={answer}
+              onChange={(value) => setAnswer(question.id, value)}
+            />
+          );
+        })()}
       </div>
 
       {/* ── Navigation ────────────────────────────────────── */}

@@ -618,7 +618,7 @@ describe('Synchronisation profil depuis une réponse (syncsToProfile)', () => {
     expect(updated.situation).toBe(before.situation);
   });
 
-  it('400 — syncsToProfile refusé sur une question qui n\'est pas CHOIX_UNIQUE', async () => {
+  it('400 — syncsToProfile refusé sur une question qui n\'est ni CHOIX_UNIQUE ni OUI_NON', async () => {
     const { token } = await makeAdminUser();
     const res = await request(app)
       .post(API)
@@ -629,7 +629,7 @@ describe('Synchronisation profil depuis une réponse (syncsToProfile)', () => {
         status: 'DRAFT',
         questions: [
           {
-            label: 'Question OUI_NON de test', type: 'OUI_NON', required: true, syncsToProfile: 'situation',
+            label: 'Question NOMBRE de test', type: 'NOMBRE', required: true, syncsToProfile: 'situation',
           },
         ],
       });
@@ -659,5 +659,22 @@ describe('Synchronisation profil depuis une réponse (syncsToProfile)', () => {
         ],
       });
     expect(res.status).toBe(400);
+  });
+
+  it('accepte syncsToProfile sur une question OUI_NON (préremplissage uniquement, jamais d\'écriture)', async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          { label: 'Travaillez-vous à Senlis ?', type: 'OUI_NON', required: true, syncsToProfile: 'travailleQuartier' },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.survey.questions[0].syncsToProfile).toBe('travailleQuartier');
   });
 });

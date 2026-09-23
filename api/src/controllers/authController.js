@@ -336,6 +336,19 @@ export async function changePassword(req, res, next) {
       throw error;
     }
 
+    // Le nouveau mot de passe doit être DIFFÉRENT de l'actuel —
+    // "changer" son mot de passe pour le même ne sert à rien, et
+    // pourrait laisser croire, à tort, qu'une compromission a été
+    // traitée. Vérifié ICI (pas seulement côté client, facilement
+    // contournable) puisque c'est une vraie règle de sécurité.
+    const sameAsBefore = await argon2.verify(user.passwordHash, newPassword);
+    if (sameAsBefore) {
+      const error = new Error('Le nouveau mot de passe doit être différent de l\'actuel');
+      error.status = 400;
+      error.code = 'PASSWORD_UNCHANGED';
+      throw error;
+    }
+
     const passwordHash = await argon2.hash(newPassword);
     await prisma.user.update({
       where: { id: userId },

@@ -191,16 +191,26 @@ async function main() {
   // recherche côté client), pas quelque chose qu'une révision du
   // contenu de l'enquête peut inclure. À discuter comme ticket séparé
   // si cette précision est jugée prioritaire.
-  const QUARTIER_OU_VILLE_OPTIONS = [
-    { label: 'Brichebay' },
-    { label: 'Bon Secours' },
-    { label: "Val d'Aunette - La Gâtelière" },
-    { label: 'Zone industrielle' },
-    { label: 'Villevert' },
-    { label: 'Jardiniers' },
-    { label: 'Une autre ville' }, // dernier index — référencé plus bas
+  // Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
+  // historique — chacun avec son syncValue (même valeur que l'enum
+  // Quartier), pour la question "résidence" qui synchronise le
+  // profil (situation=AUTRE_QUARTIER, quartier=<syncValue>).
+  const RESIDENCE_QUARTIER_OPTIONS = [
+    { label: 'Brichebay', syncValue: 'BRICHEBAY' },
+    { label: 'Bon Secours', syncValue: 'BON_SECOURS' },
+    { label: "Val d'Aunette - La Gâtelière", syncValue: 'VAL_AUNETTE_GATELIERE' },
+    { label: 'Zone industrielle', syncValue: 'ZONE_INDUSTRIELLE' },
+    { label: 'Villevert', syncValue: 'VILLEVERT' },
+    { label: 'Jardiniers', syncValue: 'JARDINIERS' },
   ];
-  const AUTRE_VILLE_INDEX = QUARTIER_OU_VILLE_OPTIONS.length - 1;
+
+  // Même liste, mais avec le centre historique en plus — a du sens
+  // comme lieu de TRAVAIL (contrairement à la résidence, où
+  // Situation.CENTRE_RESIDENT couvre déjà ce cas séparément).
+  const TRAVAIL_QUARTIER_OPTIONS = [
+    { label: 'Centre historique', syncValue: 'CENTRE_HISTORIQUE' },
+    ...RESIDENCE_QUARTIER_OPTIONS,
+  ];
 
   // Réutilisé pour patrons, salariés et visiteurs non-résidents du
   // centre utilisant leur voiture (jamais pour les habitants, déjà
@@ -219,336 +229,290 @@ async function main() {
   // Construit dynamiquement : chaque question retient sa PROPRE
   // position via addQuestion() plutôt qu'un numéro tapé à la main —
   // supprimer ou insérer une question ailleurs dans le tableau ne
-  // casse plus jamais les showIf des autres (c'est exactement ce
-  // qu'une modification manuelle avait cassé par le passé : décaler
-  // une position sans mettre à jour les références qui pointaient
-  // dessus).
+  // casse plus jamais les showIf des autres.
   const questionsSpec = [];
   function addQuestion(spec) {
     questionsSpec.push(spec);
-    return questionsSpec.length - 1; // la position de CETTE question
+    return questionsSpec.length - 1;
   }
 
-  // order 0 — l'aiguillage principal, 4 profils bien distincts
-  const idxQ0 = addQuestion({
-    label: 'Quel est votre lien avec le centre historique ?',
+  // ══ Axe résidence — toujours posé ══
+  // Remplace l'ancienne Q0 à 4 profils (habitant/patron/salarié/
+  // visiteur) : celle-ci correspond EXACTEMENT aux 3 valeurs de
+  // Situation sur le compte, pour que répondre à l'enquête mette
+  // aussi à jour le profil (syncsToProfile — revue du besoin).
+  const idxResidence = addQuestion({
+    label: 'Où résidez-vous ?',
     type: 'CHOIX_UNIQUE',
     required: true,
+    syncsToProfile: 'situation',
     options: [
-      { label: "J'habite dans le centre historique" },
-      { label: 'Je dirige/gère une activité du centre historique (commerce, profession libérale, service...)' },
-      { label: "Je suis salarié(e) d'une activité du centre historique" },
-      { label: "Je ne vis ni ne travaille dans le centre historique, mais j'y viens parfois" },
+      { label: 'Le centre historique', syncValue: 'CENTRE_RESIDENT' },
+      { label: 'Un autre quartier de Senlis', syncValue: 'AUTRE_QUARTIER' },
+      { label: 'Une autre ville', syncValue: 'HORS_SENLIS' },
+    ],
+  });
+  const RESIDENCE_CENTRE = 0;
+  const RESIDENCE_AUTRE_QUARTIER = 1;
+  const RESIDENCE_AUTRE_VILLE = 2;
+
+  addQuestion({
+    label: 'Quel quartier ?',
+    type: 'CHOIX_UNIQUE',
+    required: true,
+    syncsToProfile: 'quartier',
+    showIf: { questionOrder: idxResidence, optionOrder: RESIDENCE_AUTRE_QUARTIER },
+    options: RESIDENCE_QUARTIER_OPTIONS,
+  });
+
+  addQuestion({
+    // Pas de syncsToProfile ici : le compte ne garde qu'une valeur
+    // grossière (HORS_SENLIS) pour ce cas, sans case pour "laquelle" —
+    // voir la discussion sur les limites du modèle de compte actuel.
+    label: 'Quelle est cette ville ?',
+    type: 'TEXTE_LIBRE',
+    required: true,
+    uiHint: 'VILLE_FR',
+    showIf: { questionOrder: idxResidence, optionOrder: RESIDENCE_AUTRE_VILLE },
+  });
+
+  // ══ Axe travail — toujours posé, INDÉPENDANT de la résidence ══
+  // Une personne peut résider n'importe où et travailler à Senlis,
+  // ou l'inverse — d'où deux axes séparés plutôt qu'un seul arbre
+  // à 4 branches comme avant (qui ne couvrait pas, par exemple, un
+  // salarié résidant hors de Senlis).
+  const idxTravaille = addQuestion({
+    label: 'Travaillez-vous ou dirigez-vous une activité à Senlis ?',
+    type: 'OUI_NON',
+    required: true,
+    // Sert UNIQUEMENT au préremplissage côté client (jamais à
+    // écrire — ses options Oui/Non n'ont pas de syncValue) : si
+    // travailleQuartier est déjà connu sur le profil, "Oui" peut être
+    // pré-rempli en confiance. "Non" ne peut jamais l'être : un champ
+    // vide veut aussi bien dire "jamais demandé" que "a répondu non"
+    // — voir EnqueteRepondre.jsx.
+    syncsToProfile: 'travailleQuartier',
+  });
+  const TRAVAILLE_OUI = 0;
+  const TRAVAILLE_NON = 1;
+
+  addQuestion({
+    label: 'Dans quel quartier travaillez-vous ?',
+    type: 'CHOIX_UNIQUE',
+    required: true,
+    syncsToProfile: 'travailleQuartier',
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_OUI },
+    options: TRAVAIL_QUARTIER_OPTIONS,
+  });
+
+  addQuestion({
+    label: 'À ce titre...',
+    type: 'CHOIX_UNIQUE',
+    required: true,
+    syncsToProfile: 'travailType',
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_OUI },
+    options: [
+      { label: 'Je dirige/gère cette activité', syncValue: 'COMMERCANT' },
+      { label: "J'y suis salarié(e)", syncValue: 'SALARIE' },
     ],
   });
 
-  // ══ Parcours A — habitants du centre (showIf Q0→option 0) ══
-  // Pas de question sur les freins au vélo : déjà dans le centre,
-  // la question n'a pas de sens pour ce profil.
-  const idxA1 = addQuestion({
+  // ══ Résidents du centre — véhicules du foyer ══
+  // Inchangé dans l'esprit par rapport à l'ancienne version : ne
+  // concerne que le stationnement AU DOMICILE, dans le centre.
+  addQuestion({
     label: 'Combien de véhicules motorisés compte votre foyer ?',
     type: 'NOMBRE',
     required: true,
-    showIf: { questionOrder: idxQ0, optionOrder: 0 },
+    showIf: { questionOrder: idxResidence, optionOrder: RESIDENCE_CENTRE },
   });
   addQuestion({
     label: PARKING_LABEL,
     helpText: PARKING_HELP,
     type: 'CHOIX_MULTIPLE',
     required: false,
-    showIf: { questionOrder: idxQ0, optionOrder: 0 },
+    showIf: { questionOrder: idxResidence, optionOrder: RESIDENCE_CENTRE },
     options: [...PARKING_OPTIONS, { label: "Je n'ai pas de véhicule" }],
   });
-  const idxA3 = addQuestion({
+  const idxDifficultesFoyer = addQuestion({
     label: 'Rencontrez-vous des difficultés pour vous garer ?',
     type: 'OUI_NON',
     required: false,
-    showIf: { questionOrder: idxQ0, optionOrder: 0 },
+    showIf: { questionOrder: idxResidence, optionOrder: RESIDENCE_CENTRE },
   });
   addQuestion({
     label: 'Lesquelles ?',
     type: 'TEXTE_LIBRE',
     required: false,
-    showIf: { questionOrder: idxA3, optionOrder: 0 }, // "Oui"
+    showIf: { questionOrder: idxDifficultesFoyer, optionOrder: 0 }, // "Oui"
   });
 
-  // ══ Parcours B — patrons/gérants d'une activité (showIf Q0→option 1) ══
+  // ══ Quiconque travaille à Senlis — activité, mobilité, véhicules pro ══
+  // Généralisation utile par rapport à l'ancienne version : s'applique
+  // à qui travaille à Senlis quel que soit son lieu de RÉSIDENCE (un
+  // patron habitant une autre ville était mal couvert avant).
   addQuestion({
-    // le helpText porte la consigne demandée aux patrons, visible
-    // uniquement dans CE parcours.
-    label: "Quel type d'activité dirigez-vous ?",
-    helpText: "Merci de transmettre également ce questionnaire à vos salarié(e)s — leurs réponses comptent tout autant que les vôtres pour bien comprendre le stationnement au centre-ville.",
+    // le helpText porte la consigne aux patrons, quel que soit le
+    // type d'activité — inutile pour un salarié, mais sans incidence
+    // à ce qu'iel la voie aussi.
+    label: "Quel type d'activité (la vôtre, ou celle qui vous emploie) ?",
+    helpText: "Si vous dirigez cette activité, merci de transmettre également ce questionnaire à vos salarié(e)s — leurs réponses comptent tout autant que les vôtres.",
     type: 'CHOIX_UNIQUE',
     required: true,
-    showIf: { questionOrder: idxQ0, optionOrder: 1 },
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_OUI },
     options: ACTIVITE_OPTIONS,
   });
-  const idxB2 = addQuestion({
-    // un OUI_NON simple comme porte d'entrée : évite le problème
-    // "dépend de l'option A OU B" (le moteur ne gère qu'UNE option
-    // déclenchante par question).
-    label: 'Résidez-vous dans le centre historique ?',
-    type: 'OUI_NON',
-    required: true,
-    showIf: { questionOrder: idxQ0, optionOrder: 1 },
-  });
-  const idxB3 = addQuestion({
-    label: "D'où venez-vous ?",
-    type: 'CHOIX_UNIQUE',
-    required: true,
-    showIf: { questionOrder: idxB2, optionOrder: 1 }, // "Non"
-    options: QUARTIER_OU_VILLE_OPTIONS,
-  });
-  addQuestion({
-    label: 'Quelle est cette ville ?',
-    type: 'TEXTE_LIBRE',
-    required: true,
-    uiHint: 'VILLE_FR',
-    showIf: { questionOrder: idxB3, optionOrder: AUTRE_VILLE_INDEX },
-  });
-  const idxB5 = addQuestion({
+
+  const idxMobiliteTravail = addQuestion({
     label: 'Comment venez-vous travailler le plus souvent ?',
     type: 'CHOIX_UNIQUE',
     required: true,
-    showIf: { questionOrder: idxB2, optionOrder: 1 },
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_OUI },
     options: MOBILITE_OPTIONS,
   });
   addQuestion({
     label: 'Vous avez répondu "Autre" — précisez ce mode de transport',
     type: 'TEXTE_LIBRE',
     required: true,
-    showIf: { questionOrder: idxB5, optionOrder: MOBILITE_AUTRE },
+    showIf: { questionOrder: idxMobiliteTravail, optionOrder: MOBILITE_AUTRE },
   });
-  const idxB5c = addQuestion({
+  const idxCovoitTravail = addQuestion({
     label: 'Le véhicule du covoiturage se gare-t-il à Senlis ?',
     type: 'OUI_NON',
     required: true,
-    showIf: { questionOrder: idxB5, optionOrder: MOBILITE_COVOITURAGE },
+    showIf: { questionOrder: idxMobiliteTravail, optionOrder: MOBILITE_COVOITURAGE },
   });
   addQuestion({
     label: PARKING_LABEL,
     helpText: PARKING_HELP,
     type: 'CHOIX_MULTIPLE',
     required: false,
-    showIf: { questionOrder: idxB5c, optionOrder: 0 }, // "Oui"
+    showIf: { questionOrder: idxCovoitTravail, optionOrder: 0 }, // "Oui"
     options: PARKING_OPTIONS,
   });
   addQuestion({
-    // dépend de la RÉPONSE "Voiture" à la question de mobilité,
-    // chaînage sur 2 niveaux.
     label: PARKING_LABEL,
     helpText: PARKING_HELP,
     type: 'CHOIX_MULTIPLE',
     required: false,
-    showIf: { questionOrder: idxB5, optionOrder: MOBILITE_VOITURE },
+    showIf: { questionOrder: idxMobiliteTravail, optionOrder: MOBILITE_VOITURE },
     options: PARKING_OPTIONS,
   });
-  const idxB6b = addQuestion({
+  const idxDifficultesTravail = addQuestion({
     label: 'Rencontrez-vous des difficultés pour vous garer ?',
     type: 'OUI_NON',
     required: false,
-    showIf: { questionOrder: idxB5, optionOrder: MOBILITE_VOITURE },
+    showIf: { questionOrder: idxMobiliteTravail, optionOrder: MOBILITE_VOITURE },
   });
   addQuestion({
     label: 'Lesquelles ?',
     type: 'TEXTE_LIBRE',
     required: false,
-    showIf: { questionOrder: idxB6b, optionOrder: 0 }, // "Oui"
+    showIf: { questionOrder: idxDifficultesTravail, optionOrder: 0 },
   });
-  const idxB6d = addQuestion({
+  const idxFreinsTravail = addQuestion({
     label: FREINS_ACCES_LABEL,
     type: 'CHOIX_MULTIPLE',
     required: false,
-    showIf: { questionOrder: idxB5, optionOrder: MOBILITE_VOITURE },
+    showIf: { questionOrder: idxMobiliteTravail, optionOrder: MOBILITE_VOITURE },
     options: FREINS_ACCES_OPTIONS,
   });
   addQuestion({
     label: 'Précisez cet autre frein',
     type: 'TEXTE_LIBRE',
     required: false,
-    showIf: { questionOrder: idxB6d, optionOrder: FREINS_ACCES_AUTRE_INDEX },
+    showIf: { questionOrder: idxFreinsTravail, optionOrder: FREINS_ACCES_AUTRE_INDEX },
   });
-  const idxB7 = addQuestion({
+
+  const idxVehiculesPro = addQuestion({
     label: 'Utilisez-vous un ou plusieurs véhicules à des fins professionnelles (ex. livraisons) ?',
     type: 'OUI_NON',
     required: true,
-    showIf: { questionOrder: idxQ0, optionOrder: 1 },
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_OUI },
   });
   addQuestion({
     label: 'Combien de véhicules professionnels utilisez-vous ?',
     type: 'NOMBRE',
     required: true,
-    showIf: { questionOrder: idxB7, optionOrder: 0 }, // "Oui"
+    showIf: { questionOrder: idxVehiculesPro, optionOrder: 0 }, // "Oui"
   });
   addQuestion({
     label: 'Où sont garés ces véhicules professionnels ?',
     helpText: PARKING_HELP,
     type: 'CHOIX_MULTIPLE',
     required: false,
-    showIf: { questionOrder: idxB7, optionOrder: 0 },
+    showIf: { questionOrder: idxVehiculesPro, optionOrder: 0 },
     options: PARKING_OPTIONS,
   });
-  const idxB9b = addQuestion({
+  const idxDifficultesPro = addQuestion({
     label: 'Rencontrez-vous des difficultés pour garer ces véhicules professionnels ?',
     type: 'OUI_NON',
     required: false,
-    showIf: { questionOrder: idxB7, optionOrder: 0 },
+    showIf: { questionOrder: idxVehiculesPro, optionOrder: 0 },
   });
   addQuestion({
     label: 'Lesquelles ?',
     type: 'TEXTE_LIBRE',
     required: false,
-    showIf: { questionOrder: idxB9b, optionOrder: 0 }, // "Oui"
-  });
-  addQuestion({
-    label: 'Une suggestion pour améliorer le stationnement autour de votre activité ?',
-    type: 'TEXTE_LIBRE',
-    required: false,
-    showIf: { questionOrder: idxQ0, optionOrder: 1 },
+    showIf: { questionOrder: idxDifficultesPro, optionOrder: 0 },
   });
 
-  // ══ Parcours C — salarié(e)s d'une activité (showIf Q0→option 2) ══
-  // Même structure que le parcours B, sans le volet véhicules
-  // professionnels (ressource de l'activité, pas du salarié).
   addQuestion({
-    label: "Dans quel type d'activité travaillez-vous ?",
-    type: 'CHOIX_UNIQUE',
-    required: true,
-    showIf: { questionOrder: idxQ0, optionOrder: 2 },
-    options: ACTIVITE_OPTIONS,
+    label: 'Une suggestion pour améliorer le stationnement lié à votre activité ou votre travail ?',
+    type: 'TEXTE_LIBRE',
+    required: false,
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_OUI },
   });
-  const idxC2 = addQuestion({
-    label: 'Résidez-vous dans le centre historique ?',
+
+  // ══ Ne travaille pas à Senlis — usage et accès au centre ══
+  // Reste posé même à un·e résident·e du centre qui ne travaille pas
+  // à Senlis (léger chevauchement avec le bloc "véhicules du foyer"
+  // ci-dessus, assumé — le moteur ne gère qu'UNE condition par
+  // question, pas de "ET" entre deux questions différentes).
+  const idxVientVoiture = addQuestion({
+    label: 'Utilisez-vous une voiture pour vos déplacements dans ou vers le centre historique ?',
     type: 'OUI_NON',
     required: true,
-    showIf: { questionOrder: idxQ0, optionOrder: 2 },
-  });
-  const idxC3 = addQuestion({
-    label: "D'où venez-vous ?",
-    type: 'CHOIX_UNIQUE',
-    required: true,
-    showIf: { questionOrder: idxC2, optionOrder: 1 },
-    options: QUARTIER_OU_VILLE_OPTIONS,
-  });
-  addQuestion({
-    label: 'Quelle est cette ville ?',
-    type: 'TEXTE_LIBRE',
-    required: true,
-    uiHint: 'VILLE_FR',
-    showIf: { questionOrder: idxC3, optionOrder: AUTRE_VILLE_INDEX },
-  });
-  const idxC5 = addQuestion({
-    label: 'Comment venez-vous travailler le plus souvent ?',
-    type: 'CHOIX_UNIQUE',
-    required: true,
-    showIf: { questionOrder: idxC2, optionOrder: 1 },
-    options: MOBILITE_OPTIONS,
-  });
-  addQuestion({
-    label: 'Vous avez répondu "Autre" — précisez ce mode de transport',
-    type: 'TEXTE_LIBRE',
-    required: true,
-    showIf: { questionOrder: idxC5, optionOrder: MOBILITE_AUTRE },
-  });
-  const idxC5c = addQuestion({
-    label: 'Le véhicule du covoiturage se gare-t-il à Senlis ?',
-    type: 'OUI_NON',
-    required: true,
-    showIf: { questionOrder: idxC5, optionOrder: MOBILITE_COVOITURAGE },
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_NON },
   });
   addQuestion({
     label: PARKING_LABEL,
     helpText: PARKING_HELP,
     type: 'CHOIX_MULTIPLE',
     required: false,
-    showIf: { questionOrder: idxC5c, optionOrder: 0 },
+    showIf: { questionOrder: idxVientVoiture, optionOrder: 0 }, // "Oui"
     options: PARKING_OPTIONS,
   });
-  addQuestion({
-    label: PARKING_LABEL,
-    helpText: PARKING_HELP,
-    type: 'CHOIX_MULTIPLE',
-    required: false,
-    showIf: { questionOrder: idxC5, optionOrder: MOBILITE_VOITURE },
-    options: PARKING_OPTIONS,
-  });
-  const idxC6b = addQuestion({
+  const idxDifficultesVisiteur = addQuestion({
     label: 'Rencontrez-vous des difficultés pour vous garer ?',
     type: 'OUI_NON',
     required: false,
-    showIf: { questionOrder: idxC5, optionOrder: MOBILITE_VOITURE },
+    showIf: { questionOrder: idxVientVoiture, optionOrder: 0 },
   });
   addQuestion({
     label: 'Lesquelles ?',
     type: 'TEXTE_LIBRE',
     required: false,
-    showIf: { questionOrder: idxC6b, optionOrder: 0 },
+    showIf: { questionOrder: idxDifficultesVisiteur, optionOrder: 0 },
   });
-  const idxC6d = addQuestion({
+  const idxFreinsVisiteur = addQuestion({
     label: FREINS_ACCES_LABEL,
     type: 'CHOIX_MULTIPLE',
     required: false,
-    showIf: { questionOrder: idxC5, optionOrder: MOBILITE_VOITURE },
+    showIf: { questionOrder: idxVientVoiture, optionOrder: 0 },
     options: FREINS_ACCES_OPTIONS,
   });
   addQuestion({
     label: 'Précisez cet autre frein',
     type: 'TEXTE_LIBRE',
     required: false,
-    showIf: { questionOrder: idxC6d, optionOrder: FREINS_ACCES_AUTRE_INDEX },
-  });
-  addQuestion({
-    label: 'Une suggestion pour améliorer votre trajet domicile-travail ?',
-    type: 'TEXTE_LIBRE',
-    required: false,
-    showIf: { questionOrder: idxQ0, optionOrder: 2 },
-  });
-
-  // ══ Parcours D — visiteurs occasionnels (showIf Q0→option 3) ══
-  const idxD1 = addQuestion({
-    label: 'Vous arrive-t-il de venir en voiture dans le centre historique ?',
-    type: 'OUI_NON',
-    required: true,
-    showIf: { questionOrder: idxQ0, optionOrder: 3 },
-  });
-  addQuestion({
-    label: PARKING_LABEL + ' lors de ces visites ?',
-    helpText: PARKING_HELP,
-    type: 'CHOIX_MULTIPLE',
-    required: false,
-    showIf: { questionOrder: idxD1, optionOrder: 0 }, // "Oui"
-    options: PARKING_OPTIONS,
-  });
-  const idxD2b = addQuestion({
-    label: 'Rencontrez-vous des difficultés pour vous garer ?',
-    type: 'OUI_NON',
-    required: false,
-    showIf: { questionOrder: idxD1, optionOrder: 0 },
-  });
-  addQuestion({
-    label: 'Lesquelles ?',
-    type: 'TEXTE_LIBRE',
-    required: false,
-    showIf: { questionOrder: idxD2b, optionOrder: 0 },
-  });
-  const idxD2d = addQuestion({
-    label: FREINS_ACCES_LABEL,
-    type: 'CHOIX_MULTIPLE',
-    required: false,
-    showIf: { questionOrder: idxD1, optionOrder: 0 },
-    options: FREINS_ACCES_OPTIONS,
-  });
-  addQuestion({
-    label: 'Précisez cet autre frein',
-    type: 'TEXTE_LIBRE',
-    required: false,
-    showIf: { questionOrder: idxD2d, optionOrder: FREINS_ACCES_AUTRE_INDEX },
+    showIf: { questionOrder: idxFreinsVisiteur, optionOrder: FREINS_ACCES_AUTRE_INDEX },
   });
   addQuestion({
     label: 'À quelle fréquence venez-vous dans le centre-ville ?',
     type: 'CHOIX_UNIQUE',
     required: false,
-    showIf: { questionOrder: idxQ0, optionOrder: 3 },
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_NON },
     options: [
       { label: 'Tous les jours' },
       { label: 'Plusieurs fois par semaine' },
@@ -560,9 +524,8 @@ async function main() {
     label: 'Une suggestion pour rendre vos visites au centre-ville plus agréables ?',
     type: 'TEXTE_LIBRE',
     required: false,
-    showIf: { questionOrder: idxQ0, optionOrder: 3 },
+    showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_NON },
   });
-
   // $transaction : création ET résolution du branchement doivent
   // réussir ENSEMBLE — un crash entre les deux laisserait une
   // enquête avec des questions mais un branchement à moitié posé
@@ -595,8 +558,9 @@ async function main() {
               required: q.required,
               order: index,
               uiHint: q.uiHint,
+              syncsToProfile: q.syncsToProfile,
               options: options
-                ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex })) }
+                ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex, syncValue: o.syncValue })) }
                 : undefined,
             };
           }),

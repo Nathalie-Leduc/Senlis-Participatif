@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
+import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 
 export default function MonCompte() {
@@ -17,9 +18,27 @@ export default function MonCompte() {
   const [travailType, setTravailType] = useState(user?.travailType || '');
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
+  const [profileJustSaved, setProfileJustSaved] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+  const [passwordJustChanged, setPasswordJustChanged] = useState(false);
+  const [passwordError, setPasswordError] = useState(null);
 
   const handleUpdateSituation = async () => {
-    setError(null); setMessage(null);
+    setError(null); setMessage(null); setProfileJustSaved(false); setProfileError(null);
+
+    // Validé ICI plutôt que par un simple bouton désactivé : un
+    // bouton désactivé sans explication ne dit jamais à la personne
+    // CE QUI manque — elle clique, rien ne se passe, et elle ne sait
+    // pas pourquoi.
+    if (situation === 'AUTRE_QUARTIER' && !quartier) {
+      setProfileError('Merci de préciser votre quartier.');
+      return;
+    }
+    if (travailleASenlis && (!travailleQuartier || !travailType)) {
+      setProfileError('Merci de préciser le quartier de travail et votre rôle.');
+      return;
+    }
+
     try {
       const payload = { situation };
       // N'envoyer quartier que s'il est vraiment renseigné (Zod
@@ -34,16 +53,28 @@ export default function MonCompte() {
       payload.travailleQuartier = travailleASenlis ? (travailleQuartier || null) : null;
       payload.travailType = travailleASenlis ? (travailType || null) : null;
       await api.patch('/auth/me', payload);
-      setMessage('Profil mis à jour.');
+      // Confirmation propre à CETTE action, affichée juste sous le
+      // bouton — le message partagé tout en haut de la page passe
+      // trop facilement inaperçu, trop loin de l'endroit où le
+      // regard se trouve au moment du clic.
+      setProfileJustSaved(true);
       await refreshUser();
-    } catch (err) { setError(err.message); }
+    } catch (err) { setProfileError(err.message); }
   };
 
   const handleChangePassword = async () => {
-    setError(null); setMessage(null);
+    setError(null); setMessage(null); setPasswordJustChanged(false); setPasswordError(null);
 
     if (pwForm.newPassword !== pwForm.newPasswordConfirm) {
-      setError('Les deux mots de passe ne correspondent pas');
+      setPasswordError('Les deux mots de passe ne correspondent pas');
+      return;
+    }
+    // Le nouveau mot de passe doit être DIFFÉRENT de l'actuel — pour
+    // la sécurité, "changer" son mot de passe pour le même ne sert à
+    // rien et pourrait laisser croire, à tort, qu'une compromission a
+    // été traitée.
+    if (pwForm.newPassword === pwForm.currentPassword) {
+      setPasswordError('Le nouveau mot de passe doit être différent de l\'actuel');
       return;
     }
 
@@ -52,10 +83,10 @@ export default function MonCompte() {
       // l'API attend juste { currentPassword, newPassword }.
       const { newPasswordConfirm, ...payload } = pwForm;
       void newPasswordConfirm;
-      const data = await api.put('/auth/me/password', payload);
-      setMessage(data.message);
+      await api.put('/auth/me/password', payload);
+      setPasswordJustChanged(true);
       setPwForm({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
-    } catch (err) { setError(err.message); }
+    } catch (err) { setPasswordError(err.message); }
   };
 
   const handleDelete = async () => {
@@ -92,6 +123,7 @@ export default function MonCompte() {
             value={situation}
             onChange={(e) => {
               setSituation(e.target.value);
+              setProfileJustSaved(false); setProfileError(null);
               // Le quartier précédemment choisi n'a plus de sens si on
               // quitte "autre quartier" — sans ce reset, une valeur
               // périmée resterait en mémoire et partirait quand même.
@@ -110,7 +142,7 @@ export default function MonCompte() {
           <label style={{ display: 'block', margin: '0 0 16px' }}>
             <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Quel quartier ?</span>
             <select
-              value={quartier} onChange={(e) => setQuartier(e.target.value)}
+              value={quartier} onChange={(e) => { setQuartier(e.target.value); setProfileJustSaved(false); setProfileError(null); }}
               style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
             >
               <option value="" disabled>Choisissez votre quartier</option>
@@ -127,6 +159,7 @@ export default function MonCompte() {
             onChange={(e) => {
               const checked = e.target.checked;
               setTravailleASenlis(checked);
+              setProfileJustSaved(false); setProfileError(null);
               if (!checked) { setTravailleQuartier(''); setTravailType(''); }
             }}
             style={{ width: 20, height: 20, flexShrink: 0 }}
@@ -139,7 +172,7 @@ export default function MonCompte() {
             <label style={{ display: 'block', margin: '0 0 16px' }}>
               <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Dans quel quartier ?</span>
               <select
-                value={travailleQuartier} onChange={(e) => setTravailleQuartier(e.target.value)}
+                value={travailleQuartier} onChange={(e) => { setTravailleQuartier(e.target.value); setProfileJustSaved(false); setProfileError(null); }}
                 style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
               >
                 <option value="" disabled>Choisissez le quartier</option>
@@ -152,7 +185,7 @@ export default function MonCompte() {
             <label style={{ display: 'block', margin: '0 0 16px' }}>
               <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>À ce titre...</span>
               <select
-                value={travailType} onChange={(e) => setTravailType(e.target.value)}
+                value={travailType} onChange={(e) => { setTravailType(e.target.value); setProfileJustSaved(false); setProfileError(null); }}
                 style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
               >
                 <option value="" disabled>Précisez</option>
@@ -166,8 +199,7 @@ export default function MonCompte() {
 
         <button
           onClick={handleUpdateSituation}
-          disabled={!situation || (situation === 'AUTRE_QUARTIER' && !quartier)
-            || (travailleASenlis && (!travailleQuartier || !travailType))
+          disabled={!situation
             || (situation === user?.situation && quartier === (user?.quartier || '')
               && travailleASenlis === Boolean(user?.travailleQuartier)
               && travailleQuartier === (user?.travailleQuartier || '')
@@ -176,6 +208,16 @@ export default function MonCompte() {
         >
           Mettre à jour mon profil
         </button>
+        {profileJustSaved && (
+          <p style={{ color: '#377349', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
+            ✅ Votre profil a été mis à jour.
+          </p>
+        )}
+        {profileError && (
+          <p style={{ color: '#A8442F', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
+            {profileError}
+          </p>
+        )}
       </div>
 
       {/* Changement de mot de passe */}
@@ -183,12 +225,12 @@ export default function MonCompte() {
         <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 16 }}>Changer le mot de passe</h2>
         <label style={{ display: 'block', marginBottom: 12 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe actuel</span>
-          <input type="password" value={pwForm.currentPassword} onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
+          <PasswordInput value={pwForm.currentPassword} onChange={(e) => { setPwForm({ ...pwForm, currentPassword: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); }}
             autoComplete="current-password" style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
         </label>
         <label style={{ display: 'block', marginBottom: 8 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Nouveau mot de passe</span>
-          <input type="password" value={pwForm.newPassword} onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
+          <PasswordInput value={pwForm.newPassword} onChange={(e) => { setPwForm({ ...pwForm, newPassword: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); }}
             autoComplete="new-password" minLength={12}
             pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
             title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
@@ -198,11 +240,21 @@ export default function MonCompte() {
 
         <label style={{ display: 'block', margin: '16px 0 16px' }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Confirmer le nouveau mot de passe</span>
-          <input type="password" value={pwForm.newPasswordConfirm} onChange={(e) => setPwForm({ ...pwForm, newPasswordConfirm: e.target.value })}
+          <PasswordInput value={pwForm.newPasswordConfirm} onChange={(e) => { setPwForm({ ...pwForm, newPasswordConfirm: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); }}
             autoComplete="new-password"
             style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
         </label>
         <button onClick={handleChangePassword} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Changer le mot de passe</button>
+        {passwordJustChanged && (
+          <p style={{ color: '#377349', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
+            ✅ Votre mot de passe a été changé.
+          </p>
+        )}
+        {passwordError && (
+          <p style={{ color: '#A8442F', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
+            {passwordError}
+          </p>
+        )}
       </div>
 
       {/* Zone danger */}
