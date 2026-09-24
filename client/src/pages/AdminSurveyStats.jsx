@@ -121,8 +121,13 @@ export default function AdminSurveyStats() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {results.questions.map((question) => {
           const trigger = question.showIfOptionId ? triggerLookup.get(question.showIfOptionId) : null;
+          // Un segment peut arriver MASQUÉ en entier (moins de 5
+          // bulletins), ou seulement pour cette question (question
+          // branchée vue par trop peu de personnes du segment) — l'API
+          // a déjà retiré les chiffres, on n'affiche que l'explication.
           const segmentsForThisQuestion = results.segmentedBy?.segments.map((segment) => ({
             optionLabel: segment.optionLabel,
+            segmentMasked: segment.masked,
             question: segment.questions.find((q) => q.id === question.id),
           }));
 
@@ -149,19 +154,31 @@ export default function AdminSurveyStats() {
 
                   <p style={{ fontSize: 12, color: '#6B6257', margin: '16px 0 8px', fontWeight: 600 }}>
                     Par « {results.segmentedBy.questionLabel} » :
+                    <span style={{ fontWeight: 400 }}>
+                      {' '}(groupes de moins de {results.segmentedBy.minGroupSize} personnes masqués, réponses libres non détaillées)
+                    </span>
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {segmentsForThisQuestion.map(({ optionLabel, question: segQuestion }) => (
-                      <div key={optionLabel} style={{ paddingLeft: 12, borderLeft: '3px solid #E3EEF3' }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: '#1E5F7C', marginBottom: 4 }}>
-                          {optionLabel}
-                          {segQuestion ? ` (${segQuestion.totalForQuestion} concerné${segQuestion.totalForQuestion > 1 ? 's' : ''})` : ''}
-                        </p>
-                        {segQuestion && segQuestion.totalForQuestion > 0
-                          ? <QuestionBody question={segQuestion} compact />
-                          : <p style={{ fontSize: 13, color: '#6B6257' }}>Personne dans ce segment.</p>}
-                      </div>
-                    ))}
+                    {segmentsForThisQuestion.map(({ optionLabel, segmentMasked, question: segQuestion }) => {
+                      const masked = segmentMasked || segQuestion?.masked;
+                      return (
+                        <div key={optionLabel} style={{ paddingLeft: 12, borderLeft: '3px solid #E3EEF3' }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: '#1E5F7C', marginBottom: 4 }}>
+                            {optionLabel}
+                            {!masked && segQuestion ? ` (${segQuestion.totalForQuestion} concerné${segQuestion.totalForQuestion > 1 ? 's' : ''})` : ''}
+                          </p>
+                          {masked ? (
+                            <p style={{ fontSize: 13, color: '#6B6257' }}>
+                              Moins de {results.segmentedBy.minGroupSize} personnes — détail masqué.
+                            </p>
+                          ) : segQuestion && segQuestion.totalForQuestion > 0 ? (
+                            <QuestionBody question={segQuestion} compact />
+                          ) : (
+                            <p style={{ fontSize: 13, color: '#6B6257' }}>Personne dans ce segment.</p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -171,9 +188,11 @@ export default function AdminSurveyStats() {
       </div>
 
       <style>{`
+        .print-only { display: none; }
         @media print {
           .no-print { display: none !important; }
-          nav, header { display: none !important; }
+          .print-only { display: block !important; }
+          nav, header, footer { display: none !important; }
         }
       `}</style>
     </div>
@@ -207,19 +226,27 @@ function QuestionBody({ question: q, compact = false }) {
         </div>
       )}
 
-      {/* TEXTE_LIBRE : contenu brut affiché — c'est justement le
-          point de cette vue admin (jamais sur la vue publique). */}
-      {q.answers !== undefined && (
+      {/* TEXTE_LIBRE : le NOMBRE de réponses est toujours affiché
+          (global et segments). Le contenu brut n'arrive que dans le
+          résultat global (l'API ne l'envoie jamais par segment), et
+          n'est jamais imprimé : un PDF remis à la mairie circule, et
+          un texte libre peut suffire à reconnaître son auteur. */}
+      {q.totalAnswered !== undefined && (
         <div>
           <p style={{ fontSize: compact ? 12 : 13, color: '#6B6257', marginBottom: 6 }}>
             {q.totalAnswered} réponse{q.totalAnswered > 1 ? 's' : ''} libre{q.totalAnswered > 1 ? 's' : ''}
           </p>
-          {q.answers.length > 0 && (
-            <ul style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {q.answers.map((text, i) => (
-                <li key={i} style={{ fontSize: compact ? 13 : 14, color: '#26333A' }}>{text}</li>
-              ))}
-            </ul>
+          {q.answers?.length > 0 && (
+            <>
+              <ul className="no-print" style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {q.answers.map((text, i) => (
+                  <li key={i} style={{ fontSize: compact ? 13 : 14, color: '#26333A' }}>{text}</li>
+                ))}
+              </ul>
+              <p className="print-only" style={{ fontSize: 12, color: '#6B6257', fontStyle: 'italic' }}>
+                Contenu des réponses libres non reproduit dans ce document (données potentiellement identifiantes).
+              </p>
+            </>
           )}
         </div>
       )}

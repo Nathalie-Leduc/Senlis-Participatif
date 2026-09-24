@@ -74,3 +74,13 @@ export const adminListProposalsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
   status: proposalStatus.optional(),
 });
+
+// ── GET /proposals/:id/stats (admin, S5-21) ─────────────────
+// segmentBy = un champ du PROFIL du votant (mêmes noms que
+// Question.syncsToProfile côté enquêtes, pour garder un seul
+// vocabulaire dans tout le projet). Absent = totaux seuls.
+export const proposalStatsQuerySchema = z.object({
+  segmentBy: z.enum(['situation', 'quartier', 'travailleQuartier', 'travailType'], {
+    errorMap: () => ({ message: 'Critère de segmentation inconnu' }),
+  }).optional(),
+});

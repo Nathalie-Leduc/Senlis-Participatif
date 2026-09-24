@@ -2,6 +2,15 @@
 
 Toutes les évolutions notables du projet sont documentées ici.
 
+## [Non publié] — Sprint 5bis
+
+### Ajouté
+- **Résultats détaillés des propositions** (S5-21) : page admin `/admin/propositions/:id/stats`, répartition des votes selon le profil déclaré des votants (résidence, quartier, lieu et rôle de travail), impression / export PDF — endpoint `GET /api/v1/proposals/:id/stats?segmentBy=…`
+
+### Sécurité / RGPD
+- **Secret statistique** : tout groupe de 1 à 4 personnes est masqué dans les résultats segmentés (votes et enquêtes), y compris une question branchée vue par trop peu de personnes d'un segment
+- Les réponses libres ne sont plus jamais détaillées à l'intérieur d'un segment, ni reproduites dans un document imprimé
+
 ## v1.0.0 — Lot 1 (Sprints 0 à 5)
 
 Première mise en ligne publique de Senlis Participatif.
