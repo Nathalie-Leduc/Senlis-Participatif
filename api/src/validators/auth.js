@@ -158,3 +158,17 @@ export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Mot de passe actuel requis'),
   newPassword: password,
 });
+
+// ── Valeurs possibles du profil, réutilisées ailleurs ──────
+// La segmentation des votes (proposalsController.getStats, S5-21)
+// a besoin de la liste COMPLÈTE des valeurs de chaque champ du
+// profil, pour afficher aussi les groupes vides (« 0 votant ») —
+// plutôt que de recopier ces listes une deuxième fois (et risquer
+// qu'elles divergent le jour où l'on ajoute un quartier), on expose
+// celles des schémas Zod ci-dessus. `.options` est fourni par z.enum.
+export const PROFILE_VALUES = {
+  situation: situation.options,
+  quartier: quartier.options,
+  travailleQuartier: travailleQuartier.options,
+  travailType: travailType.options,
+};

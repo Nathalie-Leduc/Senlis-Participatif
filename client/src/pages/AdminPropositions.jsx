@@ -125,7 +125,18 @@ export default function AdminPropositions() {
 
                 <span style={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{p.title}</span>
 
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {/* Résultats détaillés (S5-21) : utile dès qu'il peut y
+                      avoir des votes, donc pas pour un brouillon. */}
+                  {p.status !== 'DRAFT' && (
+                    <Link
+                      to={`/admin/propositions/${p.id}/stats`}
+                      className="btn"
+                      style={{ background: '#E3F0F6', color: '#1E5F7C', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                    >
+                      Résultats
+                    </Link>
+                  )}
                   <Link
                     to={`/admin/propositions/${p.slug}/modifier`}
                     className="btn"

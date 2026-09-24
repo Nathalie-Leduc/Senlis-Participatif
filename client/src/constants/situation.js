@@ -59,3 +59,39 @@ export const TRAVAIL_TYPE_LABELS = {
   COMMERCANT: 'Dirige/gère l\'activité',
   SALARIE: 'Salarié(e)',
 };
+
+// ── Axes de segmentation des résultats (S5-21) ─────────────
+// Mêmes noms de champs que côté API (User.situation, quartier,
+// travailleQuartier, travailType) — c'est ce que la page de
+// résultats envoie tel quel dans ?segmentBy=.
+//
+// nullLabel : ce que veut dire une valeur VIDE pour cet axe. Elle
+// n'a pas le même sens partout — un quartier de résidence vide,
+// c'est souvent quelqu'un du centre historique (qui n'a pas à
+// préciser de quartier), pas quelqu'un qui aurait « oublié ».
+export const PROFILE_DIMENSIONS = [
+  {
+    value: 'situation',
+    label: 'Lieu de résidence',
+    valueLabels: SITUATION_SHORT_LABELS,
+    nullLabel: 'Non renseignée',
+  },
+  {
+    value: 'quartier',
+    label: 'Quartier de résidence (hors centre historique)',
+    valueLabels: QUARTIER_LABELS,
+    nullLabel: 'Centre historique, hors Senlis ou non renseigné',
+  },
+  {
+    value: 'travailleQuartier',
+    label: 'Quartier de travail',
+    valueLabels: TRAVAIL_QUARTIER_LABELS,
+    nullLabel: 'Ne travaille pas à Senlis (ou non renseigné)',
+  },
+  {
+    value: 'travailType',
+    label: "Rôle dans l'activité exercée à Senlis",
+    valueLabels: TRAVAIL_TYPE_LABELS,
+    nullLabel: 'Ne travaille pas à Senlis (ou non renseigné)',
+  },
+];

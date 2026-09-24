@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import prisma from '../src/lib/prisma.js';
-import { makeCitizen, makeAdminUser, seedSurvey } from './helpers.js';
+import { makeCitizen, makeAdminUser, seedSurvey, seedUser } from './helpers.js';
 
 const API = '/api/v1/surveys';
 
@@ -424,32 +424,147 @@ describe('Publication des résultats et vue détaillée admin', () => {
   });
 
   describe('Segmentation des résultats (S5-21)', () => {
-    it('segmente par une question OUI_NON — les effectifs de chaque segment correspondent aux vrais votants', async () => {
+    // Dépose un bulletin DIRECTEMENT en base pour un nouvel utilisateur
+    // (voir seedUser dans helpers.js) — les tests de segmentation ont
+    // besoin d'au moins 5 bulletins par segment pour franchir le seuil
+    // de confidentialité, trop lent via l'inscription HTTP complète.
+    // answers : [{ questionId, optionId? , valueText?, valueNumber? }]
+    async function seedResponse(surveyId, answers) {
+      const user = await seedUser();
+      return prisma.surveyResponse.create({
+        data: { surveyId, userId: user.id, answers: { create: answers } },
+      });
+    }
+
+    it('segmente par une question OUI_NON — les effectifs de chaque segment correspondent aux vrais bulletins', async () => {
       const survey = await seedSurvey();
       const { token: adminToken } = await makeAdminUser();
-      const oui = survey.questions[0].options.find((o) => o.label === 'Oui');
-      const non = survey.questions[0].options.find((o) => o.label === 'Non');
+      const question = survey.questions[0];
+      const oui = question.options.find((o) => o.label === 'Oui');
 
-      for (const answer of [oui, oui, non]) {
-        const { token } = await makeCitizen();
-        await request(app)
-          .post(`${API}/${survey.id}/responses`)
-          .set('Authorization', `Bearer ${token}`)
-          .send({ answers: [{ questionId: survey.questions[0].id, optionId: answer.id }] });
+      for (let i = 0; i < 5; i++) {
+        await seedResponse(survey.id, [{ questionId: question.id, optionId: oui.id }]);
       }
 
       const res = await request(app)
-        .get(`${API}/${survey.id}/stats?segmentBy=${survey.questions[0].id}`)
+        .get(`${API}/${survey.id}/stats?segmentBy=${question.id}`)
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.segmentedBy.questionId).toBe(survey.questions[0].id);
+      expect(res.body.segmentedBy.questionId).toBe(question.id);
+      expect(res.body.segmentedBy.minGroupSize).toBe(5);
 
       const ouiSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Oui');
       const nonSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Non');
-      expect(ouiSegment.totalResponses).toBe(2);
-      expect(nonSegment.totalResponses).toBe(1);
+      expect(ouiSegment).toMatchObject({ masked: false, totalResponses: 5 });
+      // Groupe VIDE : pas masqué (il ne révèle l'opinion de personne)
+      expect(nonSegment).toMatchObject({ masked: false, totalResponses: 0 });
       expect(ouiSegment.totalResponses + nonSegment.totalResponses).toBe(res.body.totalResponses);
+    });
+
+    it('masque un segment de 1 à 4 bulletins — ni effectif exact, ni réponses', async () => {
+      const survey = await seedSurvey();
+      const { token: adminToken } = await makeAdminUser();
+      const question = survey.questions[0];
+      const oui = question.options.find((o) => o.label === 'Oui');
+      const non = question.options.find((o) => o.label === 'Non');
+
+      for (let i = 0; i < 5; i++) await seedResponse(survey.id, [{ questionId: question.id, optionId: oui.id }]);
+      for (let i = 0; i < 2; i++) await seedResponse(survey.id, [{ questionId: question.id, optionId: non.id }]);
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=${question.id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const nonSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Non');
+      expect(nonSegment).toEqual({
+        optionId: non.id, optionLabel: 'Non', masked: true, totalResponses: null, questions: [],
+      });
+      // Le résultat GLOBAL, lui, reste complet : 7 bulletins au total
+      expect(res.body.totalResponses).toBe(7);
+    });
+
+    it("ne renvoie jamais le texte libre brut à l'intérieur d'un segment (seulement son nombre)", async () => {
+      const survey = await seedSurvey({
+        questions: {
+          create: [
+            { label: 'Résidez-vous dans le centre ?', type: 'OUI_NON', required: true, order: 0,
+              options: { create: [{ label: 'Oui', order: 0 }, { label: 'Non', order: 1 }] } },
+            { label: 'Un commentaire ?', type: 'TEXTE_LIBRE', required: false, order: 1 },
+          ],
+        },
+      });
+      const { token: adminToken } = await makeAdminUser();
+      const [segmentQ, textQ] = survey.questions.sort((a, b) => a.order - b.order);
+      const oui = segmentQ.options.find((o) => o.label === 'Oui');
+
+      for (let i = 0; i < 5; i++) {
+        await seedResponse(survey.id, [
+          { questionId: segmentQ.id, optionId: oui.id },
+          { questionId: textQ.id, valueText: `J'habite au ${i} rue de la République` },
+        ]);
+      }
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=${segmentQ.id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      // Global : texte brut disponible pour l'admin (comportement inchangé)
+      const globalText = res.body.questions.find((q) => q.id === textQ.id);
+      expect(globalText.answers).toHaveLength(5);
+
+      // Segment : le nombre, jamais le contenu
+      const ouiSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Oui');
+      const segmentText = ouiSegment.questions.find((q) => q.id === textQ.id);
+      expect(segmentText.totalAnswered).toBe(5);
+      expect(segmentText.answers).toBeUndefined();
+    });
+
+    it("masque, dans un segment assez grand, une question branchée vue par moins de 5 personnes", async () => {
+      const survey = await seedSurvey({
+        questions: {
+          create: [
+            { label: 'Résidez-vous dans le centre ?', type: 'OUI_NON', required: true, order: 0,
+              options: { create: [{ label: 'Oui', order: 0 }, { label: 'Non', order: 1 }] } },
+            { label: 'Avez-vous un véhicule professionnel ?', type: 'OUI_NON', required: true, order: 1,
+              options: { create: [{ label: 'Oui', order: 0 }, { label: 'Non', order: 1 }] } },
+            { label: 'Combien ?', type: 'NOMBRE', required: false, order: 2 },
+          ],
+        },
+      });
+      const { token: adminToken } = await makeAdminUser();
+      const [segmentQ, proQ, countQ] = survey.questions.sort((a, b) => a.order - b.order);
+      const centreOui = segmentQ.options.find((o) => o.label === 'Oui');
+      const proOui = proQ.options.find((o) => o.label === 'Oui');
+      const proNon = proQ.options.find((o) => o.label === 'Non');
+
+      // « Combien ? » ne s'affiche que si « véhicule professionnel = Oui »
+      await prisma.question.update({ where: { id: countQ.id }, data: { showIfOptionId: proOui.id } });
+
+      // Segment « centre = Oui » : 6 bulletins (assez grand), dont
+      // seulement 2 ont vu la question branchée « Combien ? »
+      for (let i = 0; i < 6; i++) {
+        const hasPro = i < 2;
+        await seedResponse(survey.id, [
+          { questionId: segmentQ.id, optionId: centreOui.id },
+          { questionId: proQ.id, optionId: hasPro ? proOui.id : proNon.id },
+          ...(hasPro ? [{ questionId: countQ.id, valueNumber: 1 }] : []),
+        ]);
+      }
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=${segmentQ.id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const segment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Oui');
+      expect(segment).toMatchObject({ masked: false, totalResponses: 6 });
+
+      const visible = segment.questions.find((q) => q.id === proQ.id);
+      expect(visible).toMatchObject({ masked: false, totalForQuestion: 6 });
+
+      const hidden = segment.questions.find((q) => q.id === countQ.id);
+      expect(hidden).toMatchObject({ masked: true, totalForQuestion: null });
+      expect(hidden.stats).toBeUndefined();
     });
 
     it('400 INVALID_SEGMENT_QUESTION — refuse de segmenter par une question CHOIX_MULTIPLE', async () => {

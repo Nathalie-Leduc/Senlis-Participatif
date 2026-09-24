@@ -8,6 +8,7 @@
 // 👑 POST /proposals          créer
 // 👑 PATCH  /proposals/:id    éditer / changer de statut
 // 👑 DELETE /proposals/:id    supprimer
+// 👑 GET    /proposals/:id/stats   résultats détaillés, ?segmentBy=<champ du profil>
 // 🔐 PUT    /proposals/:id/vote     voter (email vérifié)
 // 🔐 DELETE /proposals/:id/vote     retirer son vote
 // ══════════════════════════════════════════════════════════
@@ -23,6 +24,7 @@ import {
   listProposalsQuerySchema,
   adminListProposalsQuerySchema,
   voteSchema,
+  proposalStatsQuerySchema,
 } from '../validators/proposals.js';
 
 const router = Router();
@@ -45,6 +47,9 @@ router.get('/:slug', optionalAuth, ctrl.getBySlug);
 router.post('/', auth, isAdmin, validate(createProposalSchema), ctrl.create);
 router.patch('/:id', auth, isAdmin, validate(updateProposalSchema), ctrl.update);
 router.delete('/:id', auth, isAdmin, ctrl.remove);
+// Deux segments d'URL (/:id/stats) : aucune collision possible avec
+// GET /:slug déclaré plus haut, qui n'en a qu'un.
+router.get('/:id/stats', auth, isAdmin, validateQuery(proposalStatsQuerySchema), ctrl.getStats);
 
 // uploadImage (Multer) DOIT s'exécuter avant le contrôleur : c'est lui
 // qui lit le multipart/form-data et remplit req.file. Pas de validate()

@@ -40,6 +40,7 @@ const Propositions = lazy(() => import('./pages/Propositions.jsx'));
 const PropositionDetail = lazy(() => import('./pages/PropositionDetail.jsx'));
 const AdminPropositions = lazy(() => import('./pages/AdminPropositions.jsx'));
 const AdminPropositionForm = lazy(() => import('./pages/AdminPropositionForm.jsx'));
+const AdminPropositionStats = lazy(() => import('./pages/AdminPropositionStats.jsx'));
 const AdminSurveys = lazy(() => import('./pages/AdminSurveys.jsx'));
 const AdminUsers = lazy(() => import('./pages/AdminUsers.jsx'));
 const AdminSurveyStats = lazy(() => import('./pages/AdminSurveyStats.jsx'));
@@ -125,6 +126,11 @@ export default function App() {
             } />
             <Route path="/admin/propositions/:slug/modifier" element={
               <ProtectedRoute adminOnly><AdminPropositionForm /></ProtectedRoute>
+            } />
+            {/* :id (et non :slug) : même convention que /admin/enquetes/:id/stats —
+                l'endpoint API /proposals/:id/stats travaille sur l'identifiant. */}
+            <Route path="/admin/propositions/:id/stats" element={
+              <ProtectedRoute adminOnly><AdminPropositionStats /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes" element={
               <ProtectedRoute adminOnly><AdminSurveys /></ProtectedRoute>

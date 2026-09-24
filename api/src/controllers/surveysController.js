@@ -15,6 +15,7 @@
 
 import prisma from '../lib/prisma.js';
 import { generateUniqueSlug } from '../lib/slug.js';
+import { MIN_GROUP_SIZE, isTooSmall, maskSmallQuestions } from '../lib/privacy.js';
 
 const VISIBLE_STATUSES = ['OPEN', 'CLOSED'];
 
@@ -703,19 +704,48 @@ export async function getDetailedResults(req, res, next) {
       result.segmentedBy = {
         questionId: segmentQuestion.id,
         questionLabel: segmentQuestion.label,
+        // Renvoyé au client pour qu'il affiche la règle (« groupes de
+        // moins de 5 personnes masqués ») sans la recoder en dur.
+        minGroupSize: MIN_GROUP_SIZE,
         segments: await Promise.all(
           segmentQuestion.options.map(async (option) => {
             const responseIds = responseIdsByOption.get(option.id) || [];
+
+            // Segment trop petit (1 à 4 bulletins) : on dit qu'il
+            // existe, jamais combien il pèse ni ce qu'il a répondu —
+            // voir lib/privacy.js. Aucune requête de résultats lancée.
+            if (isTooSmall(responseIds.length)) {
+              return {
+                optionId: option.id,
+                optionLabel: option.label,
+                masked: true,
+                totalResponses: null,
+                questions: [],
+              };
+            }
+
             // Segment vide (personne n'a choisi cette option) : pas la
             // peine d'interroger la base pour un résultat qui sera de
             // toute façon entièrement à zéro.
-            const segmentResult = responseIds.length
-              ? await computeResults(survey, { detailed: true, responseIds })
-              : { totalResponses: 0, questions: [] };
+            if (responseIds.length === 0) {
+              return { optionId: option.id, optionLabel: option.label, masked: false, totalResponses: 0, questions: [] };
+            }
+
+            // detailed: false → PAS de texte libre brut par segment.
+            // « Un texte + le fait d'être salarié·e de tel quartier »
+            // suffit souvent à reconnaître quelqu'un ; le texte brut
+            // reste consultable dans le résultat GLOBAL, jamais
+            // recoupé avec un profil.
+            const segmentResult = await computeResults(survey, { detailed: false, responseIds });
             return {
               optionId: option.id,
               optionLabel: option.label,
-              ...segmentResult,
+              masked: false,
+              totalResponses: segmentResult.totalResponses,
+              // Deuxième niveau de masquage : une question branchée
+              // peut n'avoir été vue que par 2 personnes d'un segment
+              // pourtant assez grand.
+              questions: maskSmallQuestions(segmentResult.questions),
             };
           }),
         ),
