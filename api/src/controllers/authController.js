@@ -20,9 +20,16 @@ import { sendVerificationEmail, sendResetPasswordEmail, sendTwoFactorCode } from
 // ── POST /auth/register ─────────────────────────────────
 export async function register(req, res, next) {
   try {
-    const { email, password, pseudo, situation, quartier } = req.body;
+    const {
+      email, password, pseudo, situation, quartier, travailleQuartier, travailType,
+    } = req.body;
 
-    // Vérifie si l'email est déjà pris
+    // Vérifie si l'email est déjà pris. Ce n'est qu'un PREMIER filtre,
+    // pour un message clair dans le cas courant : deux inscriptions
+    // simultanées peuvent passer ce contrôle ensemble. C'est alors la
+    // contrainte @unique de la base qui tranche (P2002), traduite en
+    // même 409 EMAIL_TAKEN par errorHandler.js. Idem pour le pseudo,
+    // qu'on ne vérifie même pas ici : la base le fait mieux que nous.
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       const error = new Error('Cette adresse email est déjà utilisée');
@@ -36,10 +43,26 @@ export async function register(req, res, next) {
     // et aux attaques par canaux auxiliaires (Argon2i).
     const passwordHash = await argon2.hash(password);
 
-    // Crée l'utilisateur (emailVerified = false par défaut)
+    // Crée l'utilisateur (emailVerified = false par défaut).
+    //
+    // S5A-02 : travailleQuartier/travailType étaient validés par Zod…
+    // puis silencieusement oubliés ici — le profil « travail » saisi
+    // à l'inscription n'arrivait jamais en base.
+    //
+    // On n'enregistre que les données qui ont un sens ensemble (même
+    // règle que dans le dictionnaire de données, doc 03) :
+    //  - un quartier de résidence, seulement pour AUTRE_QUARTIER
+    //    (le centre et « hors Senlis » n'en ont pas) ;
+    //  - un rôle de travail, seulement s'il y a un quartier de travail.
     const user = await prisma.user.create({
       data: {
-        email, pseudo, passwordHash, situation, quartier,
+        email,
+        pseudo,
+        passwordHash,
+        situation,
+        quartier: situation === 'AUTRE_QUARTIER' ? quartier : null,
+        travailleQuartier: travailleQuartier ?? null,
+        travailType: travailleQuartier ? travailType : null,
       },
     });
 
