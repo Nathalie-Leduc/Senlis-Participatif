@@ -19,8 +19,28 @@ if (!SECRET) {
   throw new Error('JWT_SECRET manquant dans .env — impossible de signer les tokens');
 }
 
+// ── Algorithme épinglé (S5A-01 — OWASP A02/A07) ──────────
+// Un JWT annonce lui-même, dans son en-tête, l'algorithme avec
+// lequel il prétend avoir été signé. Sans liste blanche, c'est le
+// JETON qui choisit comment on le vérifie — la porte ouverte aux
+// attaques de « confusion d'algorithme » (alg: none, ou RS256 vs
+// HS256). On signe et on vérifie donc TOUJOURS en HS256, et rien
+// d'autre n'est accepté.
+//
+// Analogie : le vigile ne demande pas au visiteur « avec quel
+// tampon votre bracelet a-t-il été validé ? » — il ne connaît
+// qu'un seul tampon, le sien.
+const ALGORITHM = 'HS256';
+const SIGN_OPTIONS = { algorithm: ALGORITHM };
+const VERIFY_OPTIONS = { algorithms: [ALGORITHM] };
+
 /**
  * Crée un JWT contenant l'id et le rôle de l'utilisateur.
+ *
+ * ⚠️ Le rôle inscrit ici n'est qu'une INDICATION (utile au client
+ * pour décoder le jeton). Depuis S5A-01, le serveur ne lui fait plus
+ * confiance : le middleware auth relit le rôle en base à chaque
+ * requête — voir middlewares/auth.js.
  * @param {{ id: string, role: string }} user
  * @returns {string} Token signé
  */
@@ -28,7 +48,7 @@ export function signToken(user) {
   return jwt.sign(
     { userId: user.id, role: user.role },
     SECRET,
-    { expiresIn: EXPIRES_IN }
+    { ...SIGN_OPTIONS, expiresIn: EXPIRES_IN }
   );
 }
 
@@ -39,7 +59,7 @@ export function signToken(user) {
  * @throws {Error} Si le token est invalide, expiré ou falsifié
  */
 export function verifyToken(token) {
-  const payload = jwt.verify(token, SECRET);
+  const payload = jwt.verify(token, SECRET, VERIFY_OPTIONS);
 
   // Un jeton de défi 2FA (voir signTwoFactorChallenge) porte un
   // "purpose" — un vrai jeton de session n'en a jamais. Le refuser
@@ -74,7 +94,7 @@ export function signTwoFactorChallenge(user) {
   return jwt.sign(
     { userId: user.id, purpose: 'PENDING_2FA' },
     SECRET,
-    { expiresIn: TWO_FACTOR_CHALLENGE_TTL },
+    { ...SIGN_OPTIONS, expiresIn: TWO_FACTOR_CHALLENGE_TTL },
   );
 }
 
@@ -84,7 +104,7 @@ export function signTwoFactorChallenge(user) {
  * @throws {Error} Si le jeton est invalide, expiré, ou n'est pas un jeton de défi 2FA
  */
 export function verifyTwoFactorChallenge(token) {
-  const payload = jwt.verify(token, SECRET);
+  const payload = jwt.verify(token, SECRET, VERIFY_OPTIONS);
 
   if (payload.purpose !== 'PENDING_2FA') {
     const error = new Error('Jeton de vérification invalide');
@@ -118,7 +138,7 @@ export function signTrustedDeviceToken(user) {
   return jwt.sign(
     { userId: user.id, purpose: 'TRUSTED_DEVICE' },
     SECRET,
-    { expiresIn: TRUSTED_DEVICE_TTL },
+    { ...SIGN_OPTIONS, expiresIn: TRUSTED_DEVICE_TTL },
   );
 }
 
@@ -128,7 +148,7 @@ export function signTrustedDeviceToken(user) {
  * @throws {Error} Si le jeton est invalide, expiré, ou n'est pas un jeton "appareil de confiance"
  */
 export function verifyTrustedDeviceToken(token) {
-  const payload = jwt.verify(token, SECRET);
+  const payload = jwt.verify(token, SECRET, VERIFY_OPTIONS);
 
   if (payload.purpose !== 'TRUSTED_DEVICE') {
     const error = new Error('Jeton invalide');
