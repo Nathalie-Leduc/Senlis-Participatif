@@ -7,6 +7,11 @@ Toutes les évolutions notables du projet sont documentées ici.
 ### Ajouté
 - **Résultats détaillés des propositions** (S5-21) : page admin `/admin/propositions/:id/stats`, répartition des votes selon le profil déclaré des votants (résidence, quartier, lieu et rôle de travail), impression / export PDF — endpoint `GET /api/v1/proposals/:id/stats?segmentBy=…`
 
+### Corrigé
+- **Inscription** (S5A-02) : le quartier et le rôle de travail saisis à l'inscription sont enfin enregistrés (ils étaient validés puis ignorés) ; quartier de résidence conservé seulement pour « autre quartier », rôle seulement avec un quartier de travail
+- **Erreurs traduites** (S5A-02) : pseudo ou email déjà pris → 409 `PSEUDO_TAKEN` / `EMAIL_TAKEN` (y compris pour deux inscriptions simultanées), enregistrement introuvable → 404, image trop lourde → 413 `FILE_TOO_LARGE`, mauvais format → 400 `INVALID_FILE_TYPE`, JSON mal formé → 400 `INVALID_JSON`, trop gros → 413 — au lieu de 500 ; une 500 ne renvoie plus jamais de code interne Prisma
+- **Tests** (S5A-02) : `users.tests.js` renommé en `users.test.js` — ses 11 tests n'avaient jamais été exécutés ; nouveau garde-fou qui échoue si un fichier de `tests/` est mal nommé
+
 ### Sécurité / RGPD
 - **Contrôle d'accès** (S5A-01, OWASP A01) : le rôle et l'existence du compte sont relus en base à chaque requête authentifiée — un admin rétrogradé perd ses droits immédiatement, le jeton d'un compte supprimé est refusé (401) ; algorithme JWT épinglé en HS256
 - **Secret statistique** : tout groupe de 1 à 4 personnes est masqué dans les résultats segmentés (votes et enquêtes), y compris une question branchée vue par trop peu de personnes d'un segment
