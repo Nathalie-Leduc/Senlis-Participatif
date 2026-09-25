@@ -1,0 +1,79 @@
+// ══════════════════════════════════════════════════════════
+// Polices AUTO-HÉBERGÉES — S5A-03 (RGPD / CNIL)
+//
+// Avant : index.html chargeait Fraunces et Public Sans depuis
+// les serveurs de Google Fonts. Chaque visite envoyait donc l'adresse IP du
+// visiteur à Google (États-Unis), sans information ni base légale —
+// pratique sanctionnée en Europe (tribunal de Munich, 2022).
+//
+// Maintenant : les fichiers de police viennent des paquets npm
+// @fontsource-variable/* (licence SIL OFL 1.1, libre). Vite les copie
+// dans dist/assets au build : ils sont servis par NOTRE serveur, comme
+// le logo ou le CSS. Plus aucune requête vers un tiers.
+//
+// Analogie : au lieu d'emprunter chaque matin le dictionnaire de la
+// bibliothèque d'en face (qui note qui vient l'emprunter), on en
+// achète un exemplaire pour notre bureau.
+//
+// Pourquoi écrire les @font-face ici, plutôt qu'importer le CSS
+// fourni par Fontsource ? Fontsource nomme ses polices « Fraunces
+// Variable » et « Public Sans Variable ». En déclarant les nôtres sous
+// les noms HISTORIQUES « Fraunces » et « Public Sans », les 64
+// références existantes (SCSS et styles en ligne des pages) continuent
+// de fonctionner sans en modifier une seule.
+//
+// Deux choix techniques :
+//  - Polices VARIABLES : un seul fichier couvre toutes les graisses
+//    (100 à 900) — 400/600/700/800 pour le texte, 500/700/800 pour
+//    les titres —, là où Google en servait un par graisse. Fraunces
+//    embarque aussi l'axe « opsz » (taille optique) : le navigateur
+//    affine le dessin des lettres selon la taille du texte, comme
+//    le faisait la version Google.
+//  - Sous-ensembles latin + latin-ext seulement (le français est
+//    couvert par latin ; latin-ext pour les noms propres accentués
+//    rares). Grâce à unicode-range, le navigateur ne télécharge un
+//    fichier que si la page contient un caractère de sa plage.
+//
+// ⚠️ Le chemin url('@fontsource-variable/...') est résolu par Vite
+// (comme un import JS) : ne pas le transformer en chemin relatif.
+// ══════════════════════════════════════════════════════════
+
+// Fraunces (titres) — axes graisse + taille optique — sous-ensemble latin-ext
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/fraunces/files/fraunces-latin-ext-opsz-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+// Fraunces (titres) — axes graisse + taille optique — sous-ensemble latin
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/fraunces/files/fraunces-latin-opsz-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+// Public Sans (texte courant) — sous-ensemble latin-ext
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/public-sans/files/public-sans-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+// Public Sans (texte courant) — sous-ensemble latin
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/public-sans/files/public-sans-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}

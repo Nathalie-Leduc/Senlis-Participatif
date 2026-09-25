@@ -1,3 +1,5 @@
+// Polices en premier : les @font-face doivent précéder les règles qui les utilisent
+@use 'fonts';
 @use 'variables' as *;
 @use 'mixins' as *;
 @use 'animations';
