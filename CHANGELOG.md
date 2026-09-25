@@ -8,6 +8,7 @@ Toutes les évolutions notables du projet sont documentées ici.
 - **Résultats détaillés des propositions** (S5-21) : page admin `/admin/propositions/:id/stats`, répartition des votes selon le profil déclaré des votants (résidence, quartier, lieu et rôle de travail), impression / export PDF — endpoint `GET /api/v1/proposals/:id/stats?segmentBy=…`
 
 ### Sécurité / RGPD
+- **Contrôle d'accès** (S5A-01, OWASP A01) : le rôle et l'existence du compte sont relus en base à chaque requête authentifiée — un admin rétrogradé perd ses droits immédiatement, le jeton d'un compte supprimé est refusé (401) ; algorithme JWT épinglé en HS256
 - **Secret statistique** : tout groupe de 1 à 4 personnes est masqué dans les résultats segmentés (votes et enquêtes), y compris une question branchée vue par trop peu de personnes d'un segment
 - Les réponses libres ne sont plus jamais détaillées à l'intérieur d'un segment, ni reproduites dans un document imprimé
 
