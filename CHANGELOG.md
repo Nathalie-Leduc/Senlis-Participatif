@@ -13,6 +13,7 @@ Toutes les évolutions notables du projet sont documentées ici.
 - **Tests** (S5A-02) : `users.tests.js` renommé en `users.test.js` — ses 11 tests n'avaient jamais été exécutés ; nouveau garde-fou qui échoue si un fichier de `tests/` est mal nommé
 
 ### Sécurité / RGPD
+- **Pages légales exactes** (S5A-04) : politique de confidentialité réécrite (bases légales corrigées — plus d'art. 6.1.e —, profil déclaré, destinataires, durées, stockage navigateur réel, droits complets, réclamation CNIL) et mentions légales complètes (hébergeur Clever Cloud, mode éditeur non professionnel LCEN) ; informations centralisées dans `constants/legal.js` ; test de concordance avec le code ; case d'inscription reformulée en « pris connaissance » (information, pas consentement)
 - **Polices auto-hébergées** (S5A-03, CNIL) : Fraunces et Public Sans sont servies par notre serveur (paquets `@fontsource-variable/*`, licence OFL) — plus aucun appel à Google Fonts, donc plus d'adresse IP transmise à Google ; garde-fou de test contre toute réintroduction ; `nodemailer` retiré des dépendances du client (inutilisé)
 - **Contrôle d'accès** (S5A-01, OWASP A01) : le rôle et l'existence du compte sont relus en base à chaque requête authentifiée — un admin rétrogradé perd ses droits immédiatement, le jeton d'un compte supprimé est refusé (401) ; algorithme JWT épinglé en HS256
 - **Secret statistique** : tout groupe de 1 à 4 personnes est masqué dans les résultats segmentés (votes et enquêtes), y compris une question branchée vue par trop peu de personnes d'un segment
