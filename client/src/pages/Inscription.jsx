@@ -59,8 +59,13 @@ export default function Inscription() {
       return;
     }
 
+    // S5A-04 : ce n'est PAS un consentement au sens du RGPD. La base
+    // légale du compte est l'exécution du service (art. 6.1.b) : si
+    // c'était un consentement, le retirer devrait supprimer le compte.
+    // La case atteste seulement que la personne a été INFORMÉE.
+    // (Le nom technique `consent` est gardé pour ne pas toucher au reste.)
     if (!form.consent) {
-      setError("Merci d'accepter la politique de confidentialité pour continuer");
+      setError("Merci de confirmer avoir pris connaissance de la politique de confidentialité");
       return;
     }
 
@@ -269,9 +274,13 @@ export default function Inscription() {
             required style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}
           />
           <span>
-            J'ai lu et j'accepte la{' '}
-            <Link to="/confidentialite" target="_blank" style={{ fontWeight: 600 }}>
+            J'ai pris connaissance de la{' '}
+            {/* Nouvel onglet : le formulaire à moitié rempli n'est pas perdu.
+                Il faut alors le DIRE (RGAA 13.2) — texte réservé aux lecteurs
+                d'écran — et couper le lien avec la page d'origine (rel). */}
+            <Link to="/confidentialite" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
               politique de confidentialité
+              <span className="sr-only"> (s'ouvre dans un nouvel onglet)</span>
             </Link>
           </span>
         </label>
