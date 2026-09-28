@@ -46,7 +46,10 @@ const VERIFY_OPTIONS = { algorithms: [ALGORITHM] };
  */
 export function signToken(user) {
   return jwt.sign(
-    { userId: user.id, role: user.role },
+    // tv = tokenVersion (S5A-06) : numéro de « serrure » du compte au
+    // moment de la connexion. Le middleware auth refuse tout jeton dont
+    // le numéro ne correspond plus (mot de passe changé depuis).
+    { userId: user.id, role: user.role, tv: user.tokenVersion ?? 0 },
     SECRET,
     { ...SIGN_OPTIONS, expiresIn: EXPIRES_IN }
   );

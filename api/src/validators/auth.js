@@ -152,7 +152,14 @@ export const updateProfileSchema = z.object({
   // ex. la personne décoche "je travaille à Senlis" après coup).
   travailleQuartier: travailleQuartier.nullable().optional(),
   travailType: travailType.nullable().optional(),
+  // Exigé par le contrôleur SEULEMENT si l'email change (S5A-06)
+  currentPassword: z.string().optional(),
 }).superRefine(requireQuartierIfAutreQuartier);
+
+// DELETE /auth/me — mot de passe exigé (S5A-06)
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, 'Mot de passe requis pour supprimer le compte'),
+});
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Mot de passe actuel requis'),

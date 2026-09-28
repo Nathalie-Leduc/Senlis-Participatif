@@ -16,6 +16,7 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
 import { saveProposalImage, deleteProposalImage } from '../lib/imageProcessing.js';
 import { MIN_GROUP_SIZE, isTooSmall } from '../lib/privacy.js';
@@ -260,6 +261,14 @@ export async function create(req, res, next) {
       },
     });
 
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.PROPOSAL_CREATED,
+      targetType: 'Proposal',
+      targetId: proposal.id,
+      details: { title: proposal.title, status: proposal.status },
+    });
+
     res.status(201).json({ proposal });
   } catch (err) {
     next(err);
@@ -284,6 +293,23 @@ export async function update(req, res, next) {
     const proposal = await prisma.proposal.update({
       where: { id },
       data: { ...req.body, ...(publishedAt !== undefined && { publishedAt }) },
+    });
+
+    // Seulement les NOMS des champs modifiés (pas leur contenu) : le
+    // journal dit « le statut et le résumé ont changé », sans recopier
+    // tout l'argumentaire à chaque édition.
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.PROPOSAL_UPDATED,
+      targetType: 'Proposal',
+      targetId: id,
+      details: {
+        title: proposal.title,
+        fields: Object.keys(req.body),
+        ...(req.body.status && req.body.status !== existing.status && {
+          status: { from: existing.status, to: req.body.status },
+        }),
+      },
     });
 
     res.json({ proposal });
@@ -337,6 +363,14 @@ export async function uploadImageHandler(req, res, next) {
       data: { imagePath },
     });
 
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.PROPOSAL_IMAGE_UPLOADED,
+      targetType: 'Proposal',
+      targetId: id,
+      details: { title: proposal.title },
+    });
+
     res.json({ proposal });
   } catch (err) {
     next(err);
@@ -367,6 +401,16 @@ export async function remove(req, res, next) {
     if (existing.imagePath) {
       await deleteProposalImage(existing.imagePath);
     }
+
+    // Le titre est recopié : une fois la proposition supprimée, l'id
+    // seul ne permettrait plus de savoir de laquelle il s'agissait.
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.PROPOSAL_DELETED,
+      targetType: 'Proposal',
+      targetId: id,
+      details: { title: existing.title },
+    });
 
     res.status(204).end();
   } catch (err) {

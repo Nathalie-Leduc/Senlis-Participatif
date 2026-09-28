@@ -142,6 +142,7 @@ export const RETENTION = [
   { data: 'Liens reçus par email (vérification, mot de passe)', duration: 'Valables 1 heure, à usage unique, puis effacés sous 24 heures' },
   { data: 'Code de connexion administrateur', duration: 'Valable 10 minutes, à usage unique, puis effacé sous 24 heures' },
   { data: 'Journaux techniques du serveur (adresse IP, page demandée)', duration: '1 an au plus, pour la sécurité du service' },
+  { data: 'Journal des actions d’administration (comptes administrateurs uniquement)', duration: '6 mois' },
 ];
 
 export const CNIL = {

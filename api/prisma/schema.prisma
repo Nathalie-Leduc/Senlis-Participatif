@@ -205,11 +205,20 @@ model User {
   // suivante : se reconnecter, c'est répondre « je suis toujours là ».
   inactivityWarnedAt DateTime?
 
+  // ── Révocation des sessions (S5A-06) ─────────────────────────
+  // Recopié dans chaque JWT à la connexion (champ `tv`). Changer ou
+  // réinitialiser son mot de passe l'incrémente : tous les jetons
+  // émis AVANT portent l'ancien numéro, et le middleware auth les
+  // refuse. Analogie : changer la serrure — toutes les anciennes
+  // clés cessent d'ouvrir d'un coup, sans avoir à les récupérer.
+  tokenVersion Int @default(0)
+
   proposals Proposal[]
   votes     Vote[]
   responses SurveyResponse[]
   comments  Comment[]   // Lot 2
   tokens    AuthToken[]
+  adminActions AdminAuditLog[] // actions d'administration effectuées (S5A-06)
 }
 
 model Proposal {
@@ -466,9 +475,52 @@ model AuthToken {
   type      TokenType
   expiresAt DateTime  // typiquement 1 h — un jeton qui traîne est une porte ouverte
   usedAt    DateTime? // usage unique : consommé = définitivement inutilisable
+  // Essais ratés sur un code 2FA (S5A-06) : au 5e, le code est
+  // invalidé — il faut se reconnecter pour en recevoir un nouveau.
+  attempts  Int       @default(0)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+}
+
+// ══════════════════════════════════════════════════════════
+// Journal des actions d'administration (S5A-06 — ANSSI, CNIL)
+//
+// Qui a fait quoi, sur quoi, et quand : imputabilité des actions
+// sensibles (changer un rôle, publier ou supprimer une proposition,
+// modifier une enquête…). En cas de litige ou d'incident, on peut
+// répondre à « qui a supprimé cette proposition ? ».
+//
+// Analogie : le registre d'une mairie où chaque acte est signé et
+// daté — on ne réécrit pas le registre, on y ajoute des lignes.
+//
+// Conservé 6 mois (purge : services/retention.js), puis effacé.
+// Ne contient JAMAIS de mot de passe, de jeton, ni de contenu
+// citoyen (vote, réponse) : seulement des actions d'administrateurs.
+// ══════════════════════════════════════════════════════════
+model AdminAuditLog {
+  id String @id @default(uuid())
+
+  // Code de l'action, ex. "USER_ROLE_CHANGED", "PROPOSAL_DELETED"
+  action String
+
+  // SetNull : si le compte admin est supprimé, la ligne du journal
+  // reste (l'historique ne doit pas disparaître avec son auteur)…
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  // …et le pseudo, recopié au moment de l'action, dit encore qui c'était.
+  actorPseudo String
+
+  // Sur quoi portait l'action (ex. "Proposal" + son id)
+  targetType String?
+  targetId   String?
+  // Détails utiles, sans donnée superflue (ex. { from: "ADMIN", to: "CITIZEN" })
+  details    Json?
+
+  createdAt DateTime @default(now())
+
+  // Les consultations et la purge filtrent toujours par date
+  @@index([createdAt])
 }

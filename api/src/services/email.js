@@ -26,6 +26,18 @@ const transporter = nodemailer.createTransport({
 });
 
 /**
+ * Adresse masquée pour les journaux du serveur (S5A-06, minimisation) :
+ * « nathalie@exemple.fr » → « n***@exemple.fr ». Assez pour diagnostiquer
+ * (« l'envoi vers le domaine exemple.fr échoue »), sans stocker l'adresse
+ * complète dans des logs que l'hébergeur conserve jusqu'à un an.
+ */
+export function maskEmail(address) {
+  const [local, domain] = String(address).split('@');
+  if (!domain) return '***';
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+
+/**
  * Envoie un email. Ne lève JAMAIS d'erreur (un email raté ne doit pas
  * faire échouer une inscription), mais renvoie désormais le résultat :
  * true si le serveur SMTP a accepté le message, false sinon.
@@ -45,10 +57,10 @@ async function sendEmail({ to, subject, html }) {
       subject,
       html,
     });
-    console.log(`📧 Email envoyé à ${to} (${info.messageId})`);
+    console.log(`📧 Email envoyé à ${maskEmail(to)} (${info.messageId})`);
     return true;
   } catch (err) {
-    console.error(`❌ Échec envoi email à ${to}:`, err.message);
+    console.error(`❌ Échec envoi email à ${maskEmail(to)}:`, err.message);
     // On ne bloque pas l'inscription si l'email échoue,
     // mais on logue l'erreur pour investigation
     return false;

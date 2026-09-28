@@ -14,6 +14,7 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
 import { MIN_GROUP_SIZE, isTooSmall, maskSmallQuestions } from '../lib/privacy.js';
 
@@ -243,6 +244,14 @@ export async function create(req, res, next) {
       return tx.survey.findUnique({ where: { id: created.id }, include: QUESTIONS_INCLUDE });
     });
 
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.SURVEY_CREATED,
+      targetType: 'Survey',
+      targetId: survey.id,
+      details: { title: survey.title, status: survey.status },
+    });
+
     res.status(201).json({ survey });
   } catch (err) {
     next(err);
@@ -356,6 +365,25 @@ export async function update(req, res, next) {
       return tx.survey.findUnique({ where: { id }, include: QUESTIONS_INCLUDE });
     });
 
+    // Noms des champs modifiés + les changements qui comptent le plus
+    // pour la suite : statut (ouvrir / clore) et publication des résultats.
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.SURVEY_UPDATED,
+      targetType: 'Survey',
+      targetId: id,
+      details: {
+        title: survey.title,
+        fields: Object.keys(req.body),
+        ...(req.body.status && req.body.status !== existing.status && {
+          status: { from: existing.status, to: req.body.status },
+        }),
+        ...(req.body.resultsPublished !== undefined && req.body.resultsPublished !== existing.resultsPublished && {
+          resultsPublished: req.body.resultsPublished,
+        }),
+      },
+    });
+
     res.json({ survey });
   } catch (err) {
     next(err);
@@ -389,6 +417,14 @@ export async function remove(req, res, next) {
     }
 
     await prisma.survey.delete({ where: { id } });
+
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.SURVEY_DELETED,
+      targetType: 'Survey',
+      targetId: id,
+      details: { title: existing.title },
+    });
 
     res.status(204).end();
   } catch (err) {

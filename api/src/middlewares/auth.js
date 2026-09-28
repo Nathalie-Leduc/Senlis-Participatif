@@ -34,20 +34,31 @@ import prisma from '../lib/prisma.js';
 /**
  * Retrouve le compte désigné par un JWT, avec ses droits ACTUELS.
  * @param {string} token
- * @returns {Promise<{ userId: string, role: string, emailVerified: boolean } | null>}
- *   null si le compte n'existe plus (supprimé depuis la connexion)
+ * @returns {Promise<
+ *   { status: 'ok', user: { userId: string, role: string, emailVerified: boolean } }
+ *   | { status: 'missing' }   compte supprimé depuis la connexion
+ *   | { status: 'revoked' }   mot de passe changé depuis (S5A-06)
+ * >}
  * @throws {Error} si le jeton est invalide, expiré ou falsifié
  */
 async function loadCurrentUser(token) {
   const payload = verifyToken(token);
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, role: true, emailVerified: true },
+    select: { id: true, role: true, emailVerified: true, tokenVersion: true },
   });
-  if (!user) return null;
+  if (!user) return { status: 'missing' };
+  // S5A-06 : la « serrure » du compte a changé depuis l'émission du
+  // jeton (mot de passe changé ou réinitialisé) → jeton révoqué.
+  // `?? 0` : les jetons émis avant S5A-06 n'ont pas de champ tv, et
+  // restent valides tant que le compte n'a pas changé de mot de passe.
+  if ((payload.tv ?? 0) !== user.tokenVersion) return { status: 'revoked' };
   // On ne garde du jeton que l'identité (userId) ; le rôle et la
   // vérification de l'email viennent de la base, jamais du jeton.
-  return { userId: user.id, role: user.role, emailVerified: user.emailVerified };
+  return {
+    status: 'ok',
+    user: { userId: user.id, role: user.role, emailVerified: user.emailVerified },
+  };
 }
 
 /**
@@ -63,10 +74,10 @@ export async function auth(req, _res, next) {
     return next(error);
   }
 
-  let currentUser;
+  let result;
   try {
     const token = header.slice(7); // enlève "Bearer "
-    currentUser = await loadCurrentUser(token);
+    result = await loadCurrentUser(token);
   } catch (err) {
     // Une erreur de BASE (Postgres injoignable…) n'est pas une
     // erreur d'authentification : on la laisse remonter telle
@@ -85,7 +96,7 @@ export async function auth(req, _res, next) {
     return next(error);
   }
 
-  if (!currentUser) {
+  if (result.status === 'missing') {
     // Jeton authentique… pour un compte qui n'existe plus.
     const error = new Error('Ce compte n\'existe plus — reconnectez-vous');
     error.status = 401;
@@ -93,9 +104,18 @@ export async function auth(req, _res, next) {
     return next(error);
   }
 
+  if (result.status === 'revoked') {
+    // Code distinct : le client peut expliquer POURQUOI la session a
+    // pris fin, plutôt qu'un « session expirée » déroutant.
+    const error = new Error('Votre mot de passe a été modifié — reconnectez-vous');
+    error.status = 401;
+    error.code = 'SESSION_REVOKED';
+    return next(error);
+  }
+
   // req.user est maintenant disponible dans tous les
   // contrôleurs et middlewares suivants de la chaîne
-  req.user = currentUser;
+  req.user = result.user;
   next();
 }
 
@@ -128,8 +148,10 @@ export async function optionalAuth(req, _res, next) {
     // Même relecture en base que auth() : sinon un admin rétrogradé
     // continuerait de voir les BROUILLONS via les routes publiques
     // (GET /proposals/:slug, /surveys/:slug), qui testent
-    // req.user?.role === 'ADMIN'. Compte supprimé → null → anonyme.
-    req.user = (await loadCurrentUser(header.slice(7))) || undefined;
+    // req.user?.role === 'ADMIN'. Compte supprimé → anonyme.
+    // Jeton révoqué (S5A-06) → anonyme également.
+    const result = await loadCurrentUser(header.slice(7));
+    req.user = result.status === 'ok' ? result.user : undefined;
   } catch (err) {
     if (!['TokenExpiredError', 'JsonWebTokenError', 'NotBeforeError'].includes(err.name)) {
       return next(err); // vraie panne (base), pas un souci de session

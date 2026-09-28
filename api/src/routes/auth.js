@@ -20,6 +20,7 @@ import {
   updateProfileSchema,
   changePasswordSchema,
   verifyTwoFactorSchema,
+  deleteAccountSchema,
 } from '../validators/auth.js';
 
 const router = Router();
@@ -44,9 +45,11 @@ router.post('/login', authLimiter, validate(loginSchema), ctrl.login);
 // tentative de connexion, donc exposée au même risque de bruteforce
 // (deviner le code à 6 chiffres plutôt que le mot de passe).
 router.post('/2fa/verify', authLimiter, validate(verifyTwoFactorSchema), ctrl.verifyTwoFactor);
-router.post('/verify-email', validate(verifyEmailSchema), ctrl.verifyEmail);
+// authLimiter ajouté en S5A-06 : les jetons (256 bits) sont impossibles
+// à deviner, mais aucune route d'authentification ne doit rester sans frein.
+router.post('/verify-email', authLimiter, validate(verifyEmailSchema), ctrl.verifyEmail);
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), ctrl.forgotPassword);
-router.post('/reset-password', validate(resetPasswordSchema), ctrl.resetPassword);
+router.post('/reset-password', authLimiter, validate(resetPasswordSchema), ctrl.resetPassword);
 
 // ── Routes protégées (🔐) ───────────────────────────────
 
@@ -55,6 +58,6 @@ router.get('/me', auth, ctrl.me);
 router.get('/me/export', auth, ctrl.exportMyData);
 router.patch('/me', auth, validate(updateProfileSchema), ctrl.updateProfile);
 router.put('/me/password', auth, validate(changePasswordSchema), ctrl.changePassword);
-router.delete('/me', auth, ctrl.deleteAccount);
+router.delete('/me', auth, validate(deleteAccountSchema), ctrl.deleteAccount);
 
 export default router;

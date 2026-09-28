@@ -9,6 +9,7 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 
 const LIST_SELECT = {
   id: true,
@@ -80,10 +81,24 @@ export async function updateRole(req, res, next) {
       throw error;
     }
 
+    // Rôle AVANT le changement, pour le journal (« de ADMIN à CITIZEN »)
+    const before = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+
     const user = await prisma.user.update({
       where: { id },
       data: { role },
       select: LIST_SELECT,
+    });
+
+    // S5A-06 : action la plus sensible de toutes — elle donne ou
+    // retire les pleins pouvoirs. Journalisée même si le rôle ne
+    // change pas réellement (une tentative de promotion reste un fait).
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.USER_ROLE_CHANGED,
+      targetType: 'User',
+      targetId: id,
+      details: { from: before?.role ?? null, to: role },
     });
 
     res.json({ user });

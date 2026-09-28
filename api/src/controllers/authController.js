@@ -16,6 +16,44 @@ import {
   createToken, verifyAndConsumeToken, createTwoFactorCode, verifyTwoFactorCode,
 } from '../services/token.js';
 import { sendVerificationEmail, sendResetPasswordEmail, sendTwoFactorCode } from '../services/email.js';
+import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
+
+// ── Outils communs (S5A-06) ─────────────────────────────
+
+/**
+ * Empreinte Argon2 « bidon », calculée une seule fois à la première
+ * utilisation. Sert à égaliser les temps de réponse du login : sans
+ * elle, un email INCONNU répondait en quelques millisecondes (pas de
+ * hachage), un email CONNU en ~100 ms (Argon2) — un chronomètre
+ * suffisait à savoir si une adresse est inscrite (énumération).
+ *
+ * Analogie : le guichetier qui fait semblant de chercher dans ses
+ * dossiers même quand le nom n'y est pas — pour que la durée de
+ * l'attente ne révèle rien.
+ */
+let dummyHashPromise;
+function getDummyHash() {
+  dummyHashPromise ??= argon2.hash('pas-un-vrai-mot-de-passe-' + Math.random());
+  return dummyHashPromise;
+}
+
+/**
+ * Vérifie le mot de passe ACTUEL avant une action sensible
+ * (changer d'email, supprimer son compte). Recommandation OWASP :
+ * une session volée — ordinateur resté ouvert, jeton dérobé — ne
+ * doit pas suffire à prendre ou à détruire le compte.
+ *
+ * @throws {Error} 401 INVALID_CREDENTIALS si le mot de passe est faux ou absent
+ */
+async function assertCurrentPassword(user, password) {
+  const valid = password ? await argon2.verify(user.passwordHash, password) : false;
+  if (!valid) {
+    const error = new Error('Mot de passe actuel incorrect');
+    error.status = 401;
+    error.code = 'INVALID_CREDENTIALS';
+    throw error;
+  }
+}
 
 // ── POST /auth/register ─────────────────────────────────
 export async function register(req, res, next) {
@@ -106,11 +144,15 @@ export async function verifyEmail(req, res, next) {
 // (un admin qui s'arrête au mot de passe n'est pas « connecté »).
 // Remet aussi à zéro un éventuel avertissement d'inactivité : se
 // reconnecter, c'est répondre « je suis toujours là ».
-async function recordLogin(userId) {
+// S5A-06 : une connexion ADMIN est en plus inscrite au journal.
+async function recordLogin(user) {
   await prisma.user.update({
-    where: { id: userId },
+    where: { id: user.id },
     data: { lastLoginAt: new Date(), inactivityWarnedAt: null },
   });
+  if (user.role === 'ADMIN') {
+    await logAdminAction({ actorId: user.id, action: AUDIT_ACTIONS.ADMIN_LOGIN });
+  }
 }
 
 // ── POST /auth/login ────────────────────────────────────
@@ -129,7 +171,11 @@ export async function login(req, res, next) {
       return e;
     };
 
-    if (!user) throw genericError();
+    if (!user) {
+      // Même travail que pour un vrai compte, puis même refus
+      await argon2.verify(await getDummyHash(), password);
+      throw genericError();
+    }
 
     // Vérifie le mot de passe avec Argon2
     const valid = await argon2.verify(user.passwordHash, password);
@@ -181,7 +227,7 @@ export async function login(req, res, next) {
     }
 
     // Tout est bon → JWT
-    await recordLogin(user.id);
+    await recordLogin(user);
     const jwt = signToken(user);
 
     res.json({
@@ -235,7 +281,7 @@ export async function verifyTwoFactor(req, res, next) {
       throw error;
     }
 
-    await recordLogin(user.id);
+    await recordLogin(user);
     const jwt = signToken(user);
     // Émis EN PLUS du jeton de session, jamais à sa place — voir le
     // commentaire dans login() pour ce qu'il permet exactement (sauter
@@ -404,8 +450,20 @@ export async function exportMyData(req, res, next) {
 // ── PATCH /auth/me ──────────────────────────────────────
 export async function updateProfile(req, res, next) {
   try {
-    const { pseudo, email, situation, quartier, travailleQuartier, travailType } = req.body;
+    const {
+      pseudo, situation, quartier, travailleQuartier, travailType, currentPassword,
+    } = req.body;
     const userId = req.user.userId;
+
+    // S5A-06 : changer d'email exige le mot de passe actuel. Sinon,
+    // une session volée suffirait à détourner le compte : l'attaquant
+    // mettrait SON adresse, puis ferait « mot de passe oublié ».
+    // Un email identique à l'actuel n'est pas un changement → ignoré.
+    const current = await prisma.user.findUnique({ where: { id: userId } });
+    const email = req.body.email && req.body.email !== current.email ? req.body.email : undefined;
+    if (email) {
+      await assertCurrentPassword(current, currentPassword);
+    }
 
     // Si l'email change, vérifier qu'il n'est pas déjà pris
     if (email) {
@@ -493,12 +551,20 @@ export async function changePassword(req, res, next) {
     }
 
     const passwordHash = await argon2.hash(newPassword);
-    await prisma.user.update({
+    // S5A-06 : tokenVersion + 1 = toutes les sessions ouvertes
+    // AILLEURS sont révoquées (si on change son mot de passe, c'est
+    // souvent qu'on le croit compromis : les sessions de l'intrus
+    // doivent tomber avec). On renvoie un NOUVEAU jeton pour que la
+    // session actuelle, elle, continue sans reconnexion.
+    const updated = await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
     });
 
-    res.json({ message: 'Mot de passe modifié avec succès.' });
+    res.json({
+      message: 'Mot de passe modifié avec succès. Vos autres sessions ont été déconnectées.',
+      token: signToken(updated),
+    });
   } catch (err) {
     next(err);
   }
@@ -535,9 +601,12 @@ export async function resetPassword(req, res, next) {
     const authToken = await verifyAndConsumeToken(token, 'RESET_PASSWORD');
 
     const passwordHash = await argon2.hash(password);
+    // S5A-06 : réinitialiser = toutes les sessions existantes sont
+    // révoquées, sans exception (la personne n'est connectée nulle
+    // part de légitime : elle avait perdu son mot de passe).
     await prisma.user.update({
       where: { id: authToken.userId },
-      data: { passwordHash },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
     });
 
     res.json({ message: 'Mot de passe réinitialisé avec succès ! Vous pouvez vous connecter.' });
@@ -551,6 +620,11 @@ export async function resetPassword(req, res, next) {
 export async function deleteAccount(req, res, next) {
   try {
     const userId = req.user.userId;
+
+    // S5A-06 : action irréversible → mot de passe exigé (un ordinateur
+    // resté ouvert ne doit pas suffire à effacer un compte).
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    await assertCurrentPassword(user, req.body?.password);
 
     // La suppression cascade les votes (onDelete: Cascade)
     // et anonymise les réponses d'enquête (onDelete: SetNull)
