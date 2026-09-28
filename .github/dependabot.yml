@@ -1,0 +1,31 @@
+# ══════════════════════════════════════════════════════════
+# Dependabot (S5A-08) — mises à jour de sécurité automatiques
+#
+# Chaque lundi, GitHub vérifie si une version plus récente (ou
+# corrigeant une faille) existe pour nos dépendances, et ouvre une PR
+# vers `dev`. La CI la teste comme n'importe quelle autre PR : on
+# merge seulement si tout est vert.
+# ══════════════════════════════════════════════════════════
+
+version: 2
+updates:
+  # Dépendances npm (un seul lockfile, à la racine du monorepo)
+  - package-ecosystem: npm
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    # Regroupe les mises à jour mineures/correctives en UNE seule PR
+    # plutôt qu'une PR par paquet (évite la noyade sous les PR)
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+
+  # Les actions GitHub utilisées par la CI (actions/checkout…)
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: monthly

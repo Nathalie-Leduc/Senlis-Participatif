@@ -14,7 +14,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { api } from '../services/api.js';
+import { api, assetUrl } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
@@ -78,7 +78,7 @@ export default function AdminPropositionForm() {
         // p.imagePath est déjà un chemin exploitable tel quel par un
         // <img src="..."> (voir le proxy Vite /uploads) — pas de
         // conversion nécessaire, contrairement au geoJson.
-        if (p.imagePath) setImagePreview(p.imagePath);
+        if (p.imagePath) setImagePreview(assetUrl(p.imagePath));
       })
       .catch((err) => setError(err.message || 'Impossible de charger cette proposition'))
       .finally(() => setLoading(false));

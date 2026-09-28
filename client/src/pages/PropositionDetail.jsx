@@ -20,7 +20,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
-import { api } from '../services/api.js';
+import { api, assetUrl } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import VoteButtons from '../components/VoteButtons/VoteButtons.jsx';
 import Confetti from '../components/Confetti/Confetti.jsx';
@@ -186,7 +186,7 @@ export default function PropositionDetail() {
           (voir ProposalCard.jsx). */}
       {proposal.imagePath && (
         <img
-          src={proposal.imagePath}
+          src={assetUrl(proposal.imagePath)}
           alt={proposal.title}
           style={{
             width: '100%', maxHeight: 360, objectFit: 'cover',

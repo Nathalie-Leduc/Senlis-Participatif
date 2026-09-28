@@ -1,7 +1,12 @@
 # ══════════════════════════════════════════════════════════════
-# Senlis Participatif — docker-compose.yml
-# Lance PostgreSQL + l'API en un seul `docker compose up`.
+# Senlis Participatif — docker-compose.yml (DÉVELOPPEMENT)
+#
+#   docker compose up -d postgres   → la base seule (usage courant :
+#                                     l'API tourne avec `npm run dev`)
+#   docker compose up -d            → la base + l'API en conteneur
+#
 # Le client React tourne via `npm run dev` hors Docker (Vite HMR).
+# La production (Clever Cloud) n'utilise pas ce fichier.
 # ══════════════════════════════════════════════════════════════
 
 services:
@@ -11,7 +16,11 @@ services:
     container_name: senlis-db
     restart: unless-stopped
     ports:
-      - '5432:5432'
+      # 127.0.0.1 : la base n'écoute QUE sur ta machine (S5A-08).
+      # Sans ce préfixe, Docker l'ouvre sur toutes les interfaces
+      # réseau : n'importe qui sur le même Wi-Fi (école, café…)
+      # pouvait tenter de s'y connecter avec ce mot de passe de dev.
+      - '127.0.0.1:5432:5432'
     environment:
       POSTGRES_USER: senlis
       POSTGRES_PASSWORD: senlis_dev_password
@@ -28,23 +37,33 @@ services:
   # ── API Express ──────────────────────────────────────────────
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      # Contexte = racine : le lockfile unique du monorepo y vit
+      context: .
+      dockerfile: api/Dockerfile
     container_name: senlis-api
     restart: unless-stopped
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
+    # Même .env que `npm run dev` (JWT_SECRET, SMTP Mailtrap…) : sans
+    # lui, validateEnv.js refusait de démarrer (JWT_SECRET manquant).
+    env_file: ./api/.env
     environment:
+      # …sauf l'adresse de la base : dans Docker, « localhost » désigne
+      # le conteneur de l'API lui-même — la base s'appelle « postgres ».
       DATABASE_URL: postgresql://senlis:senlis_dev_password@postgres:5432/senlis_participatif
-      PORT: 3000
       NODE_ENV: development
     depends_on:
       postgres:
         condition: service_healthy
-    # En dev, on monte le code source pour le rechargement auto
     volumes:
-      - ./api/src:/app/src
-      - ./api/prisma:/app/prisma
+      # Code monté pour voir ses modifications sans reconstruire l'image
+      # (redémarrer le conteneur : docker compose restart api)
+      - ./api/src:/app/api/src
+      # …sauf le client Prisma généré DANS l'image, que le montage
+      # ci-dessus masquerait sinon (volume anonyme = « garde celui de l'image »)
+      - /app/api/src/generated
+      - uploads:/app/api/uploads
 
 volumes:
   pgdata:
+  uploads:

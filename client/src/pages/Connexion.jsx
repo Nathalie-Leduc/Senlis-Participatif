@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import FormError, { errorProps } from '../components/FormError/FormError.jsx';
+import { safeRedirectPath } from '../utils/safeRedirect.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function Connexion() {
@@ -38,7 +39,8 @@ export default function Connexion() {
   // un site externe après connexion.
   const redirectAfterLogin = () => {
     const redirect = searchParams.get('redirect');
-    navigate(redirect && redirect.startsWith('/') ? redirect : '/');
+    // safeRedirectPath refuse aussi « //autre-site.fr » (S5A-08)
+    navigate(safeRedirectPath(redirect));
   };
 
   const handleSubmit = async (e) => {
