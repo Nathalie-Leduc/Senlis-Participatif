@@ -23,14 +23,14 @@ import { Link } from 'react-router-dom';
 import {
   SITE, EDITOR, CONTACT_EMAIL, LAST_UPDATED, RECIPIENTS, BROWSER_STORAGE, RETENTION, CNIL,
 } from '../constants/legal.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function PolitiqueConfidentialite() {
+  usePageTitle('Politique de confidentialité');
   const mailto = <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>;
 
   return (
     <div className="wrap" style={{ padding: '40px 20px 60px', maxWidth: 760, margin: '0 auto' }}>
-      {/* Titre de l'onglet (RGAA 8.6) — React 19 le place dans le <head> */}
-      <title>{`Politique de confidentialité — ${SITE.name}`}</title>
 
       <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 30, marginBottom: 8 }}>
         Politique de confidentialité

@@ -2,10 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import { SITUATION_SHORT_LABELS } from '../constants/situation.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function AdminSurveyStats() {
   const { id } = useParams();
   const [results, setResults] = useState(null);
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(results ? `Résultats détaillés — ${results.survey.title}` : 'Résultats détaillés');
   const [segmentBy, setSegmentBy] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

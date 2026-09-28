@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const STATUS_FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -19,6 +20,7 @@ const STATUS_FILTERS = [
 ];
 
 export default function Enquetes() {
+  usePageTitle('Enquêtes');
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -86,7 +88,7 @@ export default function Enquetes() {
         </div>
 
         {error && (
-          <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+          <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
             {error}
           </div>
         )}

@@ -18,11 +18,12 @@
 // par question).
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Confetti from '../components/Confetti/Confetti.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 // Une réponse est-elle "remplie" pour CETTE question ? Dépend du
 // type — un CHOIX_MULTIPLE vide (aucune case cochée) n'est pas
@@ -60,6 +61,8 @@ export default function EnqueteRepondre() {
   const { user } = useAuth();
 
   const [survey, setSurvey] = useState(null);
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(survey ? `Répondre — ${survey.title}` : 'Répondre à l’enquête');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [answers, setAnswers] = useState({}); // { [questionId]: {optionId|optionIds|valueNumber|valueText} }
@@ -73,6 +76,21 @@ export default function EnqueteRepondre() {
   // avançant dans le parcours.
   const [overrideCurrentQuestion, setOverrideCurrentQuestion] = useState(false);
   useEffect(() => setOverrideCurrentQuestion(false), [step]);
+
+  // S5A-07 : passer à la question suivante ne change pas de page, mais
+  // pour un lecteur d'écran, rien ne se passerait. On place donc le
+  // focus sur l'intitulé de la nouvelle question, qui est lu aussitôt
+  // (« Question 2 sur 5 » y est inclus). Pas au premier affichage :
+  // là, c'est le changement de page qui s'en occupe (routeAnnouncer).
+  const questionHeadingRef = useRef(null);
+  const isFirstStepRender = useRef(true);
+  useEffect(() => {
+    if (isFirstStepRender.current) {
+      isFirstStepRender.current = false;
+      return;
+    }
+    questionHeadingRef.current?.focus();
+  }, [step]);
 
   useEffect(() => {
     setLoading(true);
@@ -264,14 +282,21 @@ export default function EnqueteRepondre() {
       </div>
 
       {error && (
-        <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
           {error}
         </div>
       )}
 
       {/* ── La question courante ─────────────────────────── */}
       <div className="card-joyful" style={{ padding: 24, marginTop: 14 }}>
-        <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, marginBottom: 6 }}>
+        {/* id : étiquette des champs de réponse (aria-labelledby) —
+            sans elle, un champ texte ou nombre n'avait AUCUN nom pour
+            un lecteur d'écran (RGAA 11.1). */}
+        <h2
+          id="question-label" ref={questionHeadingRef} tabIndex={-1}
+          style={{ fontFamily: "'Fraunces', serif", fontSize: 22, marginBottom: 6 }}
+        >
+          <span className="sr-only">Question {step + 1} sur {total} : </span>
           {question.label}
           {!question.required && (
             <span style={{ fontWeight: 400, fontSize: 14, color: '#6B6257' }}> (optionnel)</span>
@@ -328,6 +353,7 @@ export default function EnqueteRepondre() {
               question={question}
               answer={answer}
               onChange={(value) => setAnswer(question.id, value)}
+              labelledBy="question-label"
             />
           );
         })()}
@@ -345,10 +371,18 @@ export default function EnqueteRepondre() {
         <button
           type="button" onClick={handleNext} disabled={!canAdvance || submitting}
           className="btn btn-primary"
+          aria-describedby={!canAdvance ? 'required-hint' : undefined}
         >
           {submitting ? 'Envoi…' : (isLast ? 'Terminer' : 'Suivant →')}
         </button>
       </div>
+      {/* Un bouton désactivé SANS explication laisse la personne
+          cliquer dans le vide (RGAA 11.10) : on dit pourquoi. */}
+      {!canAdvance && (
+        <p id="required-hint" style={{ color: '#6B6257', fontSize: 14, marginTop: 10, textAlign: 'right' }}>
+          Une réponse est nécessaire pour continuer.
+        </p>
+      )}
     </div>
   );
 }
@@ -357,12 +391,14 @@ export default function EnqueteRepondre() {
 // Un seul composant qui bascule sur question.type plutôt que 5
 // fichiers séparés : chaque branche est courte, et voir les 5 types
 // côte à côte aide à vérifier qu'aucun n'a été oublié.
-function QuestionInput({ question, answer, onChange }) {
+function QuestionInput({ question, answer, onChange, labelledBy }) {
+  // Étiquette + caractère obligatoire, communs à tous les types de champ
+  const a11y = { 'aria-labelledby': labelledBy, 'aria-required': question.required || undefined };
   switch (question.type) {
     case 'CHOIX_UNIQUE':
     case 'OUI_NON':
       return (
-        <div role="radiogroup" aria-label={question.label} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div role="radiogroup" {...a11y} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {question.options.map((option) => {
             const active = answer?.optionId === option.id;
             return (
@@ -387,7 +423,7 @@ function QuestionInput({ question, answer, onChange }) {
         onChange({ optionIds: next });
       };
       return (
-        <div role="group" aria-label={question.label} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div role="group" aria-labelledby={labelledBy} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {question.options.map((option) => {
             const active = selected.includes(option.id);
             return (
@@ -408,6 +444,7 @@ function QuestionInput({ question, answer, onChange }) {
       return (
         <input
           type="number"
+          {...a11y}
           value={answer?.valueNumber ?? ''}
           onChange={(e) => onChange({
             valueNumber: e.target.value === '' ? undefined : Number(e.target.value),
@@ -422,11 +459,13 @@ function QuestionInput({ question, answer, onChange }) {
           <VilleAutocompleteInput
             value={answer?.valueText || ''}
             onChange={(valueText) => onChange({ valueText })}
+            a11y={a11y}
           />
         );
       }
       return (
         <textarea
+          {...a11y}
           value={answer?.valueText || ''}
           onChange={(e) => onChange({ valueText: e.target.value })}
           rows={4}
@@ -446,7 +485,7 @@ function QuestionInput({ question, answer, onChange }) {
 // si l'API est indisponible ou que la ville cherchée n'apparaît pas
 // dans les suggestions, la personne peut toujours taper librement,
 // rien ne bloque la saisie.
-function VilleAutocompleteInput({ value, onChange }) {
+function VilleAutocompleteInput({ value, onChange, a11y }) {
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
 
@@ -474,6 +513,7 @@ function VilleAutocompleteInput({ value, onChange }) {
     <div style={{ position: 'relative' }}>
       <input
         type="text"
+        {...a11y}
         value={value}
         onChange={(e) => { onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}

@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/proposalStatus.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -27,6 +28,7 @@ const FILTERS = [
 ];
 
 export default function AdminPropositions() {
+  usePageTitle('Administration — Propositions');
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState(undefined);
   const [loading, setLoading] = useState(true);
@@ -97,7 +99,7 @@ export default function AdminPropositions() {
       </div>
 
       {error && (
-        <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
           {error}
         </div>
       )}

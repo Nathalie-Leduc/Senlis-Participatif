@@ -7,8 +7,11 @@ import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordS
 import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 import { downloadJson, exportFilename } from '../utils/download.js';
+import { errorProps } from '../components/FormError/FormError.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function MonCompte() {
+  usePageTitle('Mon compte');
   const { user, logout, refreshUser, replaceToken } = useAuth();
   const navigate = useNavigate();
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
@@ -23,6 +26,10 @@ export default function MonCompte() {
   const [profileError, setProfileError] = useState(null);
   const [passwordJustChanged, setPasswordJustChanged] = useState(false);
   const [passwordError, setPasswordError] = useState(null);
+  // S5A-07 (RGAA 11.10) : champ concerné par chaque erreur, pour la
+  // relier au bon champ (aria-invalid + aria-describedby)
+  const [profileErrorField, setProfileErrorField] = useState(null); // 'quartier' | 'travail'
+  const [passwordErrorField, setPasswordErrorField] = useState(null); // 'current' | 'new' | 'confirm'
 
   const handleUpdateSituation = async () => {
     setError(null); setMessage(null); setProfileJustSaved(false); setProfileError(null);
@@ -33,12 +40,15 @@ export default function MonCompte() {
     // pas pourquoi.
     if (situation === 'AUTRE_QUARTIER' && !quartier) {
       setProfileError('Merci de préciser votre quartier.');
+      setProfileErrorField('quartier');
       return;
     }
     if (travailleASenlis && (!travailleQuartier || !travailType)) {
       setProfileError('Merci de préciser le quartier de travail et votre rôle.');
+      setProfileErrorField('travail');
       return;
     }
+    setProfileErrorField(null);
 
     try {
       const payload = { situation };
@@ -68,6 +78,7 @@ export default function MonCompte() {
 
     if (pwForm.newPassword !== pwForm.newPasswordConfirm) {
       setPasswordError('Les deux mots de passe ne correspondent pas');
+      setPasswordErrorField('confirm');
       return;
     }
     // Le nouveau mot de passe doit être DIFFÉRENT de l'actuel — pour
@@ -76,6 +87,7 @@ export default function MonCompte() {
     // été traitée.
     if (pwForm.newPassword === pwForm.currentPassword) {
       setPasswordError('Le nouveau mot de passe doit être différent de l\'actuel');
+      setPasswordErrorField('new');
       return;
     }
 
@@ -90,7 +102,13 @@ export default function MonCompte() {
       if (res?.token) replaceToken(res.token);
       setPasswordJustChanged(true);
       setPwForm({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
-    } catch (err) { setPasswordError(err.message); }
+      setPasswordErrorField(null);
+    } catch (err) {
+      // 401 = mot de passe ACTUEL faux ; sinon (mot de passe trop faible,
+      // identique à l'ancien…) c'est le NOUVEAU qui pose problème
+      setPasswordError(err.details ? Object.values(err.details)[0] : err.message);
+      setPasswordErrorField(err.status === 401 ? 'current' : 'new');
+    }
   };
 
   // ── Télécharger mes données (S5A-05, RGPD art. 15 et 20) ──
@@ -139,8 +157,8 @@ export default function MonCompte() {
 
       {/* #377349 plutôt que #3A7A4D : audit accessibilité (S5-05),
           contraste AA insuffisant (4,42:1) sur ce fond clair. */}
-      {message && <div style={{ background: '#E0F2E5', color: '#377349', padding: '12px 16px', borderRadius: 12, marginBottom: 16, fontSize: 15 }}>{message}</div>}
-      {error && <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 16, fontSize: 15 }}>{error}</div>}
+      {message && <div role="status" style={{ background: '#E0F2E5', color: '#377349', padding: '12px 16px', borderRadius: 12, marginBottom: 16, fontSize: 15 }}>{message}</div>}
+      {error && <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 16, fontSize: 15 }}>{error}</div>}
 
       {/* Infos du profil */}
       <div style={{ background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)', marginBottom: 20 }}>
@@ -174,7 +192,8 @@ export default function MonCompte() {
           <label style={{ display: 'block', margin: '0 0 16px' }}>
             <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Quel quartier ?</span>
             <select
-              value={quartier} onChange={(e) => { setQuartier(e.target.value); setProfileJustSaved(false); setProfileError(null); }}
+              value={quartier} onChange={(e) => { setQuartier(e.target.value); setProfileJustSaved(false); setProfileError(null); setProfileErrorField(null); }}
+              {...errorProps(profileErrorField === 'quartier', 'profile-error')}
               style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
             >
               <option value="" disabled>Choisissez votre quartier</option>
@@ -204,7 +223,8 @@ export default function MonCompte() {
             <label style={{ display: 'block', margin: '0 0 16px' }}>
               <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Dans quel quartier ?</span>
               <select
-                value={travailleQuartier} onChange={(e) => { setTravailleQuartier(e.target.value); setProfileJustSaved(false); setProfileError(null); }}
+                value={travailleQuartier} onChange={(e) => { setTravailleQuartier(e.target.value); setProfileJustSaved(false); setProfileError(null); setProfileErrorField(null); }}
+                {...errorProps(profileErrorField === 'travail' && !travailleQuartier, 'profile-error')}
                 style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
               >
                 <option value="" disabled>Choisissez le quartier</option>
@@ -217,7 +237,8 @@ export default function MonCompte() {
             <label style={{ display: 'block', margin: '0 0 16px' }}>
               <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>À ce titre...</span>
               <select
-                value={travailType} onChange={(e) => { setTravailType(e.target.value); setProfileJustSaved(false); setProfileError(null); }}
+                value={travailType} onChange={(e) => { setTravailType(e.target.value); setProfileJustSaved(false); setProfileError(null); setProfileErrorField(null); }}
+                {...errorProps(profileErrorField === 'travail' && !travailType, 'profile-error')}
                 style={{ width: '100%', padding: '12px 16px', fontSize: 16, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
               >
                 <option value="" disabled>Précisez</option>
@@ -240,13 +261,15 @@ export default function MonCompte() {
         >
           Mettre à jour mon profil
         </button>
+        {/* role="status" : confirmation LUE par les lecteurs d'écran
+            (poliment, sans interrompre) ; role="alert" pour une erreur */}
         {profileJustSaved && (
-          <p style={{ color: '#377349', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
+          <p role="status" style={{ color: '#377349', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
             ✅ Votre profil a été mis à jour.
           </p>
         )}
         {profileError && (
-          <p style={{ color: '#A8442F', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
+          <p id="profile-error" role="alert" style={{ color: '#A8442F', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
             {profileError}
           </p>
         )}
@@ -257,12 +280,14 @@ export default function MonCompte() {
         <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 16 }}>Changer le mot de passe</h2>
         <label style={{ display: 'block', marginBottom: 12 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe actuel</span>
-          <PasswordInput value={pwForm.currentPassword} onChange={(e) => { setPwForm({ ...pwForm, currentPassword: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); }}
+          <PasswordInput value={pwForm.currentPassword} onChange={(e) => { setPwForm({ ...pwForm, currentPassword: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); setPasswordErrorField(null); }}
+            {...errorProps(passwordErrorField === 'current', 'password-error')}
             autoComplete="current-password" style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
         </label>
         <label style={{ display: 'block', marginBottom: 8 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Nouveau mot de passe</span>
-          <PasswordInput value={pwForm.newPassword} onChange={(e) => { setPwForm({ ...pwForm, newPassword: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); }}
+          <PasswordInput value={pwForm.newPassword} onChange={(e) => { setPwForm({ ...pwForm, newPassword: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); setPasswordErrorField(null); }}
+            {...errorProps(passwordErrorField === 'new', 'password-error')}
             autoComplete="new-password" minLength={12}
             pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
             title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
@@ -272,18 +297,19 @@ export default function MonCompte() {
 
         <label style={{ display: 'block', margin: '16px 0 16px' }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Confirmer le nouveau mot de passe</span>
-          <PasswordInput value={pwForm.newPasswordConfirm} onChange={(e) => { setPwForm({ ...pwForm, newPasswordConfirm: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); }}
+          <PasswordInput value={pwForm.newPasswordConfirm} onChange={(e) => { setPwForm({ ...pwForm, newPasswordConfirm: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); setPasswordErrorField(null); }}
+            {...errorProps(passwordErrorField === 'confirm', 'password-error')}
             autoComplete="new-password"
             style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
         </label>
         <button onClick={handleChangePassword} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Changer le mot de passe</button>
         {passwordJustChanged && (
-          <p style={{ color: '#377349', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
+          <p role="status" style={{ color: '#377349', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
             ✅ Votre mot de passe a été changé.
           </p>
         )}
         {passwordError && (
-          <p style={{ color: '#A8442F', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
+          <p id="password-error" role="alert" style={{ color: '#A8442F', fontWeight: 600, fontSize: 15, marginTop: 10 }}>
             {passwordError}
           </p>
         )}

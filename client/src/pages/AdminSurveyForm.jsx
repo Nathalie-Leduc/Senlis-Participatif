@@ -21,6 +21,7 @@ import {
   STATUS_OPTIONS, AUDIENCE_OPTIONS, QUESTION_TYPE_OPTIONS, QUESTION_TYPE_META,
 } from '../constants/surveyStatus.js';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 // Menu "cette question met à jour...", et la liste de valeurs
 // possibles pour CHAQUE option une fois un champ choisi — mêmes
@@ -91,6 +92,8 @@ const EMPTY_FORM = {
 export default function AdminSurveyForm() {
   const { slug } = useParams(); // undefined en mode création
   const isEdit = !!slug;
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(isEdit ? 'Modifier une enquête' : 'Nouvelle enquête');
   const navigate = useNavigate();
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -374,7 +377,7 @@ export default function AdminSurveyForm() {
       </h1>
 
       {error && (
-        <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
           {error}
         </div>
       )}

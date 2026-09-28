@@ -11,8 +11,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function AdminUsers() {
+  usePageTitle('Administration — Comptes');
   const { user: currentUser } = useAuth();
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
@@ -80,7 +82,7 @@ export default function AdminUsers() {
       />
 
       {loading && <p>Chargement…</p>}
-      {error && <p style={{ color: '#A8442F' }}>{error}</p>}
+      {error && <p role="alert" style={{ color: '#A8442F' }}>{error}</p>}
 
       {!loading && !error && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

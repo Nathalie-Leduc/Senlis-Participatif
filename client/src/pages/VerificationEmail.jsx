@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function VerificationEmail() {
+  usePageTitle('Vérification de l’adresse email');
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const [status, setStatus] = useState('loading'); // loading | success | error

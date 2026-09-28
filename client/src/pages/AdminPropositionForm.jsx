@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const EMPTY_FORM = {
   title: '', summary: '', content: '', status: 'DRAFT',
@@ -30,6 +31,8 @@ const EMPTY_FORM = {
 export default function AdminPropositionForm() {
   const { slug } = useParams(); // undefined en mode création
   const isEdit = !!slug;
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(isEdit ? 'Modifier une proposition' : 'Nouvelle proposition');
   const navigate = useNavigate();
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -224,7 +227,7 @@ export default function AdminPropositionForm() {
       </h1>
 
       {error && (
-        <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
           {error}
         </div>
       )}

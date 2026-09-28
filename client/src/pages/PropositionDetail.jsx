@@ -26,6 +26,7 @@ import VoteButtons from '../components/VoteButtons/VoteButtons.jsx';
 import Confetti from '../components/Confetti/Confetti.jsx';
 import LazyMapView from '../components/MapView/LazyMapView.jsx';
 import useScrollReveal from '../hooks/useScrollReveal.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const PENDING_VOTE_KEY = 'senlis:pendingVote';
 
@@ -35,6 +36,8 @@ export default function PropositionDetail() {
   const { user, isLogged } = useAuth();
 
   const [proposal, setProposal] = useState(null);
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(proposal?.title ?? 'Proposition');
   const [votes, setVotes] = useState(null);
   const [myVote, setMyVote] = useState(null);
   const [loading, setLoading] = useState(true);
