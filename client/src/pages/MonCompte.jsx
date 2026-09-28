@@ -9,7 +9,7 @@ import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from
 import { downloadJson, exportFilename } from '../utils/download.js';
 
 export default function MonCompte() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, refreshUser, replaceToken } = useAuth();
   const navigate = useNavigate();
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
   const [situation, setSituation] = useState(user?.situation || '');
@@ -84,7 +84,10 @@ export default function MonCompte() {
       // l'API attend juste { currentPassword, newPassword }.
       const { newPasswordConfirm, ...payload } = pwForm;
       void newPasswordConfirm;
-      await api.put('/auth/me/password', payload);
+      const res = await api.put('/auth/me/password', payload);
+      // S5A-06 : l'ancien jeton vient d'être révoqué par l'API (comme
+      // ceux de tous les autres appareils) — on garde le nouveau.
+      if (res?.token) replaceToken(res.token);
       setPasswordJustChanged(true);
       setPwForm({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
     } catch (err) { setPasswordError(err.message); }
@@ -105,13 +108,26 @@ export default function MonCompte() {
     }
   };
 
-  const handleDelete = async () => {
+  // ── Suppression du compte (S5A-06 : mot de passe exigé) ──
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState(null);
+  const handleDelete = async (e) => {
+    e.preventDefault();
+    setDeleteError(null);
+    if (!deletePassword) {
+      setDeleteError('Saisissez votre mot de passe pour confirmer.');
+      return;
+    }
+    // Double sécurité : le mot de passe prouve QUI supprime, la
+    // confirmation vérifie que c'est bien VOULU (un clic de trop).
     if (!confirm('Supprimer votre compte ? Cette action est irréversible.')) return;
     try {
-      await api.delete('/auth/me');
+      await api.delete('/auth/me', { password: deletePassword });
       logout();
       navigate('/');
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      setDeleteError(err.message);
+    }
   };
 
   return (
@@ -298,11 +314,32 @@ export default function MonCompte() {
         <p style={{ fontSize: 15, color: '#6B6257', marginBottom: 16, lineHeight: 1.6 }}>
           La suppression de votre compte est irréversible. Vos votes seront supprimés et vos réponses d'enquête anonymisées.
         </p>
-        <button onClick={handleDelete} style={{
-          width: '100%', padding: '14px', fontSize: 16, fontWeight: 700,
-          background: 'transparent', border: '2px solid #A8442F', borderRadius: 12,
-          color: '#A8442F', cursor: 'pointer', fontFamily: "'Public Sans', system-ui",
-        }}>Supprimer mon compte</button>
+        {/* Un vrai <form> : la touche Entrée valide, et le navigateur
+            comprend qu'il s'agit d'une saisie de mot de passe. */}
+        <form onSubmit={handleDelete} noValidate>
+          <label htmlFor="delete-password" style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+            Mot de passe actuel (pour confirmer)
+          </label>
+          <PasswordInput
+            id="delete-password"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            autoComplete="current-password"
+            aria-invalid={Boolean(deleteError)}
+            aria-describedby={deleteError ? 'delete-error' : undefined}
+            style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }}
+          />
+          {deleteError && (
+            <p id="delete-error" role="alert" style={{ color: '#A8442F', fontSize: 14, margin: '8px 0 0' }}>
+              {deleteError}
+            </p>
+          )}
+          <button type="submit" style={{
+            width: '100%', padding: '14px', fontSize: 16, fontWeight: 700, marginTop: 12,
+            background: 'transparent', border: '2px solid #A8442F', borderRadius: 12,
+            color: '#A8442F', cursor: 'pointer', fontFamily: "'Public Sans', system-ui",
+          }}>Supprimer mon compte</button>
+        </form>
       </div>
     </div>
   );

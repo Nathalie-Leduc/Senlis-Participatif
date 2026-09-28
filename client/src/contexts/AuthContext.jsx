@@ -89,6 +89,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Déconnexion ────────────────────────────────────────
+  // S5A-06 : après un changement de mot de passe, l'API révoque tous
+  // les anciens jetons et renvoie un NOUVEAU jeton pour la session en
+  // cours. Sans ce remplacement, la personne serait déconnectée à la
+  // requête suivante… sur l'appareil même où elle vient d'agir.
+  const replaceToken = useCallback((token) => {
+    localStorage.setItem('token', token);
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     setUser(null);
@@ -106,7 +114,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, isLogged, isAdmin, loading,
-      register, login, verifyTwoFactor, logout, refreshUser,
+      register, login, verifyTwoFactor, logout, refreshUser, replaceToken,
     }}>
       {children}
     </AuthContext.Provider>

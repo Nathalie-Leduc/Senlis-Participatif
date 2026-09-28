@@ -26,6 +26,7 @@ try {
   console.log(`   Avertissements envoyés         : ${report.warnedAccounts}`);
   console.log(`   Avertissements en échec (SMTP) : ${report.failedWarnings}`);
   console.log(`   Jetons expirés supprimés       : ${report.deletedTokens}`);
+  console.log(`   Journal admin > 6 mois effacé  : ${report.deletedAuditLogs}`);
   // Un échec d'envoi n'est pas fatal (retenté demain), mais on le
   // signale par le code de sortie : la tâche planifiée apparaîtra en
   // erreur dans la console Clever Cloud, et on ira voir pourquoi.

@@ -10,6 +10,8 @@
 //  2. Comptes citoyens sans connexion depuis 3 ans : un email
 //     d'avertissement, puis suppression 30 jours plus tard si la
 //     personne ne s'est toujours pas reconnectée.
+//  3. Journal des actions d'administration (S5A-06) : 6 mois, durée
+//     recommandée par la CNIL pour des journaux de traçabilité.
 //
 // Analogie : la bibliothèque qui envoie « votre carte d'adhérent
 // expire, passez nous voir » avant de radier le lecteur — jamais
@@ -21,6 +23,9 @@
 //  - pas d'avertissement parti (échec SMTP) → pas de suppression :
 //    on ne supprime jamais un compte dont le titulaire n'a pas pu
 //    être prévenu ; l'envoi sera retenté au passage suivant ;
+//  - le journal d'administration survit à la suppression d'un compte
+//    (actorId → null, pseudo conservé) : ce n'est pas un doublon, c'est
+//    la trace de ce que ce compte a fait quand il était admin ;
 //  - toutes les fonctions reçoivent `now` en paramètre : les tests
 //    peuvent « voyager dans le temps » sans attendre 3 ans.
 //
@@ -34,6 +39,7 @@ import { sendInactivityWarning } from './email.js';
 export const INACTIVITY_YEARS = 3;
 export const WARNING_NOTICE_DAYS = 30;
 export const TOKEN_GRACE_HOURS = 24;
+export const AUDIT_LOG_MONTHS = 6;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -121,6 +127,19 @@ export async function deleteInactiveAccounts({ now = new Date(), dryRun = false 
 }
 
 /**
+ * Efface les lignes du journal d'administration de plus de 6 mois.
+ * @returns {Promise<number>} nombre de lignes supprimées
+ */
+export async function purgeOldAuditLogs({ now = new Date(), dryRun = false } = {}) {
+  const limit = new Date(now);
+  limit.setMonth(limit.getMonth() - AUDIT_LOG_MONTHS);
+  const where = { createdAt: { lt: limit } };
+  if (dryRun) return prisma.adminAuditLog.count({ where });
+  const { count } = await prisma.adminAuditLog.deleteMany({ where });
+  return count;
+}
+
+/**
  * Passe complète, dans l'ordre : suppressions d'abord (elles
  * concernent des comptes prévenus lors d'un passage PRÉCÉDENT), puis
  * nouveaux avertissements, puis jetons.
@@ -129,5 +148,8 @@ export async function runRetention({ now = new Date(), dryRun = false } = {}) {
   const deletedAccounts = await deleteInactiveAccounts({ now, dryRun });
   const { warned, failed } = await warnInactiveAccounts({ now, dryRun });
   const deletedTokens = await purgeExpiredTokens({ now, dryRun });
-  return { dryRun, deletedAccounts, warnedAccounts: warned, failedWarnings: failed, deletedTokens };
+  const deletedAuditLogs = await purgeOldAuditLogs({ now, dryRun });
+  return {
+    dryRun, deletedAccounts, warnedAccounts: warned, failedWarnings: failed, deletedTokens, deletedAuditLogs,
+  };
 }

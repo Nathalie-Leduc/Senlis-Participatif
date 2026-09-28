@@ -42,7 +42,9 @@ La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres
 | `npm run purge` | Purge RGPD : comptes inactifs (3 ans, après avertissement) et jetons expirés — `-- --dry-run` pour simuler |
 | `npm test` | Tests d'intégration Vitest + Supertest (BDD de test jetable) |
 | `npm run lint` | ESLint |
-| `npx prisma migrate dev` | Nouvelle migration en dev |
+| `npx prisma migrate dev` | Nouvelle migration en dev (base uniquement) |
+| `npx prisma generate` | Régénère le client Prisma — **obligatoire après chaque migration** : depuis Prisma 7, `migrate dev` ne le fait plus |
+| `npm run migrate:test` | Applique les migrations à la base de test |
 | `npx prisma migrate deploy` | Applique les migrations (prod / CI) |
 | `npx prisma studio` | Explorateur visuel de la BDD |
 
@@ -72,7 +74,15 @@ src/
 
 **Durées de conservation** — `npm run purge` (une fois par jour en production) :
 - jetons email et codes 2FA : effacés 24 h après expiration ou utilisation ;
-- comptes citoyens sans connexion depuis 3 ans : email d'avertissement, puis suppression 30 jours plus tard si toujours aucune connexion. Jamais de suppression sans avertissement effectivement envoyé ; jamais de suppression automatique d'un compte admin.
+- comptes citoyens sans connexion depuis 3 ans : email d'avertissement, puis suppression 30 jours plus tard si toujours aucune connexion. Jamais de suppression sans avertissement effectivement envoyé ; jamais de suppression automatique d'un compte admin ;
+- journal des actions d'administration (`AdminAuditLog`) : 6 mois.
+
+## Sécurité de l'authentification (S5A-06)
+
+- **Code 2FA** : 5 essais au plus par code, puis il faut se reconnecter.
+- **Sessions révocables** : `User.tokenVersion`, recopié dans le JWT (`tv`) ; changer ou réinitialiser son mot de passe l'incrémente → toutes les autres sessions tombent (`401 SESSION_REVOKED`). `PUT /auth/me/password` renvoie un nouveau jeton pour la session courante.
+- **Mot de passe exigé** pour changer d'email (`currentPassword`) et pour supprimer son compte (`DELETE /auth/me`, corps `{ password }`).
+- **Journal d'administration** : connexions admin, changements de rôle, création/modification/suppression de propositions et d'enquêtes (`src/services/audit.js`), consultable dans Prisma Studio.
 
 Logique : `src/services/retention.js` · tests : `tests/retention.test.js`.
 
