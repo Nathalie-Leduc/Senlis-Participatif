@@ -2,15 +2,18 @@
 // Page Inscription — création de compte
 // ══════════════════════════════════════════════════════════
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
 import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
+import FormError, { errorProps } from '../components/FormError/FormError.jsx';
 
 export default function Inscription() {
+  usePageTitle('Créer un compte');
   const { register } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
@@ -20,6 +23,29 @@ export default function Inscription() {
     travailleASenlis: false, travailleQuartier: '', travailType: '',
   });
   const [error, setError] = useState(null);
+  // S5A-07 (RGAA 11.10) : NOM du champ concerné par l'erreur, pour la
+  // relier au bon champ (aria-describedby) et y placer le focus.
+  const [errorField, setErrorField] = useState(null);
+  const formRef = useRef(null);
+
+  /** Attributs ARIA d'un champ : invalide seulement s'il est le fautif */
+  const fieldProps = (name) => errorProps(errorField === name, 'register-error');
+
+  /** Affiche une erreur, reliée au champ `field` (ou à aucun) */
+  const showError = (message, field = null) => {
+    setError(message);
+    setErrorField(field);
+    // Le focus va sur le champ fautif : la personne (au clavier, ou avec
+    // un lecteur d'écran) est directement là où elle doit corriger, au
+    // lieu de chercher dans tout le formulaire. requestAnimationFrame :
+    // on attend que React ait posé aria-invalid avant de déplacer le focus.
+    if (field) {
+      requestAnimationFrame(() => formRef.current?.querySelector(`[name="${field}"]`)?.focus());
+    }
+  };
+
+  // Codes d'erreur de l'API → champ concerné
+  const FIELD_BY_CODE = { EMAIL_TAKEN: 'email', PSEUDO_TAKEN: 'pseudo' };
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -34,6 +60,7 @@ export default function Inscription() {
       ...(name === 'situation' && value !== 'AUTRE_QUARTIER' && { quartier: '' }),
     }));
     setError(null);
+    setErrorField(null);
   };
 
   const handleTravailleToggle = (e) => {
@@ -50,12 +77,13 @@ export default function Inscription() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setErrorField(null);
 
     // Vérifié côté client AVANT l'appel réseau : pas la peine
     // d'attendre une réponse serveur pour une faute de frappe que
     // l'utilisateur peut corriger tout de suite.
     if (form.password !== form.passwordConfirm) {
-      setError('Les deux mots de passe ne correspondent pas');
+      showError('Les deux mots de passe ne correspondent pas', 'passwordConfirm');
       return;
     }
 
@@ -65,7 +93,7 @@ export default function Inscription() {
     // La case atteste seulement que la personne a été INFORMÉE.
     // (Le nom technique `consent` est gardé pour ne pas toucher au reste.)
     if (!form.consent) {
-      setError("Merci de confirmer avoir pris connaissance de la politique de confidentialité");
+      showError('Merci de confirmer avoir pris connaissance de la politique de confidentialité', 'consent');
       return;
     }
 
@@ -93,11 +121,13 @@ export default function Inscription() {
     } catch (err) {
       // Si l'API renvoie des détails de validation (Zod),
       // on les affiche champ par champ
+      // details = { nomDuChamp: message } : le nom du champ Zod est
+      // aussi le `name` de l'input — on sait donc où pointer.
       if (err.details) {
-        const firstError = Object.values(err.details)[0];
-        setError(firstError);
+        const [field, message] = Object.entries(err.details)[0];
+        showError(message, field);
       } else {
-        setError(err.message || 'Une erreur est survenue');
+        showError(err.message || 'Une erreur est survenue', FIELD_BY_CODE[err.code] ?? null);
       }
     } finally {
       setLoading(false);
@@ -133,16 +163,9 @@ export default function Inscription() {
         </p>
       </div>
 
-      {error && (
-        <div style={{
-          background: '#FCEAE6', color: '#A8442F', padding: '12px 16px',
-          borderRadius: 12, marginBottom: 16, fontSize: 15,
-        }}>
-          {error}
-        </div>
-      )}
+      <FormError id="register-error">{error}</FormError>
 
-      <div style={{
+      <form ref={formRef} onSubmit={handleSubmit} noValidate style={{
         background: '#fff', borderRadius: 24, padding: 28,
         boxShadow: '0 2px 8px rgba(38,51,58,.06)',
       }}>
@@ -152,6 +175,7 @@ export default function Inscription() {
             type="text" name="pseudo" value={form.pseudo} onChange={handleChange}
             autoComplete="username" required minLength={2} maxLength={30}
             placeholder="Votre pseudo public"
+            {...fieldProps('pseudo')}
             style={inputStyle}
           />
         </label>
@@ -162,6 +186,7 @@ export default function Inscription() {
             type="email" name="email" value={form.email} onChange={handleChange}
             autoComplete="email" required
             placeholder="votreadresse@email.fr"
+            {...fieldProps('email')}
             style={inputStyle}
           />
         </label>
@@ -174,6 +199,7 @@ export default function Inscription() {
             pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
             title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
             placeholder="12 caractères minimum"
+            {...fieldProps('password')}
             style={inputStyle}
           />
         </label>
@@ -185,6 +211,7 @@ export default function Inscription() {
             name="passwordConfirm" value={form.passwordConfirm} onChange={handleChange}
             autoComplete="new-password" required
             placeholder="Retapez le même mot de passe"
+            {...fieldProps('passwordConfirm')}
             style={inputStyle}
           />
         </label>
@@ -193,7 +220,7 @@ export default function Inscription() {
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Votre situation</span>
           <select
             name="situation" value={form.situation} onChange={handleChange}
-            required style={inputStyle}
+            required style={inputStyle} {...fieldProps('situation')}
           >
             <option value="" disabled>Choisissez votre situation</option>
             <option value="CENTRE_RESIDENT">J&apos;habite le centre historique</option>
@@ -214,7 +241,7 @@ export default function Inscription() {
             <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Quel quartier ?</span>
             <select
               name="quartier" value={form.quartier} onChange={handleChange}
-              required style={inputStyle}
+              required style={inputStyle} {...fieldProps('quartier')}
             >
               <option value="" disabled>Choisissez votre quartier</option>
               {QUARTIER_OPTIONS.map((q) => (
@@ -243,7 +270,7 @@ export default function Inscription() {
               <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Dans quel quartier ?</span>
               <select
                 name="travailleQuartier" value={form.travailleQuartier} onChange={handleChange}
-                required style={inputStyle}
+                required style={inputStyle} {...fieldProps('travailleQuartier')}
               >
                 <option value="" disabled>Choisissez le quartier</option>
                 {TRAVAIL_QUARTIER_OPTIONS.map((q) => (
@@ -256,7 +283,7 @@ export default function Inscription() {
               <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>À ce titre...</span>
               <select
                 name="travailType" value={form.travailType} onChange={handleChange}
-                required style={inputStyle}
+                required style={inputStyle} {...fieldProps('travailType')}
               >
                 <option value="" disabled>Précisez</option>
                 {TRAVAIL_TYPE_OPTIONS.map((t) => (
@@ -269,8 +296,9 @@ export default function Inscription() {
 
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, fontSize: 14, color: '#26333A' }}>
           <input
-            type="checkbox" checked={form.consent}
-            onChange={(e) => { setForm({ ...form, consent: e.target.checked }); setError(null); }}
+            type="checkbox" name="consent" checked={form.consent}
+            onChange={(e) => { setForm({ ...form, consent: e.target.checked }); setError(null); setErrorField(null); }}
+            {...fieldProps('consent')}
             required style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}
           />
           <span>
@@ -286,13 +314,13 @@ export default function Inscription() {
         </label>
 
         <button
-          onClick={handleSubmit} disabled={loading}
+          type="submit" disabled={loading}
           className="btn btn-primary"
           style={{ width: '100%', justifyContent: 'center' }}
         >
           {loading ? 'Création en cours…' : 'Créer mon compte'}
         </button>
-      </div>
+      </form>
 
       <p style={{ textAlign: 'center', marginTop: 20, color: '#6B6257', fontSize: 15 }}>
         Déjà inscrit ?{' '}

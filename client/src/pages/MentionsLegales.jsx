@@ -10,12 +10,12 @@
 
 import { Link } from 'react-router-dom';
 import { SITE, EDITOR, HOST, CONTACT_EMAIL, LAST_UPDATED } from '../constants/legal.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function MentionsLegales() {
+  usePageTitle('Mentions légales');
   return (
     <div className="wrap" style={{ padding: '40px 20px 60px', maxWidth: 720, margin: '0 auto' }}>
-      {/* Titre de l'onglet (RGAA 8.6) — React 19 le place dans le <head> */}
-      <title>{`Mentions légales — ${SITE.name}`}</title>
 
       <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 30, marginBottom: 8 }}>
         Mentions légales

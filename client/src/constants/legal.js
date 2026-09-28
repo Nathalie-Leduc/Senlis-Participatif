@@ -148,3 +148,22 @@ export const RETENTION = [
 export const CNIL = {
   complaintUrl: 'https://www.cnil.fr/fr/plaintes',
 };
+
+/**
+ * Accessibilité (S5A-07) — affichée en pied de page ET dans la
+ * déclaration d'accessibilité : une seule source pour les deux.
+ *
+ * « non conforme » est la seule mention HONNÊTE tant qu'aucun audit
+ * complet selon le RGAA (106 critères, sur un échantillon de pages)
+ * n'a été réalisé — c'est la règle fixée par le RGAA lui-même, même
+ * si beaucoup de critères sont déjà respectés. Après un audit, passer
+ * à « partiellement conforme » (taux ≥ 50 %) ou « totalement conforme »
+ * et renseigner `auditDate` et `rate`.
+ */
+export const ACCESSIBILITY = {
+  status: 'non conforme',
+  standard: 'RGAA version 4.1.2',
+  auditDate: null, // ex. '15 janvier 2027'
+  rate: null,      // ex. '87 %'
+  declarationDate: '28 septembre 2026',
+};

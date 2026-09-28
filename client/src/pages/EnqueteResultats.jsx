@@ -12,10 +12,13 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import useScrollReveal from '../hooks/useScrollReveal.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function EnqueteResultats() {
   const { slug } = useParams();
   const [results, setResults] = useState(null);
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(results ? `Résultats — ${results.survey.title}` : 'Résultats de l’enquête');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 

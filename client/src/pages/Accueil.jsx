@@ -16,6 +16,7 @@ import LazyMapView from '../components/MapView/LazyMapView.jsx';
 import { PARKINGS_REPORT_EXEMPLE } from '../data/parkingsReport.js';
 import useIsVisible from '../hooks/useIsVisible.js';
 import useCountUp from '../hooks/useCountUp.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 // 0 et 1 = singulier, 2 et plus = pluriel (règle du français, pas du
 // pluriel anglais où seul 1 est singulier).
@@ -24,6 +25,7 @@ function pluralize(count, singular, plural = `${singular}s`) {
 }
 
 export default function Accueil() {
+  usePageTitle('Accueil');
   const { isLogged } = useAuth();
   const [proposalsTotal, setProposalsTotal] = useState(0);
   const [surveysTotal, setSurveysTotal] = useState(0);

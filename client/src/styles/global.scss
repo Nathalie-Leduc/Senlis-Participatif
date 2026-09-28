@@ -16,6 +16,10 @@ a { color: $nonette; }
 // Texte lu par les lecteurs d'écran mais invisible à l'écran (ex. « s'ouvre dans un
 // nouvel onglet »). Technique standard : on ne met PAS display:none, qui masquerait
 // aussi le texte aux lecteurs d'écran.
+// Titre focalisé par le code au changement de page (routeAnnouncer.js) :
+// pas de cadre de focus sur un élément NON interactif — le lecteur
+// d'écran annonce le titre, un contour autour ne servirait à rien.
+h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus { outline: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .skip-link { position: absolute; left: -999px; top: 8px; background: $ardoise; color: $blanc; padding: 10px 16px; border-radius: $radius-sm; z-index: 100; font: 600 15px $font-body; text-decoration: none; &:focus { left: 8px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

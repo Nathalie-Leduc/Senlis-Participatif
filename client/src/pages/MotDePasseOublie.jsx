@@ -2,14 +2,26 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
+import FormError, { errorProps } from '../components/FormError/FormError.jsx';
 
 export default function MotDePasseOublie() {
+  usePageTitle('Mot de passe oublié');
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Contrôle de saisie (RGAA 11.10) : un champ vide ou sans « @ »
+    // ne peut pas être une adresse. Sans ce contrôle, la page disait
+    // « Email envoyé ! » même pour une saisie vide.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Saisissez une adresse email valide, par exemple : prenom@exemple.fr');
+      return;
+    }
+    setError(null);
     setLoading(true);
     try { await api.post('/auth/forgot-password', { email }); }
     catch (_) { /* on ne révèle pas si l'email existe */ }
@@ -37,17 +49,19 @@ export default function MotDePasseOublie() {
         <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0 4px' }}>Mot de passe oublié ?</h1>
         <p style={{ color: '#6B6257' }}>Pas de souci — entrez votre email, on vous envoie un lien</p>
       </div>
-      <div style={{ background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)' }}>
+      <FormError id="forgot-error">{error}</FormError>
+      <form onSubmit={handleSubmit} noValidate style={{ background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)' }}>
         <label style={{ display: 'block', marginBottom: 20 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Email</span>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(null); }}
             autoComplete="email" required placeholder="votreadresse@email.fr"
+            {...errorProps(Boolean(error), 'forgot-error')}
             style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
         </label>
-        <button onClick={handleSubmit} disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+        <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
           {loading ? 'Envoi…' : 'Envoyer le lien'}
         </button>
-      </div>
+      </form>
       <p style={{ textAlign: 'center', marginTop: 20, color: '#6B6257', fontSize: 15 }}>
         <Link to="/connexion">Retour à la connexion</Link>
       </p>

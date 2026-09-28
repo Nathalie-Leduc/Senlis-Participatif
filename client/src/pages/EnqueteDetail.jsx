@@ -14,6 +14,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function EnqueteDetail() {
   const { slug } = useParams();
@@ -21,6 +22,8 @@ export default function EnqueteDetail() {
   const { isLogged } = useAuth();
 
   const [survey, setSurvey] = useState(null);
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(survey?.title ?? 'Enquête');
   const [hasResponded, setHasResponded] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

@@ -20,10 +20,13 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import { PROFILE_DIMENSIONS } from '../constants/situation.js';
 import { votePercentages, segmentLabel } from '../utils/voteStats.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function AdminPropositionStats() {
   const { id } = useParams();
   const [stats, setStats] = useState(null);
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(stats ? `Résultats — ${stats.proposal.title}` : 'Résultats de la proposition');
   const [segmentBy, setSegmentBy] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,8 +62,6 @@ export default function AdminPropositionStats() {
 
   return (
     <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 900 }}>
-      {/* Titre de l'onglet (RGAA 8.6) — React 19 place ce <title> dans le <head> */}
-      <title>{`Résultats — ${stats.proposal.title} — Senlis Participatif`}</title>
 
       <div className="no-print">
         <Link to="/admin/propositions" style={{ color: '#6B6257', fontSize: 14 }}>← Retour aux propositions</Link>
