@@ -193,6 +193,18 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // ── Durée de conservation (S5A-05, RGPD art. 5.1.e) ──────────
+  // Un compte sans connexion depuis 3 ans est supprimé, après un
+  // email d'avertissement 30 jours avant (voir services/retention.js).
+  //
+  // lastLoginAt : mis à jour à chaque connexion RÉUSSIE. Null pour les
+  // comptes antérieurs à ce champ → l'inactivité se compte alors
+  // depuis createdAt (pas besoin de remplir les anciennes lignes).
+  lastLoginAt        DateTime?
+  // Date de l'email d'avertissement. Remis à null à la connexion
+  // suivante : se reconnecter, c'est répondre « je suis toujours là ».
+  inactivityWarnedAt DateTime?
+
   proposals Proposal[]
   votes     Vote[]
   responses SurveyResponse[]

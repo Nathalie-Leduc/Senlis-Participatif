@@ -6,6 +6,7 @@ import Mascot from '../components/Mascot/Mascot.jsx';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
 import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
+import { downloadJson, exportFilename } from '../utils/download.js';
 
 export default function MonCompte() {
   const { user, logout, refreshUser } = useAuth();
@@ -87,6 +88,21 @@ export default function MonCompte() {
       setPasswordJustChanged(true);
       setPwForm({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
     } catch (err) { setPasswordError(err.message); }
+  };
+
+  // ── Télécharger mes données (S5A-05, RGPD art. 15 et 20) ──
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const data = await api.get('/auth/me/export');
+      downloadJson(data, exportFilename());
+    } catch (err) {
+      setError(err.message || 'Impossible de préparer vos données');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -255,6 +271,25 @@ export default function MonCompte() {
             {passwordError}
           </p>
         )}
+      </div>
+
+      {/* Mes données (S5A-05) — placé AVANT la zone dangereuse : on
+          propose de récupérer ses données avant de tout effacer. */}
+      <div style={{ background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)', marginBottom: 24 }}>
+        <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 12 }}>Mes données</h2>
+        <p style={{ fontSize: 15, color: '#6B6257', marginBottom: 16, lineHeight: 1.6 }}>
+          Téléchargez tout ce que Senlis Participatif sait de vous — compte, profil, votes et
+          réponses aux enquêtes — dans un fichier JSON, lisible par vous comme par un autre logiciel.
+        </p>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          aria-busy={exporting}
+          className="btn btn-primary"
+          style={{ width: '100%', padding: '14px', fontSize: 16 }}
+        >
+          {exporting ? 'Préparation du fichier…' : 'Télécharger mes données'}
+        </button>
       </div>
 
       {/* Zone danger */}

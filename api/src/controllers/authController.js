@@ -99,6 +99,20 @@ export async function verifyEmail(req, res, next) {
   }
 }
 
+// ── Suivi de la dernière connexion (S5A-05) ─────────────
+//
+// Appelé UNIQUEMENT quand une session est réellement ouverte : après
+// le mot de passe pour un citoyen, après le code 2FA pour un admin
+// (un admin qui s'arrête au mot de passe n'est pas « connecté »).
+// Remet aussi à zéro un éventuel avertissement d'inactivité : se
+// reconnecter, c'est répondre « je suis toujours là ».
+async function recordLogin(userId) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastLoginAt: new Date(), inactivityWarnedAt: null },
+  });
+}
+
 // ── POST /auth/login ────────────────────────────────────
 export async function login(req, res, next) {
   try {
@@ -167,6 +181,7 @@ export async function login(req, res, next) {
     }
 
     // Tout est bon → JWT
+    await recordLogin(user.id);
     const jwt = signToken(user);
 
     res.json({
@@ -220,6 +235,7 @@ export async function verifyTwoFactor(req, res, next) {
       throw error;
     }
 
+    await recordLogin(user.id);
     const jwt = signToken(user);
     // Émis EN PLUS du jeton de session, jamais à sa place — voir le
     // commentaire dans login() pour ce qu'il permet exactement (sauter
@@ -276,6 +292,110 @@ export async function me(req, res, next) {
     }
 
     res.json({ user });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── GET /auth/me/export — télécharger mes données (S5A-05) ──
+//
+// Droit d'accès (RGPD art. 15) et droit à la portabilité (art. 20) :
+// la personne récupère TOUT ce qui la concerne, dans un format
+// structuré et lisible par une machine (JSON).
+//
+// Analogie : demander à sa banque le relevé complet de son compte —
+// pas un résumé, pas une capture d'écran : toutes les lignes, dans
+// un format qu'un autre logiciel sait relire.
+//
+// Ce qui n'y figure PAS, volontairement :
+//  - l'empreinte du mot de passe et les jetons : ce sont des secrets
+//    de sécurité, pas des informations sur la personne — les
+//    exporter n'apporterait rien et exposerait inutilement ;
+//  - les données des AUTRES (totaux des votes, réponses d'autrui).
+export async function exportMyData(req, res, next) {
+  try {
+    const userId = req.user.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        email: true, pseudo: true, role: true, emailVerified: true,
+        situation: true, quartier: true, travailleQuartier: true, travailType: true,
+        notifyNewProposal: true, notifySurveyClosed: true,
+        createdAt: true, updatedAt: true, lastLoginAt: true,
+        votes: {
+          select: {
+            value: true, createdAt: true, updatedAt: true,
+            proposal: { select: { title: true, slug: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        responses: {
+          select: {
+            submittedAt: true,
+            survey: { select: { title: true, slug: true } },
+            answers: {
+              select: {
+                valueText: true, valueNumber: true,
+                question: { select: { label: true, order: true } },
+                option: { select: { label: true } },
+              },
+            },
+          },
+          orderBy: { submittedAt: 'asc' },
+        },
+        proposals: {
+          select: { title: true, slug: true, status: true, createdAt: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!user) {
+      const error = new Error('Compte introuvable');
+      error.status = 404;
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+
+    const { votes, responses, proposals, ...account } = user;
+
+    const data = {
+      // En-tête lisible : un humain qui ouvre le fichier doit
+      // comprendre ce qu'il a entre les mains.
+      about: 'Export de vos données personnelles — Senlis Participatif (RGPD, art. 15 et 20)',
+      exportedAt: new Date().toISOString(),
+      account,
+      votes: votes.map((v) => ({
+        proposal: v.proposal.title,
+        proposalSlug: v.proposal.slug,
+        vote: v.value,
+        votedAt: v.createdAt,
+        lastChangedAt: v.updatedAt,
+      })),
+      surveyResponses: responses.map((r) => ({
+        survey: r.survey.title,
+        surveySlug: r.survey.slug,
+        submittedAt: r.submittedAt,
+        // Dans l'ordre du questionnaire ; une question à choix
+        // multiple apparaît une fois par option cochée.
+        answers: r.answers
+          .sort((a, b) => a.question.order - b.question.order)
+          .map((a) => ({
+            question: a.question.label,
+            answer: a.option?.label ?? a.valueText ?? a.valueNumber,
+          })),
+      })),
+      proposals,
+    };
+
+    const date = new Date().toISOString().slice(0, 10); // AAAA-MM-JJ
+    // attachment : le navigateur propose d'ENREGISTRER le fichier
+    // plutôt que d'afficher le JSON brut dans l'onglet.
+    res.set('Content-Disposition', `attachment; filename="senlis-participatif-mes-donnees-${date}.json"`);
+    // Données personnelles : aucun cache intermédiaire ne doit les garder
+    res.set('Cache-Control', 'no-store');
+    res.json(data);
   } catch (err) {
     next(err);
   }

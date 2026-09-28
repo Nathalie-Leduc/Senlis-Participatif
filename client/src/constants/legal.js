@@ -131,16 +131,16 @@ export const BROWSER_STORAGE = [
 
 /**
  * Durées de conservation (RGPD art. 13.2.a).
- * ⚠️ La purge automatique des comptes inactifs et des jetons expirés
- * est implémentée par S5A-05 — la politique ne doit pas être publiée
- * (mise en ligne S5-22) avant que cette issue soit livrée.
+ * Appliquées automatiquement par api/src/services/retention.js
+ * (npm run purge, une fois par jour) — si tu changes une durée ici,
+ * change-la aussi là-bas, et inversement.
  */
 export const RETENTION = [
   { data: 'Compte et profil déclaré', duration: 'Jusqu’à la suppression du compte, ou 3 ans sans connexion (après un email d’avertissement)' },
   { data: 'Votes', duration: 'Supprimés avec le compte' },
   { data: 'Réponses aux enquêtes', duration: 'Détachées du compte à sa suppression, puis conservées de façon anonyme pour ne pas fausser les résultats' },
-  { data: 'Liens reçus par email (vérification, mot de passe)', duration: '1 heure, à usage unique' },
-  { data: 'Code de connexion administrateur', duration: '10 minutes, à usage unique' },
+  { data: 'Liens reçus par email (vérification, mot de passe)', duration: 'Valables 1 heure, à usage unique, puis effacés sous 24 heures' },
+  { data: 'Code de connexion administrateur', duration: 'Valable 10 minutes, à usage unique, puis effacé sous 24 heures' },
   { data: 'Journaux techniques du serveur (adresse IP, page demandée)', duration: '1 an au plus, pour la sécurité du service' },
 ];
 

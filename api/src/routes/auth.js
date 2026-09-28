@@ -51,6 +51,8 @@ router.post('/reset-password', validate(resetPasswordSchema), ctrl.resetPassword
 // ── Routes protégées (🔐) ───────────────────────────────
 
 router.get('/me', auth, ctrl.me);
+// Droit d'accès et de portabilité (RGPD art. 15 et 20) — S5A-05
+router.get('/me/export', auth, ctrl.exportMyData);
 router.patch('/me', auth, validate(updateProfileSchema), ctrl.updateProfile);
 router.put('/me/password', auth, validate(changePasswordSchema), ctrl.changePassword);
 router.delete('/me', auth, ctrl.deleteAccount);
