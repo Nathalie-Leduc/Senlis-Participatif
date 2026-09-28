@@ -38,6 +38,8 @@ La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres
 | `npm run dev` | Serveur avec rechargement (`node --watch`) |
 | `npm start` | Serveur production |
 | `npm run seed` | Injecte les données de démo (`prisma/seed.js`) |
+| `npm run seed:prod` | Données réelles de production (admin, proposition, enquête) |
+| `npm run purge` | Purge RGPD : comptes inactifs (3 ans, après avertissement) et jetons expirés — `-- --dry-run` pour simuler |
 | `npm test` | Tests d'intégration Vitest + Supertest (BDD de test jetable) |
 | `npm run lint` | ESLint |
 | `npx prisma migrate dev` | Nouvelle migration en dev |
@@ -64,6 +66,16 @@ src/
 - Codes utilisés : `400` validation · `401` non authentifié · `403` interdit · `404` introuvable · `409` conflit d'unicité (déjà voté / déjà répondu) · `429` rate limit
 - Tout nouvel endpoint = schéma Zod + test d'intégration + bloc Swagger dans la même PR
 
-## RGPD — effacement de compte
+## RGPD — droits et durées de conservation
+
+**Accès et portabilité** — `GET /api/v1/auth/me/export` : fichier JSON avec le compte, le profil déclaré, les votes et les réponses (libellés lisibles), sans aucun secret (ni empreinte de mot de passe, ni jeton).
+
+**Durées de conservation** — `npm run purge` (une fois par jour en production) :
+- jetons email et codes 2FA : effacés 24 h après expiration ou utilisation ;
+- comptes citoyens sans connexion depuis 3 ans : email d'avertissement, puis suppression 30 jours plus tard si toujours aucune connexion. Jamais de suppression sans avertissement effectivement envoyé ; jamais de suppression automatique d'un compte admin.
+
+Logique : `src/services/retention.js` · tests : `tests/retention.test.js`.
+
+**Effacement à la demande**
 
 `DELETE /api/v1/auth/me` : votes **supprimés** (cascade), propositions/commentaires/réponses d'enquête **anonymisés** (`SetNull`) — les statistiques agrégées survivent au départ d'un compte. Détail : voir le dictionnaire de données dans le dépôt de docs.

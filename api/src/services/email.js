@@ -26,7 +26,16 @@ const transporter = nodemailer.createTransport({
 });
 
 /**
- * Envoie un email. Logue en dev, lève une erreur si ça échoue.
+ * Envoie un email. Ne lève JAMAIS d'erreur (un email raté ne doit pas
+ * faire échouer une inscription), mais renvoie désormais le résultat :
+ * true si le serveur SMTP a accepté le message, false sinon.
+ *
+ * S5A-05 : la purge des comptes inactifs a besoin de savoir si
+ * l'avertissement est VRAIMENT parti — on ne supprime jamais un compte
+ * dont le titulaire n'a pas pu être prévenu. Les autres appelants
+ * ignorent simplement la valeur de retour (rien ne change pour eux).
+ *
+ * @returns {Promise<boolean>}
  */
 async function sendEmail({ to, subject, html }) {
   try {
@@ -37,10 +46,12 @@ async function sendEmail({ to, subject, html }) {
       html,
     });
     console.log(`📧 Email envoyé à ${to} (${info.messageId})`);
+    return true;
   } catch (err) {
     console.error(`❌ Échec envoi email à ${to}:`, err.message);
     // On ne bloque pas l'inscription si l'email échoue,
     // mais on logue l'erreur pour investigation
+    return false;
   }
 }
 
@@ -164,6 +175,61 @@ export async function sendTwoFactorCode(email, code) {
         <p style="color: #6B6257; font-size: 14px;">
           Ce code expire dans 10 minutes. Si vous n'êtes pas à l'origine de cette
           tentative de connexion, changez votre mot de passe sans attendre.
+        </p>
+        <hr style="border: none; border-top: 1px solid #e3dcce; margin: 24px 0;" />
+        <p style="color: #B9B2A4; font-size: 12px;">
+          Senlis Participatif — Plateforme citoyenne indépendante
+        </p>
+      </div>
+    `,
+  });
+}
+
+/**
+ * Avertissement avant suppression d'un compte inactif (S5A-05).
+ *
+ * Volontairement SANS le pseudo : c'est un texte libre choisi par
+ * l'utilisateur, qu'il faudrait échapper avant de l'insérer dans du
+ * HTML (sinon un pseudo comme « <a href=…> » deviendrait un vrai lien
+ * dans l'email). « Bonjour » suffit — moins de données, moins de risque.
+ *
+ * @param {string} email
+ * @param {Date} deletionDate - date à partir de laquelle le compte sera supprimé
+ * @returns {Promise<boolean>} true si l'email est parti
+ */
+export async function sendInactivityWarning(email, deletionDate) {
+  const date = deletionDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const link = `${CLIENT_URL}/connexion`;
+
+  return sendEmail({
+    to: email,
+    subject: 'Votre compte Senlis Participatif sera bientôt supprimé',
+    html: `
+      <div style="font-family: 'Public Sans', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px;">
+        <h1 style="font-family: Georgia, serif; color: #26333A; font-size: 24px;">
+          Toujours là ? 🦌
+        </h1>
+        <p style="color: #6B6257; font-size: 16px; line-height: 1.6;">
+          Bonjour, vous ne vous êtes pas connecté·e à Senlis Participatif depuis bientôt 3 ans.
+          Pour ne pas conserver vos données plus longtemps que nécessaire, votre compte sera
+          <strong>supprimé à partir du ${date}</strong>.
+        </p>
+        <p style="color: #6B6257; font-size: 16px; line-height: 1.6;">
+          Pour le garder, il suffit de vous connecter une fois avant cette date :
+        </p>
+        <a href="${link}" style="
+          display: inline-block;
+          background: #1E5F7C;
+          color: white;
+          padding: 14px 28px;
+          border-radius: 999px;
+          text-decoration: none;
+          font-weight: 700;
+          margin: 16px 0;
+        ">Me connecter</a>
+        <p style="color: #6B6257; font-size: 14px;">
+          Si vous ne faites rien, votre compte et vos votes seront supprimés ; vos réponses
+          aux enquêtes resteront seulement sous forme de bulletins anonymes.
         </p>
         <hr style="border: none; border-top: 1px solid #e3dcce; margin: 24px 0;" />
         <p style="color: #B9B2A4; font-size: 12px;">

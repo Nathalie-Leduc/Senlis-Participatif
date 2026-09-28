@@ -147,12 +147,12 @@ export default function PolitiqueConfidentialite() {
       <Section title="Vos droits">
         <ul style={listStyle}>
           <li><strong>Accès et rectification</strong> : consultez et modifiez votre pseudo, votre email et votre profil dans <Link to="/mon-compte">Mon compte</Link>.</li>
+          <li><strong>Accès complet et portabilité</strong> : le bouton « Télécharger mes données » de <em>Mon compte</em> vous remet immédiatement tout ce qui vous concerne (compte, profil, votes, réponses) dans un fichier JSON, lisible par un autre logiciel.</li>
           <li>
             <strong>Effacement</strong> : le bouton « Supprimer mon compte » de <em>Mon compte </em>
             supprime immédiatement votre compte et vos votes ; vos réponses aux enquêtes ne sont
             plus rattachées à vous et restent seulement comme bulletins anonymes.
           </li>
-          <li><strong>Portabilité</strong> : recevoir vos données dans un format lisible par une machine.</li>
           <li><strong>Opposition</strong> : vous opposer à l'utilisation de votre profil déclaré dans les statistiques agrégées — il suffit aussi de ne pas le renseigner ou de l'effacer.</li>
           <li><strong>Limitation</strong>, et <strong>directives</strong> sur le sort de vos données après votre décès.</li>
         </ul>
