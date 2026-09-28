@@ -20,6 +20,7 @@
 
 import { Link } from 'react-router-dom';
 import useScrollReveal from '../../hooks/useScrollReveal.js';
+import { assetUrl } from '../../services/api.js';
 
 const STATUS_LABELS = {
   PUBLISHED: 'En concertation',
@@ -63,7 +64,7 @@ export default function ProposalCard({ proposal }) {
           besoin de lui donner des jumelles, il le fait tout seul. */}
       {proposal.imagePath && (
         <img
-          src={proposal.imagePath}
+          src={assetUrl(proposal.imagePath)}
           alt=""
           loading="lazy"
           style={{

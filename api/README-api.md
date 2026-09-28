@@ -1,6 +1,6 @@
 # API — Senlis Participatif
 
-> Express 5 + Prisma 7 + PostgreSQL. API REST versionnée (`/api/v1`), stateless (JWT), documentée par Swagger sur `/api/v1/docs`.
+> Express 5 + Prisma 7 + PostgreSQL. API REST versionnée (`/api/v1`), stateless (JWT). Documentation OpenAPI/Swagger : prévue, pas encore publiée — les routes sont listées dans le cahier des charges (dépôt docs, document 01, §9).
 
 ## Démarrage
 
@@ -12,7 +12,14 @@ npm run seed                  # données de démonstration
 npm run dev                   # http://localhost:3000 (rechargement auto)
 ```
 
-La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres`).
+La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres`) ou un PostgreSQL installé localement.
+
+## Production (S5A-08)
+
+- `prisma` et `dotenv` sont des dépendances **de production** : `prisma generate` (postinstall) et `prisma migrate deploy` s'exécutent sur l'hébergeur, où les devDependencies ne sont pas installées.
+- `TRUST_PROXY` : nombre d'intermédiaires de confiance devant l'API (défaut : `1` en production, `0` sinon) — indispensable pour que le rate limiting voie l'IP réelle des visiteurs.
+- Les images (`/uploads/…`) sont servies avec `Cross-Origin-Resource-Policy: same-site`, pour être affichables depuis le domaine du site.
+- Image Docker (dev) : `docker build -f api/Dockerfile .` depuis la **racine** (lockfile unique du monorepo), utilisateur non-root.
 
 ## Variables d'environnement
 
@@ -66,7 +73,7 @@ src/
 
 - Réponses d'erreur normalisées : `{ "error": { "code", "message", "details?" } }`
 - Codes utilisés : `400` validation · `401` non authentifié · `403` interdit · `404` introuvable · `409` conflit d'unicité (déjà voté / déjà répondu) · `429` rate limit
-- Tout nouvel endpoint = schéma Zod + test d'intégration + bloc Swagger dans la même PR
+- Tout nouvel endpoint = schéma Zod + test d'intégration dans la même PR (+ bloc OpenAPI quand la documentation Swagger sera en place)
 
 ## RGPD — droits et durées de conservation
 

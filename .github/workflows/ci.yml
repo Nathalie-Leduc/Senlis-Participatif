@@ -59,3 +59,28 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  # ── Dépendances vulnérables (S5A-08 — OWASP A06) ─────
+  # Un projet moderne embarque des centaines de paquets écrits par
+  # d'autres. `npm audit` compare leurs versions à la base publique des
+  # failles connues. Analogie : le rappel de produits d'un fabricant
+  # automobile — on vérifie si NOTRE voiture est concernée.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      # BLOQUANT : aucune faille « critique » dans ce qui part en
+      # production (--omit=dev : les outils de test ne sont pas livrés).
+      - name: Audit bloquant (critique)
+        run: npm audit --omit=dev --audit-level=critical
+      # INFORMATIF : les failles « élevées » sont affichées sans bloquer.
+      # Au 28/09/2026, elles viennent toutes de l'outillage de la CLI
+      # Prisma 7.8 (@prisma/dev, mysql2, deepmerge-ts…), jamais exécuté
+      # par l'API en fonctionnement ; seule « correction » proposée :
+      # redescendre en Prisma 6. Dependabot proposera la mise à jour
+      # dès que Prisma publiera un correctif.
+      - name: Audit informatif (élevé)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true

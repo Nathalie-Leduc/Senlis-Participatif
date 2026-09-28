@@ -24,7 +24,7 @@ export default function MotDePasseOublie() {
     setError(null);
     setLoading(true);
     try { await api.post('/auth/forgot-password', { email }); }
-    catch (_) { /* on ne révèle pas si l'email existe */ }
+    catch { /* on ne révèle pas si l'email existe */ }
     setSent(true);
     setLoading(false);
   };

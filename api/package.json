@@ -21,6 +21,7 @@
     "@prisma/client": "7.8.0",
     "argon2": "^0.41.1",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
@@ -28,14 +29,13 @@
     "multer": "^2.2.0",
     "nodemailer": "^9.0.0",
     "pg": "^8.22.0",
+    "prisma": "7.8.0",
     "sharp": "^0.35.3",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.19.0",
-    "dotenv": "^17.2.0",
-    "prisma": "7.8.0",
     "supertest": "^7.1.0",
     "vitest": "^4.1.9"
   }

@@ -3,7 +3,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { useState, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordStrengthMeter.jsx';
@@ -15,7 +15,6 @@ import FormError, { errorProps } from '../components/FormError/FormError.jsx';
 export default function Inscription() {
   usePageTitle('Créer un compte');
   const { register } = useAuth();
-  const navigate = useNavigate();
   const [form, setForm] = useState({
     pseudo: '', email: '', password: '', passwordConfirm: '', consent: false, situation: '', quartier: '',
     // travailleAsenlis n'existe que pour l'affichage (afficher/masquer

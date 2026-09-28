@@ -21,7 +21,7 @@
 
 import { Link } from 'react-router-dom';
 import {
-  SITE, EDITOR, CONTACT_EMAIL, LAST_UPDATED, RECIPIENTS, BROWSER_STORAGE, RETENTION, CNIL,
+  EDITOR, CONTACT_EMAIL, LAST_UPDATED, RECIPIENTS, BROWSER_STORAGE, RETENTION, CNIL,
 } from '../constants/legal.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 

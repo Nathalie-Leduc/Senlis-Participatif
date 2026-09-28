@@ -35,8 +35,38 @@ import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
 
+// ── Derrière un proxy (S5A-08) ──────────────────────────────
+// En production, les requêtes n'arrivent pas directement du
+// navigateur : elles passent d'abord par le répartiteur de charge de
+// l'hébergeur (Clever Cloud), qui les transmet à Express. Sans ce
+// réglage, Express croit que TOUTES les requêtes viennent de ce
+// répartiteur — une seule et même adresse IP pour tout le monde. Le
+// rate limiting (100 req/min PAR IP) bloquerait alors l'ensemble des
+// visiteurs d'un coup, dès que le site aurait un peu de trafic.
+//
+// trust proxy = N : « fais confiance aux N derniers intermédiaires,
+// et lis la vraie IP du visiteur dans l'en-tête X-Forwarded-For
+// qu'ils ont posé ». Jamais `true` (tout croire) : n'importe qui
+// pourrait alors inventer sa propre IP dans cet en-tête et échapper
+// au rate limiting.
+//
+// Analogie : l'accueil d'un immeuble qui transmet le courrier. Le
+// facteur (Express) ne doit pas croire que toutes les lettres
+// viennent de l'accueil — mais il ne doit croire QUE l'accueil sur
+// l'expéditeur réel, pas une mention griffonnée par n'importe qui.
+const trustProxy = process.env.TRUST_PROXY ?? (process.env.NODE_ENV === 'production' ? '1' : '0');
+app.set('trust proxy', Number(trustProxy));
+
 // ── Sécurité HTTP ───────────────────────────────────────────
-app.use(helmet());
+// crossOriginResourcePolicy 'same-site' (S5A-08) : par défaut, Helmet
+// interdit à toute AUTRE origine d'afficher nos fichiers ('same-origin').
+// Or le site (senlis-participatif.fr) et l'API (api.senlis-participatif.fr)
+// sont deux origines différentes : les images de propositions,
+// servies par l'API, auraient été bloquées par le navigateur. Ils
+// restent en revanche le même « site » (même domaine enregistré) :
+// 'same-site' les autorise, sans ouvrir nos images au reste du web.
+// En dev, localhost:5173 et localhost:3000 sont aussi le même site.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }));
 
 app.use(
   cors({

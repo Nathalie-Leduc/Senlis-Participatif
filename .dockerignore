@@ -1,0 +1,24 @@
+# ══════════════════════════════════════════════════════════
+# Fichiers JAMAIS envoyés à Docker au moment du build (S5A-08)
+# Contexte = racine du dépôt (voir docker-compose.yml)
+# ══════════════════════════════════════════════════════════
+
+# Dépendances : réinstallées proprement DANS l'image (binaires Linux
+# musl d'argon2/sharp, pas ceux de ta machine)
+**/node_modules
+
+# Client Prisma généré sur ta machine : régénéré dans l'image
+api/src/generated
+
+# Secrets : une image peut être partagée — un .env copié dedans y
+# resterait lisible par quiconque la récupère
+**/.env
+**/.env.*
+!**/.env.example
+
+# Données locales, builds et outillage
+api/uploads
+client/dist
+.git
+.github
+**/coverage
