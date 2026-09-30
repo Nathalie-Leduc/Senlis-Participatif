@@ -50,6 +50,9 @@ router.post('/2fa/verify', authLimiter, validate(verifyTwoFactorSchema), ctrl.ve
 router.post('/verify-email', authLimiter, validate(verifyEmailSchema), ctrl.verifyEmail);
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), ctrl.forgotPassword);
 router.post('/reset-password', authLimiter, validate(resetPasswordSchema), ctrl.resetPassword);
+// S5R-01 : même corps que « mot de passe oublié » ({ email }), même
+// schéma Zod, même frein anti-abus (chaque appel peut envoyer un email).
+router.post('/resend-verification', authLimiter, validate(forgotPasswordSchema), ctrl.resendVerification);
 
 // ── Routes protégées (🔐) ───────────────────────────────
 

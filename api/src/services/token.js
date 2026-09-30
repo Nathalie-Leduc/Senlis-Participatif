@@ -59,10 +59,33 @@ export async function createToken(userId, type) {
  * @returns {object} Le record AuthToken (avec userId)
  * @throws {Error} Si le jeton est invalide, expiré ou déjà utilisé
  */
-export async function verifyAndConsumeToken(plainToken, type) {
+/**
+ * Retrouve un jeton DÉJÀ consommé (ou invalidé), avec l'état actuel
+ * de son compte — S5R-01.
+ *
+ * Sert à distinguer « ce lien n'a jamais existé / a été remplacé »
+ * de « ce lien a DÉJÀ servi à vérifier ce compte » : un second clic
+ * sur le lien de l'email (ou le double appel du mode StrictMode de
+ * React en développement) ne doit pas afficher une erreur à quelqu'un
+ * dont l'adresse est bel et bien vérifiée.
+ *
+ * @returns {Promise<{ userId: string, user: { emailVerified: boolean } } | null>}
+ */
+export async function findConsumedToken(plainToken, type) {
+  const hash = crypto.createHash('sha256').update(plainToken).digest('hex');
+  return prisma.authToken.findFirst({
+    where: { tokenHash: hash, type, usedAt: { not: null } },
+    select: { userId: true, user: { select: { emailVerified: true } } },
+  });
+}
+
+// db (S5R-01) : client Prisma à utiliser — par défaut le client global,
+// ou un client de TRANSACTION (tx) pour que la consommation du jeton
+// et son effet (ex. « email vérifié ») soient enregistrés ensemble.
+export async function verifyAndConsumeToken(plainToken, type, db = prisma) {
   const hash = crypto.createHash('sha256').update(plainToken).digest('hex');
 
-  const token = await prisma.authToken.findFirst({
+  const token = await db.authToken.findFirst({
     where: {
       tokenHash: hash,   // ← Prisma attend "tokenHash", pas "hash"
       type,
@@ -85,7 +108,7 @@ export async function verifyAndConsumeToken(plainToken, type) {
   }
 
   // Marque le jeton comme utilisé (usage unique)
-  await prisma.authToken.update({
+  await db.authToken.update({
     where: { id: token.id },
     data: { usedAt: new Date() },
   });

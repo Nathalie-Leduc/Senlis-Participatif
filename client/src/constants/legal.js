@@ -122,6 +122,12 @@ export const BROWSER_STORAGE = [
     duration: 'Jusqu’à ce que vous les réinitialisiez',
   },
   {
+    key: 'senlis:registerDraft',
+    storage: 'sessionStorage',
+    purpose: 'Garder votre saisie du formulaire d’inscription (jamais le mot de passe) si la page se recharge',
+    duration: 'Jusqu’à la fermeture de l’onglet, ou la fin de l’inscription',
+  },
+  {
     key: 'senlis:pendingVote',
     storage: 'sessionStorage',
     purpose: 'Retenir un vote cliqué avant la connexion, pour l’enregistrer juste après',

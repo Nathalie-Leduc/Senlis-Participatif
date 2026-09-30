@@ -13,7 +13,7 @@ import {
   signTrustedDeviceToken, verifyTrustedDeviceToken,
 } from '../lib/jwt.js';
 import {
-  createToken, verifyAndConsumeToken, createTwoFactorCode, verifyTwoFactorCode,
+  createToken, verifyAndConsumeToken, findConsumedToken, createTwoFactorCode, verifyTwoFactorCode,
 } from '../services/token.js';
 import { sendVerificationEmail, sendResetPasswordEmail, sendTwoFactorCode } from '../services/email.js';
 import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
@@ -123,13 +123,38 @@ export async function verifyEmail(req, res, next) {
     const { token } = req.body;
 
     // Vérifie le jeton (hash, expiration, usage unique)
-    const authToken = await verifyAndConsumeToken(token, 'VERIFY_EMAIL');
-
-    // Active le compte
-    await prisma.user.update({
-      where: { id: authToken.userId },
-      data: { emailVerified: true },
-    });
+    try {
+      // Transaction : « jeton consommé » et « email vérifié » sont
+      // enregistrés ENSEMBLE. Sans elle, une seconde requête arrivant
+      // entre les deux écritures verrait un jeton utilisé… sur un
+      // compte pas encore vérifié, et répondrait à tort par une erreur.
+      await prisma.$transaction(async (tx) => {
+        const authToken = await verifyAndConsumeToken(token, 'VERIFY_EMAIL', tx);
+        await tx.user.update({
+          where: { id: authToken.userId },
+          data: { emailVerified: true },
+        });
+      });
+    } catch (err) {
+      // S5R-01 — le lien a déjà servi. Si le compte est bien vérifié,
+      // c'est un SUCCÈS, pas une erreur : la personne a cliqué deux
+      // fois, ou React a envoyé la requête deux fois en développement.
+      // Analogie : le ticket de vestiaire poinçonné une seconde fois
+      // — le manteau a déjà été rendu, inutile de crier « ticket
+      // invalide ». (Compte NON vérifié : le lien a été remplacé par
+      // un plus récent, par exemple après un changement d'email →
+      // l'erreur d'origine reste la bonne réponse.)
+      if (err.code === 'INVALID_TOKEN') {
+        const consumed = await findConsumedToken(token, 'VERIFY_EMAIL');
+        if (consumed?.user.emailVerified) {
+          return res.json({
+            message: 'Votre adresse email est déjà vérifiée. Vous pouvez vous connecter.',
+            alreadyVerified: true,
+          });
+        }
+      }
+      throw err;
+    }
 
     res.json({ message: 'Email vérifié avec succès ! Vous pouvez maintenant vous connecter.' });
   } catch (err) {
@@ -152,6 +177,36 @@ async function recordLogin(user) {
   });
   if (user.role === 'ADMIN') {
     await logAdminAction({ actorId: user.id, action: AUDIT_ACTIONS.ADMIN_LOGIN });
+  }
+}
+
+// ── POST /auth/resend-verification — S5R-01 ─────────────
+//
+// Avant : un lien de vérification perdu, expiré (60 min) ou supprimé
+// par erreur obligeait à… rien du tout — il n'existait aucun moyen
+// d'en recevoir un autre, et « réessayer l'inscription » se heurtait
+// à « adresse déjà utilisée ». Compte bloqué pour toujours.
+//
+// Réponse IDENTIQUE que le compte existe ou non, qu'il soit vérifié
+// ou non (anti-énumération, comme « mot de passe oublié ») : sinon ce
+// formulaire permettrait de tester quelles adresses sont inscrites.
+export async function resendVerification(req, res, next) {
+  try {
+    const { email } = req.body;
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (user && !user.emailVerified) {
+      // createToken invalide les liens précédents : seul le dernier
+      // email reçu fonctionne (pas de liens valides qui s'empilent).
+      const token = await createToken(user.id, 'VERIFY_EMAIL');
+      await sendVerificationEmail(user.email, token);
+    }
+
+    res.json({
+      message: 'Si un compte en attente de vérification correspond à cette adresse, un nouveau lien vient de lui être envoyé.',
+    });
+  } catch (err) {
+    next(err);
   }
 }
 
