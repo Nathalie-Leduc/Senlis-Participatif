@@ -2,7 +2,7 @@
 // Page Inscription — création de compte
 // ══════════════════════════════════════════════════════════
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
@@ -11,6 +11,8 @@ import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import FormError, { errorProps } from '../components/FormError/FormError.jsx';
+import ResendVerification from '../components/ResendVerification/ResendVerification.jsx';
+import { loadRegisterDraft, saveRegisterDraft, clearRegisterDraft } from '../utils/registerDraft.js';
 
 export default function Inscription() {
   usePageTitle('Créer un compte');
@@ -20,7 +22,13 @@ export default function Inscription() {
     // travailleAsenlis n'existe que pour l'affichage (afficher/masquer
     // la cascade) — jamais envoyé tel quel à l'API, voir handleSubmit.
     travailleASenlis: false, travailleQuartier: '', travailType: '',
+    // S5R-01 : on reprend la saisie laissée dans cet onglet (sans les
+    // mots de passe) — plus besoin de tout retaper après une erreur
+    ...loadRegisterDraft(),
   });
+
+  // Chaque modification met le brouillon à jour
+  useEffect(() => { saveRegisterDraft(form); }, [form]);
   const [error, setError] = useState(null);
   // S5A-07 (RGAA 11.10) : NOM du champ concerné par l'erreur, pour la
   // relier au bon champ (aria-describedby) et y placer le focus.
@@ -47,6 +55,9 @@ export default function Inscription() {
   const FIELD_BY_CODE = { EMAIL_TAKEN: 'email', PSEUDO_TAKEN: 'pseudo' };
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
+  // S5R-01 : « adresse déjà utilisée » → c'est souvent la personne
+  // elle-même, revenue après un lien de vérification perdu
+  const [emailTaken, setEmailTaken] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -116,6 +127,7 @@ export default function Inscription() {
         ...(travailType && { travailType }),
       };
       const data = await register(payload);
+      clearRegisterDraft();
       setSuccess(data.message);
     } catch (err) {
       // Si l'API renvoie des détails de validation (Zod),
@@ -128,6 +140,7 @@ export default function Inscription() {
       } else {
         showError(err.message || 'Une erreur est survenue', FIELD_BY_CODE[err.code] ?? null);
       }
+      setEmailTaken(err.code === 'EMAIL_TAKEN');
     } finally {
       setLoading(false);
     }
@@ -146,6 +159,9 @@ export default function Inscription() {
         <Link to="/connexion" className="btn btn-primary" style={{ marginTop: 24 }}>
           Aller à la connexion
         </Link>
+        <div style={{ background: '#fff', borderRadius: 20, padding: '8px 24px 20px', marginTop: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)' }}>
+          <ResendVerification defaultEmail={form.email} intro="Rien reçu après quelques minutes ? Vérifiez vos indésirables, ou recevez un nouveau lien :" />
+        </div>
       </div>
     );
   }
@@ -163,6 +179,15 @@ export default function Inscription() {
       </div>
 
       <FormError id="register-error">{error}</FormError>
+      {emailTaken && (
+        <div style={{ background: '#fff', borderRadius: 20, padding: '16px 24px 20px', marginBottom: 16, boxShadow: '0 2px 8px rgba(38,51,58,.06)' }}>
+          <p style={{ fontSize: 15 }}>
+            C'est votre adresse ? <Link to="/connexion">Connectez-vous</Link>, ou, si vous n'avez
+            jamais pu confirmer votre inscription :
+          </p>
+          <ResendVerification defaultEmail={form.email} />
+        </div>
+      )}
 
       <form ref={formRef} onSubmit={handleSubmit} noValidate style={{
         background: '#fff', borderRadius: 24, padding: 28,

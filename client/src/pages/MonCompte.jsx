@@ -8,6 +8,7 @@ import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 import { downloadJson, exportFilename } from '../utils/download.js';
 import { errorProps } from '../components/FormError/FormError.jsx';
+import ResendVerification from '../components/ResendVerification/ResendVerification.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function MonCompte() {
@@ -166,6 +167,12 @@ export default function MonCompte() {
         <p style={{ fontSize: 16, marginBottom: 8 }}><strong>Pseudo :</strong> {user?.pseudo}</p>
         <p style={{ fontSize: 16, marginBottom: 8 }}><strong>Email :</strong> {user?.email}</p>
         <p style={{ fontSize: 16 }}><strong>Email vérifié :</strong> {user?.emailVerified ? '✅ Oui' : '❌ Non'}</p>
+        {/* S5R-01 : cas d'un changement d'email — la session reste
+            ouverte, mais la participation est bloquée tant que la
+            nouvelle adresse n'est pas confirmée. */}
+        {user && !user.emailVerified && (
+          <ResendVerification defaultEmail={user.email} intro="Pour voter et répondre aux enquêtes, confirmez votre adresse :" />
+        )}
 
         <label style={{ display: 'block', margin: '16px 0 8px' }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Votre situation</span>

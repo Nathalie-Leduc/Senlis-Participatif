@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import FormError, { errorProps } from '../components/FormError/FormError.jsx';
 import { safeRedirectPath } from '../utils/safeRedirect.js';
+import ResendVerification from '../components/ResendVerification/ResendVerification.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function Connexion() {
@@ -13,6 +14,9 @@ export default function Connexion() {
   const [searchParams] = useSearchParams();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState(null);
+  // S5R-01 : compte non vérifié → on propose de renvoyer le lien, au
+  // lieu de laisser la personne devant un message sans issue
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Non-null dès qu'un compte ADMIN a réussi l'étape mot de passe —
@@ -56,6 +60,7 @@ export default function Connexion() {
       }
     } catch (err) {
       setError(err.message || 'Email ou mot de passe incorrect');
+      setNeedsVerification(err.code === 'EMAIL_NOT_VERIFIED');
     } finally {
       setLoading(false);
     }
@@ -138,6 +143,11 @@ export default function Connexion() {
           l'erreur est donc reliée aux deux (on ne dit volontairement pas
           lequel est faux — anti-énumération, voir authController). */}
       <FormError id="login-error">{error}</FormError>
+      {needsVerification && (
+        <div style={{ background: '#fff', borderRadius: 20, padding: '8px 24px 20px', marginBottom: 16, boxShadow: '0 2px 8px rgba(38,51,58,.06)' }}>
+          <ResendVerification defaultEmail={form.email} intro="Lien perdu ou expiré ? Recevez-en un nouveau :" />
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} noValidate style={{ background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)' }}>
         <label style={{ display: 'block', marginBottom: 16 }}>
