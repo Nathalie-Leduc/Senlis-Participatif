@@ -73,9 +73,10 @@ describe('Inscription', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /pris connaissance/ }));
     fireEvent.submit(screen.getByLabelText('Pseudo').closest('form'));
 
-    await screen.findByRole('alert');
+    // S5R-02 : l'erreur s'affiche désormais SOUS le champ (zone
+    // aria-live), plus en alerte en haut du formulaire
     const pseudo = screen.getByLabelText('Pseudo');
-    expect(pseudo).toHaveAttribute('aria-invalid', 'true');
+    await waitFor(() => expect(pseudo).toHaveAttribute('aria-invalid', 'true'));
     expect(pseudo).toHaveAccessibleDescription('Ce pseudo est déjà pris');
     await waitFor(() => expect(document.activeElement).toBe(pseudo));
   });
