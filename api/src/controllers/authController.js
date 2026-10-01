@@ -17,6 +17,7 @@ import {
 } from '../services/token.js';
 import { sendVerificationEmail, sendResetPasswordEmail, sendTwoFactorCode } from '../services/email.js';
 import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
+import { assertEmailDomainCanReceive } from '../lib/emailDomain.js';
 
 // ── Outils communs (S5A-06) ─────────────────────────────
 
@@ -75,6 +76,11 @@ export async function register(req, res, next) {
       error.code = 'EMAIL_TAKEN';
       throw error;
     }
+
+    // S5R-02b : le domaine peut-il recevoir du courrier ? Refus
+    // seulement si c'est CERTAIN (domaine inexistant, « null MX ») ;
+    // en cas de panne DNS, on accepte — voir lib/emailDomain.js.
+    await assertEmailDomainCanReceive(email);
 
     // Hash du mot de passe avec Argon2id (état de l'art 2026)
     // Argon2id combine résistance aux attaques GPU (Argon2d)
@@ -193,6 +199,10 @@ async function recordLogin(user) {
 export async function resendVerification(req, res, next) {
   try {
     const { email } = req.body;
+    // S5R-02b : un domaine qui ne reçoit pas de courrier ne recevra pas
+    // plus le nouveau lien — autant le dire. Cette réponse ne révèle
+    // rien sur l'existence d'un compte : elle porte sur le DOMAINE.
+    await assertEmailDomainCanReceive(email);
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (user && !user.emailVerified) {
@@ -531,6 +541,8 @@ export async function updateProfile(req, res, next) {
         error.code = 'EMAIL_TAKEN';
         throw error;
       }
+      // S5R-02b : même contrôle du domaine qu'à l'inscription
+      await assertEmailDomainCanReceive(email);
     }
 
     const user = await prisma.user.update({

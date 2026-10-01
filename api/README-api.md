@@ -88,6 +88,7 @@ src/
 
 - **Code 2FA** : 5 essais au plus par code, puis il faut se reconnecter.
 - **Sessions révocables** : `User.tokenVersion`, recopié dans le JWT (`tv`) ; changer ou réinitialiser son mot de passe l'incrémente → toutes les autres sessions tombent (`401 SESSION_REVOKED`). `PUT /auth/me/password` renvoie un nouveau jeton pour la session courante.
+- **Domaine de l'email vérifié par DNS** (S5R-02b, `src/lib/emailDomain.js`) à l'inscription, au changement d'email et au renvoi du lien : refus seulement si c'est certain, acceptation en cas de panne DNS. Dans les tests, le DNS est simulé (`dnsMock` dans `tests/setup.js`).
 - **Mot de passe exigé** pour changer d'email (`currentPassword`) et pour supprimer son compte (`DELETE /auth/me`, corps `{ password }`).
 - **Journal d'administration** : connexions admin, changements de rôle, création/modification/suppression de propositions et d'enquêtes (`src/services/audit.js`), consultable dans Prisma Studio.
 
