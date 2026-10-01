@@ -5,6 +5,7 @@ Toutes les évolutions notables du projet sont documentées ici.
 ## [Non publié] — Sprint 5bis
 
 ### Ajouté
+- **Vérification DNS du domaine de l'email** (S5R-02b) : à l'inscription, au changement d'email et au renvoi du lien, l'API refuse (400 `EMAIL_DOMAIN_INVALID`, message sous le champ) un domaine qui ne peut certainement pas recevoir de courrier — domaine inexistant, « null MX » (RFC 7505), ni MX ni adresse IP ; « MX implicite » respecté (RFC 5321), délai de 2 s, cache de 10 min, et adresse ACCEPTÉE en cas de panne DNS (`lib/emailDomain.js`) ; DNS simulé dans les tests (`dnsMock`)
 - **Résultats détaillés des propositions** (S5-21) : page admin `/admin/propositions/:id/stats`, répartition des votes selon le profil déclaré des votants (résidence, quartier, lieu et rôle de travail), impression / export PDF — endpoint `GET /api/v1/proposals/:id/stats?segmentBy=…`
 
 ### Corrigé
