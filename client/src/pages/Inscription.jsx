@@ -10,7 +10,13 @@ import PasswordStrengthMeter from '../components/PasswordStrengthMeter/PasswordS
 import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
-import FormError, { errorProps } from '../components/FormError/FormError.jsx';
+import FormError from '../components/FormError/FormError.jsx';
+import FieldError from '../components/FieldError/FieldError.jsx';
+import EmailSuggestion from '../components/EmailSuggestion/EmailSuggestion.jsx';
+import { useFieldValidation, focusField } from '../hooks/useFieldValidation.js';
+import {
+  validateEmail, validatePseudo, validateNewPassword, validatePasswordConfirm, required,
+} from '../utils/formValidation.js';
 import ResendVerification from '../components/ResendVerification/ResendVerification.jsx';
 import { loadRegisterDraft, saveRegisterDraft, clearRegisterDraft } from '../utils/registerDraft.js';
 
@@ -19,7 +25,7 @@ export default function Inscription() {
   const { register } = useAuth();
   const [form, setForm] = useState({
     pseudo: '', email: '', password: '', passwordConfirm: '', consent: false, situation: '', quartier: '',
-    // travailleAsenlis n'existe que pour l'affichage (afficher/masquer
+    // travailleASenlis n'existe que pour l'affichage (afficher/masquer
     // la cascade) — jamais envoyé tel quel à l'API, voir handleSubmit.
     travailleASenlis: false, travailleQuartier: '', travailType: '',
     // S5R-01 : on reprend la saisie laissée dans cet onglet (sans les
@@ -29,27 +35,27 @@ export default function Inscription() {
 
   // Chaque modification met le brouillon à jour
   useEffect(() => { saveRegisterDraft(form); }, [form]);
+
+  // ── Règles de chaque champ (S5R-02) ─────────────────────
+  // Les champs conditionnels (quartier, travail) n'ont de règle que
+  // lorsqu'ils sont AFFICHÉS : un champ caché ne peut pas être fautif.
+  const validation = useFieldValidation('register', {
+    pseudo: (value) => validatePseudo(value),
+    email: (value) => validateEmail(value),
+    password: (value) => validateNewPassword(value),
+    passwordConfirm: (value, all) => validatePasswordConfirm(value, all.password),
+    situation: required('Choisissez votre situation'),
+    quartier: (value, all) => (all.situation === 'AUTRE_QUARTIER' && !value ? 'Choisissez votre quartier' : null),
+    // Recette : « je travaille à Senlis » coché → quartier ET rôle obligatoires
+    travailleQuartier: (value, all) => (all.travailleASenlis && !value ? 'Choisissez le quartier où vous travaillez' : null),
+    travailType: (value, all) => (all.travailleASenlis && !value ? 'Précisez si vous dirigez cette activité ou si vous y êtes salarié·e' : null),
+    consent: (value) => (value ? null : 'Merci de confirmer avoir pris connaissance de la politique de confidentialité'),
+  });
+  const { errors, errorId, fieldProps } = validation;
+
+  // Erreur qui ne concerne AUCUN champ (réseau, serveur…) → en haut
   const [error, setError] = useState(null);
-  // S5A-07 (RGAA 11.10) : NOM du champ concerné par l'erreur, pour la
-  // relier au bon champ (aria-describedby) et y placer le focus.
-  const [errorField, setErrorField] = useState(null);
   const formRef = useRef(null);
-
-  /** Attributs ARIA d'un champ : invalide seulement s'il est le fautif */
-  const fieldProps = (name) => errorProps(errorField === name, 'register-error');
-
-  /** Affiche une erreur, reliée au champ `field` (ou à aucun) */
-  const showError = (message, field = null) => {
-    setError(message);
-    setErrorField(field);
-    // Le focus va sur le champ fautif : la personne (au clavier, ou avec
-    // un lecteur d'écran) est directement là où elle doit corriger, au
-    // lieu de chercher dans tout le formulaire. requestAnimationFrame :
-    // on attend que React ait posé aria-invalid avant de déplacer le focus.
-    if (field) {
-      requestAnimationFrame(() => formRef.current?.querySelector(`[name="${field}"]`)?.focus());
-    }
-  };
 
   // Codes d'erreur de l'API → champ concerné
   const FIELD_BY_CODE = { EMAIL_TAKEN: 'email', PSEUDO_TAKEN: 'pseudo' };
@@ -59,51 +65,48 @@ export default function Inscription() {
   // elle-même, revenue après un lien de vérification perdu
   const [emailTaken, setEmailTaken] = useState(false);
 
+  /** Met à jour un champ, puis le revérifie s'il était en erreur */
+  const updateField = (name, value, extra = {}) => {
+    const next = { ...form, [name]: value, ...extra };
+    setForm(next);
+    setError(null);
+    if (name === 'email') setEmailTaken(false);
+    validation.revalidateIfInvalid(name, next);
+    // Corriger le mot de passe peut rendre la confirmation juste (ou fausse)
+    if (name === 'password' && next.passwordConfirm) validation.revalidateIfInvalid('passwordConfirm', next);
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-      // Le quartier précédemment choisi n'a plus de sens si on quitte
-      // "autre quartier" — sans ce reset, une valeur périmée resterait
-      // en mémoire et partirait quand même vers l'API.
-      ...(name === 'situation' && value !== 'AUTRE_QUARTIER' && { quartier: '' }),
-    }));
-    setError(null);
-    setErrorField(null);
+    // Le quartier précédemment choisi n'a plus de sens si on quitte
+    // "autre quartier" — sans ce reset, une valeur périmée resterait
+    // en mémoire et partirait quand même vers l'API.
+    updateField(name, value, name === 'situation' && value !== 'AUTRE_QUARTIER' ? { quartier: '' } : {});
   };
 
   const handleTravailleToggle = (e) => {
     const checked = e.target.checked;
-    setForm((prev) => ({
-      ...prev,
-      travailleASenlis: checked,
-      // Même logique que le reset de quartier ci-dessus : une valeur
-      // périmée ne doit jamais survivre au décochage de la case.
-      ...(!checked && { travailleQuartier: '', travailType: '' }),
-    }));
+    // Même logique que le reset de quartier ci-dessus : une valeur
+    // périmée ne doit jamais survivre au décochage de la case.
+    updateField('travailleASenlis', checked, !checked ? { travailleQuartier: '', travailType: '' } : {});
+    if (!checked) {
+      validation.setFieldError('travailleQuartier', null);
+      validation.setFieldError('travailType', null);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
-    setErrorField(null);
 
-    // Vérifié côté client AVANT l'appel réseau : pas la peine
-    // d'attendre une réponse serveur pour une faute de frappe que
-    // l'utilisateur peut corriger tout de suite.
-    if (form.password !== form.passwordConfirm) {
-      showError('Les deux mots de passe ne correspondent pas', 'passwordConfirm');
-      return;
-    }
-
-    // S5A-04 : ce n'est PAS un consentement au sens du RGPD. La base
-    // légale du compte est l'exécution du service (art. 6.1.b) : si
-    // c'était un consentement, le retirer devrait supprimer le compte.
-    // La case atteste seulement que la personne a été INFORMÉE.
-    // (Le nom technique `consent` est gardé pour ne pas toucher au reste.)
-    if (!form.consent) {
-      showError('Merci de confirmer avoir pris connaissance de la politique de confidentialité', 'consent');
+    // Tous les champs d'un coup : la personne voit TOUT ce qui reste à
+    // corriger, pas une erreur à la fois (soumettre, corriger, soumettre…)
+    const invalid = validation.validateAll(form);
+    if (invalid.length > 0) {
+      setError(invalid.length === 1
+        ? 'Un champ est à corriger.'
+        : `${invalid.length} champs sont à corriger.`);
+      focusField(formRef.current, invalid[0]);
       return;
     }
 
@@ -130,15 +133,16 @@ export default function Inscription() {
       clearRegisterDraft();
       setSuccess(data.message);
     } catch (err) {
-      // Si l'API renvoie des détails de validation (Zod),
-      // on les affiche champ par champ
-      // details = { nomDuChamp: message } : le nom du champ Zod est
-      // aussi le `name` de l'input — on sait donc où pointer.
-      if (err.details) {
-        const [field, message] = Object.entries(err.details)[0];
-        showError(message, field);
+      // Erreur liée à un champ (Zod : details = { nomDuChamp: message } ;
+      // ou un code connu comme EMAIL_TAKEN) → affichée SOUS ce champ.
+      const [field, message] = err.details
+        ? Object.entries(err.details)[0]
+        : [FIELD_BY_CODE[err.code], err.message];
+      if (field) {
+        validation.setFieldError(field, message);
+        focusField(formRef.current, field);
       } else {
-        showError(err.message || 'Une erreur est survenue', FIELD_BY_CODE[err.code] ?? null);
+        setError(err.message || 'Une erreur est survenue');
       }
       setEmailTaken(err.code === 'EMAIL_TAKEN');
     } finally {
@@ -193,86 +197,105 @@ export default function Inscription() {
         background: '#fff', borderRadius: 24, padding: 28,
         boxShadow: '0 2px 8px rgba(38,51,58,.06)',
       }}>
-        <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Pseudo</span>
-          <input
-            type="text" name="pseudo" value={form.pseudo} onChange={handleChange}
-            autoComplete="username" required minLength={2} maxLength={30}
-            placeholder="Votre pseudo public"
-            {...fieldProps('pseudo')}
-            style={inputStyle}
-          />
-        </label>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Pseudo</span>
+            <input
+              type="text" name="pseudo" value={form.pseudo} onChange={handleChange}
+              autoComplete="username" required minLength={2} maxLength={30}
+              placeholder="Votre pseudo public"
+              {...fieldProps('pseudo', form)}
+              style={inputStyle}
+            />
+          </label>
+          <FieldError id={errorId('pseudo')}>{errors.pseudo}</FieldError>
+        </div>
 
-        <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Email</span>
-          <input
-            type="email" name="email" value={form.email} onChange={handleChange}
-            autoComplete="email" required
-            placeholder="votreadresse@email.fr"
-            {...fieldProps('email')}
-            style={inputStyle}
-          />
-        </label>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Email</span>
+            <input
+              type="email" name="email" value={form.email} onChange={handleChange}
+              autoComplete="email" required
+              placeholder="votreadresse@email.fr"
+              {...fieldProps('email', form)}
+              style={inputStyle}
+            />
+          </label>
+          <FieldError id={errorId('email')}>{errors.email}</FieldError>
+          <EmailSuggestion email={form.email} hidden={Boolean(errors.email)} onAccept={(corrected) => updateField('email', corrected)} />
+        </div>
 
-        <label style={{ display: 'block', marginBottom: 8 }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe</span>
-          <PasswordInput
-            name="password" value={form.password} onChange={handleChange}
-            autoComplete="new-password" required minLength={12}
-            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
-            title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
-            placeholder="12 caractères minimum"
-            {...fieldProps('password')}
-            style={inputStyle}
-          />
-        </label>
+        <div style={{ marginBottom: 8 }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe</span>
+            <PasswordInput
+              name="password" value={form.password} onChange={handleChange}
+              autoComplete="new-password" required minLength={12}
+              pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
+              title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
+              placeholder="12 caractères minimum"
+              {...fieldProps('password', form)}
+              style={inputStyle}
+            />
+          </label>
+          <FieldError id={errorId('password')}>{errors.password}</FieldError>
+        </div>
         <PasswordStrengthMeter password={form.password} />
 
-        <label style={{ display: 'block', margin: '16px 0 24px' }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Confirmer le mot de passe</span>
-          <PasswordInput
-            name="passwordConfirm" value={form.passwordConfirm} onChange={handleChange}
-            autoComplete="new-password" required
-            placeholder="Retapez le même mot de passe"
-            {...fieldProps('passwordConfirm')}
-            style={inputStyle}
-          />
-        </label>
+        <div style={{ margin: '16px 0 24px' }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Confirmer le mot de passe</span>
+            <PasswordInput
+              name="passwordConfirm" value={form.passwordConfirm} onChange={handleChange}
+              autoComplete="new-password" required
+              placeholder="Retapez le même mot de passe"
+              {...fieldProps('passwordConfirm', form)}
+              style={inputStyle}
+            />
+          </label>
+          <FieldError id={errorId('passwordConfirm')}>{errors.passwordConfirm}</FieldError>
+        </div>
 
-        <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Votre situation</span>
-          <select
-            name="situation" value={form.situation} onChange={handleChange}
-            required style={inputStyle} {...fieldProps('situation')}
-          >
-            <option value="" disabled>Choisissez votre situation</option>
-            <option value="CENTRE_RESIDENT">J&apos;habite le centre historique</option>
-            <option value="AUTRE_QUARTIER">J&apos;habite un autre quartier de Senlis</option>
-            <option value="HORS_SENLIS">Je ne réside pas à Senlis</option>
-          </select>
-          <p style={{ fontSize: 13, color: '#6B6257', marginTop: 4 }}>
-            Sert à cibler certaines enquêtes (ex. stationnement centre-ville) — jamais vérifié, modifiable à tout moment dans Mon compte.
-          </p>
-        </label>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Votre situation</span>
+            <select
+              name="situation" value={form.situation} onChange={handleChange}
+              required style={inputStyle} {...fieldProps('situation', form)}
+            >
+              <option value="" disabled>Choisissez votre situation</option>
+              <option value="CENTRE_RESIDENT">J&apos;habite le centre historique</option>
+              <option value="AUTRE_QUARTIER">J&apos;habite un autre quartier de Senlis</option>
+              <option value="HORS_SENLIS">Je ne réside pas à Senlis</option>
+            </select>
+            <p style={{ fontSize: 13, color: '#6B6257', marginTop: 4 }}>
+              Sert à cibler certaines enquêtes (ex. stationnement centre-ville) — jamais vérifié, modifiable à tout moment dans Mon compte.
+            </p>
+          </label>
+          <FieldError id={errorId('situation')}>{errors.situation}</FieldError>
+        </div>
 
         {/* Menu en cascade : affiché seulement pour "autre quartier",
             pour que ces citoyens précisent lequel plutôt que de rester
             dans une case fourre-tout — utile pour cibler de futures
             enquêtes/propositions par quartier. */}
         {form.situation === 'AUTRE_QUARTIER' && (
-          <label style={{ display: 'block', marginBottom: 16 }}>
-            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Quel quartier ?</span>
-            <select
-              name="quartier" value={form.quartier} onChange={handleChange}
-              required style={inputStyle} {...fieldProps('quartier')}
-            >
-              <option value="" disabled>Choisissez votre quartier</option>
-              {QUARTIER_OPTIONS.map((q) => (
-                <option key={q.value} value={q.value}>{q.label}</option>
-              ))}
-            </select>
-          </label>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block' }}>
+              <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Quel quartier ?</span>
+              <select
+                name="quartier" value={form.quartier} onChange={handleChange}
+                required style={inputStyle} {...fieldProps('quartier', form)}
+              >
+                <option value="" disabled>Choisissez votre quartier</option>
+                {QUARTIER_OPTIONS.map((q) => (
+                  <option key={q.value} value={q.value}>{q.label}</option>
+                ))}
+              </select>
+            </label>
+            <FieldError id={errorId('quartier')}>{errors.quartier}</FieldError>
+          </div>
         )}
 
         {/* Axe indépendant de la situation ci-dessus : on peut
@@ -290,52 +313,61 @@ export default function Inscription() {
 
         {form.travailleASenlis && (
           <>
-            <label style={{ display: 'block', marginBottom: 16 }}>
-              <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Dans quel quartier ?</span>
-              <select
-                name="travailleQuartier" value={form.travailleQuartier} onChange={handleChange}
-                required style={inputStyle} {...fieldProps('travailleQuartier')}
-              >
-                <option value="" disabled>Choisissez le quartier</option>
-                {TRAVAIL_QUARTIER_OPTIONS.map((q) => (
-                  <option key={q.value} value={q.value}>{q.label}</option>
-                ))}
-              </select>
-            </label>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block' }}>
+                <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Dans quel quartier ?</span>
+                <select
+                  name="travailleQuartier" value={form.travailleQuartier} onChange={handleChange}
+                  required style={inputStyle} {...fieldProps('travailleQuartier', form)}
+                >
+                  <option value="" disabled>Choisissez le quartier</option>
+                  {TRAVAIL_QUARTIER_OPTIONS.map((q) => (
+                    <option key={q.value} value={q.value}>{q.label}</option>
+                  ))}
+                </select>
+              </label>
+              <FieldError id={errorId('travailleQuartier')}>{errors.travailleQuartier}</FieldError>
+            </div>
 
-            <label style={{ display: 'block', marginBottom: 16 }}>
-              <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>À ce titre...</span>
-              <select
-                name="travailType" value={form.travailType} onChange={handleChange}
-                required style={inputStyle} {...fieldProps('travailType')}
-              >
-                <option value="" disabled>Précisez</option>
-                {TRAVAIL_TYPE_OPTIONS.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-            </label>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block' }}>
+                <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>À ce titre...</span>
+                <select
+                  name="travailType" value={form.travailType} onChange={handleChange}
+                  required style={inputStyle} {...fieldProps('travailType', form)}
+                >
+                  <option value="" disabled>Précisez</option>
+                  {TRAVAIL_TYPE_OPTIONS.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </label>
+              <FieldError id={errorId('travailType')}>{errors.travailType}</FieldError>
+            </div>
           </>
         )}
 
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, fontSize: 14, color: '#26333A' }}>
-          <input
-            type="checkbox" name="consent" checked={form.consent}
-            onChange={(e) => { setForm({ ...form, consent: e.target.checked }); setError(null); setErrorField(null); }}
-            {...fieldProps('consent')}
-            required style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}
-          />
-          <span>
-            J'ai pris connaissance de la{' '}
-            {/* Nouvel onglet : le formulaire à moitié rempli n'est pas perdu.
-                Il faut alors le DIRE (RGAA 13.2) — texte réservé aux lecteurs
-                d'écran — et couper le lien avec la page d'origine (rel). */}
-            <Link to="/confidentialite" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
-              politique de confidentialité
-              <span className="sr-only"> (s'ouvre dans un nouvel onglet)</span>
-            </Link>
-          </span>
-        </label>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, color: '#26333A' }}>
+            <input
+              type="checkbox" name="consent" checked={form.consent}
+              onChange={(e) => updateField('consent', e.target.checked)}
+              {...fieldProps('consent', form)}
+              required style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}
+            />
+            <span>
+              J'ai pris connaissance de la{' '}
+              {/* Nouvel onglet : le formulaire à moitié rempli n'est pas perdu.
+                  Il faut alors le DIRE (RGAA 13.2) — texte réservé aux lecteurs
+                  d'écran — et couper le lien avec la page d'origine (rel). */}
+              <Link to="/confidentialite" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+                politique de confidentialité
+                <span className="sr-only"> (s'ouvre dans un nouvel onglet)</span>
+              </Link>
+            </span>
+          </label>
+          <FieldError id={errorId('consent')}>{errors.consent}</FieldError>
+        </div>
 
         <button
           type="submit" disabled={loading}

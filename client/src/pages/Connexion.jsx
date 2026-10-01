@@ -1,8 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import FormError, { errorProps } from '../components/FormError/FormError.jsx';
+import FieldError from '../components/FieldError/FieldError.jsx';
+import EmailSuggestion from '../components/EmailSuggestion/EmailSuggestion.jsx';
+import PasswordInput from '../components/PasswordInput/PasswordInput.jsx';
+import { useFieldValidation, focusField } from '../hooks/useFieldValidation.js';
+import { validateEmail, required } from '../utils/formValidation.js';
 import { safeRedirectPath } from '../utils/safeRedirect.js';
 import ResendVerification from '../components/ResendVerification/ResendVerification.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
@@ -25,10 +30,38 @@ export default function Connexion() {
   const [challengeToken, setChallengeToken] = useState(null);
   const [code, setCode] = useState('');
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    setError(null);
+  // ── Validation champ par champ (S5R-02) ─────────────────
+  // Seulement le format : à la connexion, on ne rappelle PAS les règles
+  // de complexité du mot de passe (elles pourraient avoir changé depuis
+  // la création du compte, et ça aiderait un attaquant à cibler ses essais).
+  const validation = useFieldValidation('login', {
+    email: (value) => validateEmail(value),
+    password: required('Saisissez votre mot de passe'),
+  });
+  const formRef = useRef(null);
+
+  /**
+   * Un champ peut être décrit par DEUX messages : le sien (sous le
+   * champ) et l'erreur de connexion (en haut, qui concerne les deux
+   * champs). aria-describedby accepte plusieurs id séparés par un espace.
+   */
+  const describedBy = (name) => {
+    const ids = [validation.errors[name] && validation.errorId(name), error && 'login-error'].filter(Boolean);
+    return {
+      'aria-invalid': ids.length > 0 || undefined,
+      'aria-describedby': ids.join(' ') || undefined,
+      onBlur: () => validation.validateField(name, form),
+    };
   };
+
+  const updateField = (name, value) => {
+    const next = { ...form, [name]: value };
+    setForm(next);
+    setError(null);
+    validation.revalidateIfInvalid(name, next);
+  };
+
+  const handleChange = (e) => updateField(e.target.name, e.target.value);
 
   // Même redirection dans les deux cas (connexion directe OU après
   // le code 2FA) — d'où son extraction dans sa propre fonction
@@ -49,8 +82,14 @@ export default function Connexion() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    // Pas d'appel réseau pour un formulaire visiblement incomplet
+    const invalid = validation.validateAll(form);
+    if (invalid.length > 0) {
+      focusField(formRef.current, invalid[0]);
+      return;
+    }
+    setLoading(true);
     try {
       const data = await login(form);
       if (data.twoFactorRequired) {
@@ -149,22 +188,31 @@ export default function Connexion() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate style={{ background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)' }}>
-        <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Email</span>
-          <input type="email" name="email" value={form.email} onChange={handleChange}
-            autoComplete="email" required placeholder="votreadresse@email.fr"
-            {...errorProps(Boolean(error), 'login-error')}
-            style={inputStyle} />
-        </label>
+      <form ref={formRef} onSubmit={handleSubmit} noValidate style={{ background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)' }}>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Email</span>
+            <input type="email" name="email" value={form.email} onChange={handleChange}
+              autoComplete="email" required placeholder="votreadresse@email.fr"
+              {...describedBy('email')}
+              style={inputStyle} />
+          </label>
+          <FieldError id={validation.errorId('email')}>{validation.errors.email}</FieldError>
+          <EmailSuggestion email={form.email} hidden={Boolean(validation.errors.email)} onAccept={(corrected) => updateField('email', corrected)} />
+        </div>
 
-        <label style={{ display: 'block', marginBottom: 24 }}>
-          <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe</span>
-          <input type="password" name="password" value={form.password} onChange={handleChange}
-            autoComplete="current-password" required placeholder="Votre mot de passe"
-            {...errorProps(Boolean(error), 'login-error')}
-            style={inputStyle} />
-        </label>
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe</span>
+            {/* S5R-02 : l'œil pour afficher ce qu'on tape, comme à
+                l'inscription — moins d'échecs de connexion « à l'aveugle » */}
+            <PasswordInput name="password" value={form.password} onChange={handleChange}
+              autoComplete="current-password" required placeholder="Votre mot de passe"
+              {...describedBy('password')}
+              style={inputStyle} />
+          </label>
+          <FieldError id={validation.errorId('password')}>{validation.errors.password}</FieldError>
+        </div>
 
         <button type="submit" disabled={loading} className="btn btn-primary"
           style={{ width: '100%', justifyContent: 'center' }}>
