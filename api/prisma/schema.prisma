@@ -179,6 +179,11 @@ model User {
   // sinon toujours null (pas de sens à préciser un type de travail
   // pour quelqu'un qui ne travaille pas à Senlis).
   travailType       TravailType?
+  // S5R-05 : « travaille à Senlis » dit EXPLICITEMENT (oui / non /
+  // null = jamais demandé). Avant, un travailleQuartier vide voulait
+  // dire « non » OU « on ne sait pas » : impossible de préremplir
+  // « Non » dans une enquête, ni de l'enregistrer.
+  travailleASenlis  Boolean?
 
   // Barrière anti-comptes jetables : l'email doit être vérifié (jeton envoyé
   // à l'inscription) avant de voter ou répondre. Des comptes bidons qui
@@ -365,16 +370,25 @@ model Question {
   // unique).
   syncsToProfile String? // 'situation' | 'quartier' | 'travailleQuartier' | 'travailType'
 
-  // Branchement conditionnel : si renseigné, cette question ne s'affiche
-  // QUE si le répondant a choisi cette option précise à une question
-  // antérieure (ex. l'enquête stationnement scindée en deux parcours
-  // selon la situation déclarée en 1re question). SetNull plutôt que
-  // Cascade : si l'option de déclenchement est supprimée, la question
-  // redevient simplement "toujours affichée" plutôt que d'être détruite
-  // en cascade — un admin qui retouche une question ne doit pas risquer
-  // de perdre une AUTRE question sans le vouloir.
-  showIfOptionId String?
-  showIfOption   QuestionOption? @relation("QuestionBranching", fields: [showIfOptionId], references: [id], onDelete: SetNull)
+  // ── Moteur d'enquête v2 (S5R-05) ─────────────────────────
+  // Conditions d'affichage : la question n'apparaît que si AU MOINS UNE
+  // de ces options (de questions précédentes) a été choisie — un « OU ».
+  // Aucune condition = question toujours affichée. Remplace l'ancien
+  // champ unique showIfOptionId (une seule condition possible).
+  conditions QuestionCondition[] @relation("QuestionConditions")
+
+  // NOMBRE uniquement : bornes de la réponse (ex. « nombre de véhicules
+  // professionnels » ≥ 1 quand on vient de répondre « Oui, j'en ai »).
+  minValue Float?
+  maxValue Float?
+
+  // CHOIX_MULTIPLE uniquement : pas plus de cases cochées que la réponse
+  // donnée à une question NOMBRE précédente (ex. « où sont garés vos
+  // véhicules » ≤ nombre de véhicules). SetNull : si la question de
+  // référence disparaît, la limite disparaît avec elle.
+  maxChoicesFromId String?
+  maxChoicesFrom   Question?  @relation("MaxChoicesFrom", fields: [maxChoicesFromId], references: [id], onDelete: SetNull)
+  limitedQuestions Question[] @relation("MaxChoicesFrom")
 
   surveyId String
   survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
@@ -405,9 +419,13 @@ model QuestionOption {
   question   Question @relation("QuestionOwnOptions", fields: [questionId], references: [id], onDelete: Cascade)
 
   answers Answer[]
-  // Questions dont l'affichage dépend d'avoir choisi CETTE option
-  // (le côté "1" de la relation nommée QuestionBranching ci-dessus).
-  gatesQuestions Question[] @relation("QuestionBranching")
+  // Questions dont l'affichage dépend du choix de cette option (S5R-05)
+  conditionsTriggered QuestionCondition[] @relation("ConditionOption")
+
+  // Choisir cette option TERMINE l'enquête (S5R-05) : les questions
+  // suivantes ne sont plus posées — ex. « 0 véhicule » dans l'enquête
+  // stationnement. CHOIX_UNIQUE et OUI_NON uniquement.
+  endsSurvey Boolean @default(false)
 
   @@unique([questionId, order])
 }
@@ -523,4 +541,29 @@ model AdminAuditLog {
 
   // Les consultations et la purge filtrent toujours par date
   @@index([createdAt])
+}
+
+// ══════════════════════════════════════════════════════════
+// Condition d'affichage d'une question (S5R-05)
+//
+// Une ligne = « la question Q s'affiche si l'option O a été choisie ».
+// Plusieurs lignes pour la même question = plusieurs façons de la
+// faire apparaître (OU) : ex. « questions sur le stationnement du
+// centre » si « je réside dans le centre » OU « je viens en voiture
+// dans le centre ».
+//
+// Analogie : une porte avec plusieurs badges autorisés — n'importe
+// lequel ouvre la porte.
+//
+// Clé primaire composée (questionId, optionId) : la même condition ne
+// peut pas être enregistrée deux fois. Cascade des deux côtés : si la
+// question OU l'option disparaît, la condition n'a plus de sens.
+// ══════════════════════════════════════════════════════════
+model QuestionCondition {
+  questionId String
+  question   Question       @relation("QuestionConditions", fields: [questionId], references: [id], onDelete: Cascade)
+  optionId   String
+  option     QuestionOption @relation("ConditionOption", fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, optionId])
 }

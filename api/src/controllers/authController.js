@@ -60,7 +60,7 @@ async function assertCurrentPassword(user, password) {
 export async function register(req, res, next) {
   try {
     const {
-      email, password, pseudo, situation, quartier, travailleQuartier, travailType,
+      email, password, pseudo, situation, quartier, travailleQuartier, travailType, travailleASenlis,
     } = req.body;
 
     // Vérifie si l'email est déjà pris. Ce n'est qu'un PREMIER filtre,
@@ -107,6 +107,9 @@ export async function register(req, res, next) {
         quartier: situation === 'AUTRE_QUARTIER' ? quartier : null,
         travailleQuartier: travailleQuartier ?? null,
         travailType: travailleQuartier ? travailType : null,
+        // S5R-05 : oui / non / non renseigné. Un quartier de travail
+        // donné vaut « oui », quoi qu'indique la case.
+        travailleASenlis: travailleQuartier ? true : (travailleASenlis ?? null),
       },
     });
 
@@ -307,6 +310,7 @@ export async function login(req, res, next) {
         quartier: user.quartier,
         travailleQuartier: user.travailleQuartier,
         travailType: user.travailType,
+        travailleASenlis: user.travailleASenlis,
       },
     });
   } catch (err) {
@@ -367,6 +371,7 @@ export async function verifyTwoFactor(req, res, next) {
         quartier: user.quartier,
         travailleQuartier: user.travailleQuartier,
         travailType: user.travailType,
+        travailleASenlis: user.travailleASenlis,
       },
     });
   } catch (err) {
@@ -389,6 +394,7 @@ export async function me(req, res, next) {
         quartier: true,
         travailleQuartier: true,
         travailType: true,
+        travailleASenlis: true,
         notifyNewProposal: true,
         notifySurveyClosed: true,
         createdAt: true,
@@ -431,7 +437,7 @@ export async function exportMyData(req, res, next) {
       where: { id: userId },
       select: {
         email: true, pseudo: true, role: true, emailVerified: true,
-        situation: true, quartier: true, travailleQuartier: true, travailType: true,
+        situation: true, quartier: true, travailleQuartier: true, travailType: true, travailleASenlis: true,
         notifyNewProposal: true, notifySurveyClosed: true,
         createdAt: true, updatedAt: true, lastLoginAt: true,
         votes: {
@@ -516,7 +522,7 @@ export async function exportMyData(req, res, next) {
 export async function updateProfile(req, res, next) {
   try {
     const {
-      pseudo, situation, quartier, travailleQuartier, travailType, currentPassword,
+      pseudo, situation, quartier, travailleQuartier, travailType, travailleASenlis, currentPassword,
     } = req.body;
     const userId = req.user.userId;
 
@@ -566,10 +572,15 @@ export async function updateProfile(req, res, next) {
         // envoyé.
         ...(travailleQuartier !== undefined && { travailleQuartier }),
         ...(travailType !== undefined && { travailType }),
+        // S5R-05 : même cohérence qu'à l'inscription et qu'en enquête —
+        // « non » efface le volet travail, un quartier vaut « oui »
+        ...(travailleASenlis !== undefined && { travailleASenlis }),
+        ...(travailleASenlis === false && { travailleQuartier: null, travailType: null }),
+        ...(travailleQuartier && { travailleASenlis: true }),
       },
       select: {
         id: true, email: true, pseudo: true, role: true, emailVerified: true,
-        situation: true, quartier: true, travailleQuartier: true, travailType: true,
+        situation: true, quartier: true, travailleQuartier: true, travailType: true, travailleASenlis: true,
       },
     });
 

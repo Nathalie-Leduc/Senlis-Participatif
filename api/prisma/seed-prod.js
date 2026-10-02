@@ -20,6 +20,7 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../src/lib/prisma.js';
+import { toNestedQuestionsCreate, resolveReferences } from '../src/services/surveyBuilder.js';
 import argon2 from 'argon2';
 
 /**
@@ -526,10 +527,14 @@ async function main() {
     required: false,
     showIf: { questionOrder: idxTravaille, optionOrder: TRAVAILLE_NON },
   });
-  // $transaction : création ET résolution du branchement doivent
-  // réussir ENSEMBLE — un crash entre les deux laisserait une
-  // enquête avec des questions mais un branchement à moitié posé
-  // (même principe que resolveBranching côté contrôleur admin).
+  // $transaction : création ET résolution des conditions doivent
+  // réussir ENSEMBLE — un crash entre les deux laisserait une enquête
+  // avec des questions mais des conditions à moitié posées.
+  //
+  // S5R-05 : plus de copie locale de la logique de création — le seed
+  // utilise le MÊME service que l'administration (services/
+  // surveyBuilder.js) : options Oui/Non par défaut, conditions (showIf
+  // ou showIfAny), limites de cases, fins anticipées.
   await prisma.$transaction(async (tx) => {
     const survey = await tx.survey.create({
       data: {
@@ -539,52 +544,10 @@ async function main() {
           'Vos habitudes de déplacement et de stationnement à Senlis nous aident à mieux organiser l\'espace public — un centre-ville plus végétalisé, plus piéton, passe par mieux comprendre qui se gare où, et pourquoi.',
         status: 'OPEN',
         opensAt: new Date(),
-        questions: {
-          create: questionsSpec.map((q, index) => {
-            // Même logique que toNestedQuestionsCreate côté contrôleur
-            // admin : une question OUI_NON sans options explicites
-            // reçoit "Oui"/"Non" par défaut — sans ce filet, une
-            // question OUI_NON écrite sans `options` (le cas courant,
-            // pour rester lisible) n'aurait AUCUNE option en base, et
-            // toute question qui en dépend (showIf) n'aurait rien à
-            // référencer.
-            const options = q.options
-              ?? (q.type === 'OUI_NON' ? [{ label: 'Oui' }, { label: 'Non' }] : undefined);
-
-            return {
-              label: q.label,
-              helpText: q.helpText,
-              type: q.type,
-              required: q.required,
-              order: index,
-              uiHint: q.uiHint,
-              syncsToProfile: q.syncsToProfile,
-              options: options
-                ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex, syncValue: o.syncValue })) }
-                : undefined,
-            };
-          }),
-        },
+        questions: { create: toNestedQuestionsCreate(questionsSpec) },
       },
     });
-
-    const createdQuestions = await tx.question.findMany({
-      where: { surveyId: survey.id },
-      include: { options: true },
-      orderBy: { order: 'asc' },
-    });
-
-    for (const [index, spec] of questionsSpec.entries()) {
-      if (!spec.showIf) continue;
-
-      const targetQuestion = createdQuestions.find((q) => q.order === spec.showIf.questionOrder);
-      const targetOption = targetQuestion?.options.find((o) => o.order === spec.showIf.optionOrder);
-
-      await tx.question.update({
-        where: { id: createdQuestions[index].id },
-        data: { showIfOptionId: targetOption.id },
-      });
-    }
+    await resolveReferences(tx, survey.id, questionsSpec);
   });
 
   console.log('✅ Enquête "Stationnement et déplacements dans le centre historique" créée (OPEN), en 4 parcours branchés.');

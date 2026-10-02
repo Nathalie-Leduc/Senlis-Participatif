@@ -24,6 +24,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Confetti from '../components/Confetti/Confetti.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { visibleQuestionIds, chosenFromAnswers } from '../utils/surveyFlow.js';
 
 // Une réponse est-elle "remplie" pour CETTE question ? Dépend du
 // type — un CHOIX_MULTIPLE vide (aucune case cochée) n'est pas
@@ -49,7 +50,44 @@ function isAnswered(question, answer) {
 // Phrasé spécifique par champ profil — plus naturel qu'une formule
 // générique unique ("D'après votre profil : ...") pour chacun de ces
 // quatre champs bien identifiés.
+/**
+ * S5R-05 : message si un nombre sort des bornes fixées par
+ * l'administratrice (null si tout va bien ou si rien n'est saisi).
+ */
+export function numberRangeError(question, answer) {
+  const value = answer?.valueNumber;
+  if (question.type !== 'NOMBRE' || typeof value !== 'number' || Number.isNaN(value)) return null;
+  if (question.minValue !== null && question.minValue !== undefined && value < question.minValue) {
+    return `La valeur doit être au moins ${question.minValue}.`;
+  }
+  if (question.maxValue !== null && question.maxValue !== undefined && value > question.maxValue) {
+    return `La valeur doit être au plus ${question.maxValue}.`;
+  }
+  return null;
+}
+
+/**
+ * Profil → option à présélectionner.
+ *  - OUI_NON synchronisée avec travailleQuartier (ancien format) : un
+ *    champ renseigné veut dire « Oui » ; un champ VIDE ne prouve pas
+ *    « Non » (seulement « jamais demandé ») → on ne préremplit jamais
+ *    « Non » dans ce cas ;
+ *  - S5R-05 : « travaille à Senlis » est un vrai oui/non : true → « Oui »,
+ *    false → « Non », null (jamais renseigné) → rien.
+ */
+export function prefilledOptionFor(question, user) {
+  if (!question.syncsToProfile || !user) return null;
+  const value = user[question.syncsToProfile];
+  if (value === null || value === undefined || value === '') return null;
+  if (question.syncsToProfile === 'travailleASenlis') {
+    return question.options?.find((o) => o.syncValue === String(value)) ?? null;
+  }
+  if (question.type === 'OUI_NON') return question.options[0]; // « Oui » toujours en premier
+  return question.options?.find((o) => o.syncValue === value) ?? null;
+}
+
 const PROFILE_PREFILL_LABELS = {
+  travailleASenlis: 'Vous travaillez à Senlis :',
   situation: 'Vous résidez :',
   quartier: 'Votre quartier :',
   travailleQuartier: 'Vous travaillez dans :',
@@ -120,24 +158,8 @@ export default function EnqueteRepondre() {
         // si la personne clique sur "Modifier".
         const prefilled = {};
         for (const q of data.survey.questions) {
-          if (!q.syncsToProfile) continue;
-          const currentValue = user[q.syncsToProfile];
-          if (!currentValue) continue;
-
-          if (q.type === 'OUI_NON') {
-            // Cas particulier : les options Oui/Non n'ont jamais de
-            // syncValue (rien à leur associer), donc pas de
-            // correspondance à chercher — un champ profil renseigné
-            // veut dire "Oui" avec certitude. L'inverse serait faux :
-            // un champ VIDE ne prouve pas "Non", seulement "jamais
-            // demandé" (voir le commentaire sur cette question dans
-            // seed-prod.js) — on ne préremplit donc JAMAIS le "Non".
-            prefilled[q.id] = { optionId: q.options[0].id }; // "Oui" toujours en premier
-            continue;
-          }
-
-          const matchingOption = q.options?.find((o) => o.syncValue === currentValue);
-          if (matchingOption) prefilled[q.id] = { optionId: matchingOption.id };
+          const option = prefilledOptionFor(q, user);
+          if (option) prefilled[q.id] = { optionId: option.id };
         }
         if (Object.keys(prefilled).length) setAnswers(prefilled);
       })
@@ -197,15 +219,14 @@ export default function EnqueteRepondre() {
   }
 
   // Recalculée à chaque rendu (donc à chaque réponse donnée) : une
-  // question dont le déclencheur (showIfOptionId) n'a pas été choisi
-  // n'apparaît simplement jamais dans le parcours — pas ignorée en
-  // fin de course, absente dès le départ pour ce répondant précis.
-  const visibleQuestions = survey.questions.filter((q) => {
-    if (!q.showIfOptionId) return true;
-    return Object.values(answers).some(
-      (a) => a.optionId === q.showIfOptionId || a.optionIds?.includes(q.showIfOptionId),
-    );
-  });
+  // question dont aucune condition n'est remplie n'apparaît jamais dans
+  // le parcours — absente dès le départ pour ce répondant précis.
+  // S5R-05 : le parcours de CETTE personne, recalculé à chaque réponse
+  // (même moteur que l'API, voir utils/surveyFlow.js). Le total
+  // « Question 3 sur N » ne compte donc que les questions qu'elle
+  // verra réellement — plus le questionnaire complet, décourageant.
+  const visibleIds = visibleQuestionIds(survey.questions, chosenFromAnswers(answers));
+  const visibleQuestions = visibleIds.map((id) => survey.questions.find((q) => q.id === id));
 
   const question = visibleQuestions[step];
   if (!question) {
@@ -217,7 +238,17 @@ export default function EnqueteRepondre() {
   const total = visibleQuestions.length;
   const answer = answers[question.id];
   const answered = isAnswered(question, answer);
-  const canAdvance = !question.required || answered;
+  const rangeError = numberRangeError(question, answer);
+  // Limite de cases (S5R-05) : la réponse donnée à la question « Nombre »
+  // de référence, si elle a été donnée
+  const maxChoices = question.maxChoicesFromId
+    ? answers[question.maxChoicesFromId]?.valueNumber
+    : undefined;
+  // Cas d'un retour en arrière : on a coché 3 lieux, puis corrigé le
+  // nombre de véhicules à 2 → il faut décocher avant de continuer
+  // (sinon l'API refuserait la réponse à l'envoi)
+  const tooManyChoices = typeof maxChoices === 'number' && (answer?.optionIds?.length ?? 0) > maxChoices;
+  const canAdvance = (!question.required || answered) && !rangeError && !tooManyChoices;
   const isLast = step === total - 1;
 
   const handleNext = async () => {
@@ -312,17 +343,7 @@ export default function EnqueteRepondre() {
           // avec la possibilité de revenir au champ normal si elle ne
           // correspond plus (ex. déménagement récent, profil pas à
           // jour).
-          const currentProfileValue = question.syncsToProfile ? user[question.syncsToProfile] : null;
-          // OUI_NON : ses options n'ont jamais de syncValue (rien à
-          // leur associer) — un champ profil renseigné veut dire
-          // "Oui" avec certitude, sans avoir besoin de chercher une
-          // correspondance. Jamais l'inverse : un champ VIDE ne
-          // prouve pas "Non" (voir le commentaire dans seed-prod.js).
-          const prefilledOption = !currentProfileValue
-            ? null
-            : question.type === 'OUI_NON'
-              ? question.options[0] // "Oui" toujours en premier
-              : question.options?.find((o) => o.syncValue === currentProfileValue);
+          const prefilledOption = prefilledOptionFor(question, user);
 
           if (prefilledOption && !overrideCurrentQuestion) {
             return (
@@ -354,6 +375,8 @@ export default function EnqueteRepondre() {
               answer={answer}
               onChange={(value) => setAnswer(question.id, value)}
               labelledBy="question-label"
+              maxChoices={maxChoices}
+              rangeError={rangeError}
             />
           );
         })()}
@@ -371,14 +394,14 @@ export default function EnqueteRepondre() {
         <button
           type="button" onClick={handleNext} disabled={!canAdvance || submitting}
           className="btn btn-primary"
-          aria-describedby={!canAdvance ? 'required-hint' : undefined}
+          aria-describedby={!canAdvance && !rangeError && !tooManyChoices ? 'required-hint' : undefined}
         >
           {submitting ? 'Envoi…' : (isLast ? 'Terminer' : 'Suivant →')}
         </button>
       </div>
       {/* Un bouton désactivé SANS explication laisse la personne
           cliquer dans le vide (RGAA 11.10) : on dit pourquoi. */}
-      {!canAdvance && (
+      {!canAdvance && !rangeError && !tooManyChoices && (
         <p id="required-hint" style={{ color: '#6B6257', fontSize: 14, marginTop: 10, textAlign: 'right' }}>
           Une réponse est nécessaire pour continuer.
         </p>
@@ -391,7 +414,7 @@ export default function EnqueteRepondre() {
 // Un seul composant qui bascule sur question.type plutôt que 5
 // fichiers séparés : chaque branche est courte, et voir les 5 types
 // côte à côte aide à vérifier qu'aucun n'a été oublié.
-function QuestionInput({ question, answer, onChange, labelledBy }) {
+function QuestionInput({ question, answer, onChange, labelledBy, maxChoices, rangeError }) {
   // Étiquette + caractère obligatoire, communs à tous les types de champ
   const a11y = { 'aria-labelledby': labelledBy, 'aria-required': question.required || undefined };
   switch (question.type) {
@@ -416,6 +439,10 @@ function QuestionInput({ question, answer, onChange, labelledBy }) {
 
     case 'CHOIX_MULTIPLE': {
       const selected = answer?.optionIds || [];
+      // S5R-05 : limite = réponse à une question « Nombre » précédente
+      // (ex. pas plus de lieux de stationnement que de véhicules)
+      const hasLimit = typeof maxChoices === 'number';
+      const limitReached = hasLimit && selected.length >= maxChoices;
       const toggle = (optionId) => {
         const next = selected.includes(optionId)
           ? selected.filter((id) => id !== optionId)
@@ -423,14 +450,26 @@ function QuestionInput({ question, answer, onChange, labelledBy }) {
         onChange({ optionIds: next });
       };
       return (
-        <div role="group" aria-labelledby={labelledBy} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div role="group" aria-labelledby={labelledBy} aria-describedby={hasLimit ? 'choices-limit' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {hasLimit && (
+            // aria-live : « 2 sur 2 » est annoncé quand la limite est atteinte
+            <p id="choices-limit" aria-live="polite" style={{ fontSize: 14, color: '#6B6257', margin: 0 }}>
+              {maxChoices <= 1
+                ? `Une seule réponse possible (${selected.length} sur 1).`
+                : `Jusqu'à ${maxChoices} réponses (${selected.length} sur ${maxChoices}).`}
+            </p>
+          )}
           {question.options.map((option) => {
             const active = selected.includes(option.id);
+            // Une fois la limite atteinte, les cases NON cochées sont
+            // désactivées ; on peut toujours décocher pour changer d'avis
+            const blocked = limitReached && !active;
             return (
               <button
                 key={option.id} type="button" aria-pressed={active}
                 onClick={() => toggle(option.id)}
-                style={optionButtonStyle(active)}
+                disabled={blocked}
+                style={{ ...optionButtonStyle(active), ...(blocked && { opacity: 0.45, cursor: 'not-allowed' }) }}
               >
                 {active ? '☑ ' : '☐ '}{option.label}
               </button>
@@ -442,15 +481,26 @@ function QuestionInput({ question, answer, onChange, labelledBy }) {
 
     case 'NOMBRE':
       return (
-        <input
-          type="number"
-          {...a11y}
-          value={answer?.valueNumber ?? ''}
-          onChange={(e) => onChange({
-            valueNumber: e.target.value === '' ? undefined : Number(e.target.value),
-          })}
-          style={fieldStyle}
-        />
+        <div>
+          <input
+            type="number"
+            {...a11y}
+            // Bornes S5R-05 : les flèches du champ les respectent, et la
+            // saisie au clavier est vérifiée (message ci-dessous)
+            min={question.minValue ?? undefined}
+            max={question.maxValue ?? undefined}
+            aria-invalid={rangeError ? true : undefined}
+            aria-describedby={rangeError ? 'number-range-error' : undefined}
+            value={answer?.valueNumber ?? ''}
+            onChange={(e) => onChange({
+              valueNumber: e.target.value === '' ? undefined : Number(e.target.value),
+            })}
+            style={fieldStyle}
+          />
+          <p id="number-range-error" aria-live="polite" style={{ color: '#A8442F', fontSize: 14, fontWeight: 600, margin: rangeError ? '6px 0 0' : 0 }}>
+            {rangeError}
+          </p>
+        </div>
       );
 
     case 'TEXTE_LIBRE':

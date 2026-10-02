@@ -25,8 +25,8 @@ export default function Inscription() {
   const { register } = useAuth();
   const [form, setForm] = useState({
     pseudo: '', email: '', password: '', passwordConfirm: '', consent: false, situation: '', quartier: '',
-    // travailleASenlis n'existe que pour l'affichage (afficher/masquer
-    // la cascade) — jamais envoyé tel quel à l'API, voir handleSubmit.
+    // travailleASenlis : la case « Je travaille à Senlis ». Elle affiche
+    // la cascade quartier/rôle ET, depuis S5R-05, part vers l'API (oui/non).
     travailleASenlis: false, travailleQuartier: '', travailType: '',
     // S5R-01 : on reprend la saisie laissée dans cet onglet (sans les
     // mots de passe) — plus besoin de tout retaper après une erreur
@@ -113,8 +113,8 @@ export default function Inscription() {
     setLoading(true);
 
     try {
-      // passwordConfirm, consent et travailleASenlis n'existent que
-      // pour ce formulaire — quartier/travailleQuartier/travailType
+      // passwordConfirm et consent n'existent que pour ce formulaire ;
+      // travailleASenlis est converti en vrai booléen — quartier/travailleQuartier/travailType
       // ne sont envoyés que s'ils sont vraiment renseignés (Zod
       // refuserait une chaîne vide comme valeur d'enum).
       const {
@@ -122,12 +122,14 @@ export default function Inscription() {
       } = form;
       void passwordConfirm;
       void consent;
-      void travailleASenlis;
       const payload = {
         ...rest,
         ...(quartier && { quartier }),
         ...(travailleQuartier && { travailleQuartier }),
         ...(travailType && { travailType }),
+        // S5R-05 : la case est enfin transmise — décochée, elle dit
+        // « non », ce qu'un quartier de travail vide ne savait pas dire
+        travailleASenlis: Boolean(travailleASenlis),
       };
       const data = await register(payload);
       clearRegisterDraft();

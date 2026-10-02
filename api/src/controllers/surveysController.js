@@ -17,6 +17,8 @@ import prisma from '../lib/prisma.js';
 import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
 import { MIN_GROUP_SIZE, isTooSmall, maskSmallQuestions } from '../lib/privacy.js';
+import { visibleQuestionIds, withConditionIds } from '../lib/surveyFlow.js';
+import { toNestedQuestionsCreate, resolveReferences, questionsUnchanged } from '../services/surveyBuilder.js';
 
 const VISIBLE_STATUSES = ['OPEN', 'CLOSED'];
 
@@ -39,90 +41,26 @@ const LIST_SELECT = {
 const QUESTIONS_INCLUDE = {
   questions: {
     orderBy: { order: 'asc' },
-    include: { options: { orderBy: { order: 'asc' } } },
+    include: {
+      options: { orderBy: { order: 'asc' } },
+      // S5R-05 : les conditions d'affichage (OU) de chaque question
+      conditions: { select: { optionId: true } },
+    },
   },
 };
 
-// Transforme le tableau "questions" reçu du client (Zod) en nested
-// write Prisma. Réutilisée par create() ET update() pour ne pas
-// dupliquer la même transformation à deux endroits.
-//
-// order = index dans le tableau, jamais une valeur envoyée par le
-// client : ça élimine toute une classe d'erreurs (doublons, trous,
-// ordres qui ne commencent pas à 0) sans avoir à les valider.
-function toNestedQuestionsCreate(questions) {
-  return questions.map((q, index) => {
-    // OUI_NON a besoin de 2 options pour fonctionner (voir Answer
-    // dans schema.prisma), mais on ne veut pas obliger l'admin à
-    // taper "Oui"/"Non" à chaque fois — seulement s'il veut les
-    // personnaliser (ex. "Oui, systématiquement" / "Non, jamais").
-    const options = q.options
-      ?? (q.type === 'OUI_NON' ? [{ label: 'Oui' }, { label: 'Non' }] : undefined);
-
-    return {
-      label: q.label,
-      helpText: q.helpText,
-      type: q.type,
-      required: q.required ?? true,
-      order: index,
-      uiHint: q.uiHint,
-      syncsToProfile: q.syncsToProfile,
-      options: options
-        ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex, syncValue: o.syncValue })) }
-        : undefined,
-    };
-  });
+/**
+ * Forme renvoyée au client : chaque question porte
+ * `conditionOptionIds: [...]` (plus simple à exploiter qu'une liste
+ * d'objets { optionId }). Voir lib/surveyFlow.js.
+ */
+function serializeSurvey(survey) {
+  return survey && { ...survey, questions: survey.questions?.map(withConditionIds) };
 }
 
-// ── Résolution du branchement conditionnel (showIf) ─────
-//
-// Le nested create ci-dessus ne peut PAS poser showIfOptionId :
-// au moment où Prisma construit la requête, les options n'ont pas
-// encore d'id — elles sont créées dans la MÊME requête. On résout
-// donc les références par POSITION (order) dans un second passage,
-// une fois les vrais id générés et connus.
-async function resolveBranching(tx, surveyId, inputQuestions) {
-  const hasBranching = inputQuestions.some((q) => q.showIf);
-  if (!hasBranching) return;
-
-  const createdQuestions = await tx.question.findMany({
-    where: { surveyId },
-    include: { options: true },
-    orderBy: { order: 'asc' },
-  });
-
-  for (const [index, inputQuestion] of inputQuestions.entries()) {
-    if (!inputQuestion.showIf) continue;
-
-    // Une question ne peut dépendre que d'une question qui la
-    // PRÉCÈDE — jamais d'elle-même ni d'une question plus tardive
-    // (le répondant n'aurait pas encore répondu à celle-ci).
-    if (inputQuestion.showIf.questionOrder >= index) {
-      const error = new Error(
-        `La question ${index + 1} ne peut dépendre que d'une question qui la précède`,
-      );
-      error.status = 400;
-      error.code = 'VALIDATION_ERROR';
-      throw error;
-    }
-
-    const targetQuestion = createdQuestions.find((q) => q.order === inputQuestion.showIf.questionOrder);
-    const targetOption = targetQuestion?.options.find((o) => o.order === inputQuestion.showIf.optionOrder);
-    const thisQuestion = createdQuestions[index];
-
-    if (!targetOption || !thisQuestion) {
-      const error = new Error(`Référence de branchement invalide pour la question ${index + 1}`);
-      error.status = 400;
-      error.code = 'VALIDATION_ERROR';
-      throw error;
-    }
-
-    await tx.question.update({
-      where: { id: thisQuestion.id },
-      data: { showIfOptionId: targetOption.id },
-    });
-  }
-}
+// Transformation des questions reçues et résolution des références
+// (conditions, limites de cases) : voir services/surveyBuilder.js,
+// partagé avec le seed de production (S5R-05).
 
 // ── GET /surveys/admin — liste ADMIN, tous statuts confondus ───
 export async function listAdmin(req, res, next) {
@@ -209,7 +147,7 @@ export async function getBySlug(req, res, next) {
       hasResponded = !!existing;
     }
 
-    res.json({ survey, hasResponded });
+    res.json({ survey: serializeSurvey(survey), hasResponded });
   } catch (err) {
     next(err);
   }
@@ -239,7 +177,7 @@ export async function create(req, res, next) {
         },
       });
 
-      await resolveBranching(tx, created.id, questions);
+      await resolveReferences(tx, created.id, questions);
 
       return tx.survey.findUnique({ where: { id: created.id }, include: QUESTIONS_INCLUDE });
     });
@@ -252,40 +190,10 @@ export async function create(req, res, next) {
       details: { title: survey.title, status: survey.status },
     });
 
-    res.status(201).json({ survey });
+    res.status(201).json({ survey: serializeSurvey(survey) });
   } catch (err) {
     next(err);
   }
-}
-
-// Compare les questions déjà en base à celles reçues dans la requête,
-// pour savoir si l'admin a RÉELLEMENT touché aux questions ou si le
-// formulaire renvoie juste, sans y toucher, ce qui était déjà là (le
-// constructeur envoie toujours l'état complet, même quand seul le
-// statut a changé — voir plus bas). Ignore délibérément les id (le
-// payload entrant n'en a pas) : seuls label/type/required/order et
-// les libellés d'options comptent pour dire "pareil" ou "différent".
-function questionsUnchanged(existingQuestions, incomingQuestions) {
-  if (existingQuestions.length !== incomingQuestions.length) return false;
-
-  return existingQuestions.every((existingQuestion, index) => {
-    const incoming = incomingQuestions[index];
-
-    if (existingQuestion.label !== incoming.label) return false;
-    if ((existingQuestion.helpText || '') !== (incoming.helpText || '')) return false;
-    if (existingQuestion.type !== incoming.type) return false;
-    if (existingQuestion.required !== (incoming.required ?? true)) return false;
-
-    const existingLabels = existingQuestion.options.map((o) => o.label);
-    // OUI_NON sans options fournies = "garder les options actuelles"
-    // (même contrat qu'à la création) — pas une vraie différence.
-    const incomingLabels = incoming.options?.length
-      ? incoming.options.map((o) => o.label)
-      : (existingQuestion.type === 'OUI_NON' ? existingLabels : []);
-
-    if (existingLabels.length !== incomingLabels.length) return false;
-    return existingLabels.every((label, i) => label === incomingLabels[i]);
-  });
 }
 
 // ── PATCH /surveys/:id — éditer (admin) ─────────────────
@@ -359,7 +267,7 @@ export async function update(req, res, next) {
       });
 
       if (questionsActuallyChanged) {
-        await resolveBranching(tx, id, questions);
+        await resolveReferences(tx, id, questions);
       }
 
       return tx.survey.findUnique({ where: { id }, include: QUESTIONS_INCLUDE });
@@ -384,7 +292,7 @@ export async function update(req, res, next) {
       },
     });
 
-    res.json({ survey });
+    res.json({ survey: serializeSurvey(survey) });
   } catch (err) {
     next(err);
   }
@@ -482,7 +390,7 @@ async function computeResults(survey, { detailed = false, responseIds = null } =
   // versions (avec/sans filtre).
   const responseFilter = responseIds ? { responseId: { in: responseIds } } : {};
 
-  const [optionCounts, numberStats, textCounts, rawTextAnswers, situationCounts] = await Promise.all([
+  const [optionCounts, numberStats, textCounts, rawTextAnswers, situationCounts, responsesForFlow] = await Promise.all([
     choiceQuestionIds.length
       ? prisma.answer.groupBy({
         by: ['questionId', 'optionId'],
@@ -527,6 +435,12 @@ async function computeResults(survey, { detailed = false, responseIds = null } =
         select: { user: { select: { situation: true } } },
       })
       : [],
+    // S5R-05 : les options choisies par chaque répondant, pour rejouer
+    // son parcours et savoir quelles questions il a VUES (voir plus bas)
+    prisma.surveyResponse.findMany({
+      where: responseIds ? { id: { in: responseIds } } : { surveyId: survey.id },
+      select: { answers: { where: { optionId: { not: null } }, select: { questionId: true, optionId: true } } },
+    }),
   ]);
 
   // Map à plat questionId+optionId → compte (nested) ET optionId seul
@@ -535,13 +449,11 @@ async function computeResults(survey, { detailed = false, responseIds = null } =
   // l'option qui la déclenche), sans avoir à savoir à quelle question
   // cette option appartient.
   const optionCountsByQuestion = new Map();
-  const countByOptionId = new Map();
   for (const row of optionCounts) {
     if (!optionCountsByQuestion.has(row.questionId)) {
       optionCountsByQuestion.set(row.questionId, new Map());
     }
     optionCountsByQuestion.get(row.questionId).set(row.optionId, row._count);
-    countByOptionId.set(row.optionId, row._count);
   }
   const numberStatsByQuestion = new Map(numberStats.map((row) => [row.questionId, row]));
   const textCountsByQuestion = new Map(
@@ -553,24 +465,36 @@ async function computeResults(survey, { detailed = false, responseIds = null } =
     rawTextByQuestion.get(row.questionId).push(row.valueText);
   }
 
-  const questions = survey.questions.map((question) => {
-    // Une question SANS branchement est vue par tout le monde : le
-    // dénominateur reste totalResponses, comme avant. Une question
-    // BRANCHÉE n'a été vue que par les répondants ayant choisi
-    // l'option qui la déclenche — utiliser totalResponses comme
-    // dénominateur ferait paraître ses pourcentages artificiellement
-    // bas (ex. 12 % au lieu de 80 % si seul un quart des répondants
-    // pouvait même voir la question).
-    const questionTotal = question.showIfOptionId
-      ? (countByOptionId.get(question.showIfOptionId) || 0)
-      : totalResponses;
+  // ── Combien de personnes ont VU chaque question ? (S5R-05) ──
+  // C'est la base des pourcentages : « 80 % des personnes à qui on a
+  // posé la question », pas « 12 % de tous les répondants » (une
+  // question conditionnelle n'est vue que par une partie d'entre eux).
+  // Avec des conditions multiples (OU) et des fins anticipées, ce nombre
+  // ne se déduit plus d'un simple compteur : on REJOUE le parcours de
+  // chaque répondant avec le même moteur que le questionnaire
+  // (lib/surveyFlow.js).
+  const flowQuestions = survey.questions.map(withConditionIds);
+  const seenCount = new Map();
+  for (const response of responsesForFlow) {
+    const chosen = new Map();
+    for (const a of response.answers) {
+      if (!chosen.has(a.questionId)) chosen.set(a.questionId, []);
+      chosen.get(a.questionId).push(a.optionId);
+    }
+    for (const id of visibleQuestionIds(flowQuestions, (qid) => chosen.get(qid) ?? [])) {
+      seenCount.set(id, (seenCount.get(id) || 0) + 1);
+    }
+  }
+
+  const questions = flowQuestions.map((question) => {
+    const questionTotal = seenCount.get(question.id) || 0;
 
     const base = {
       id: question.id,
       label: question.label,
       type: question.type,
       required: question.required,
-      showIfOptionId: question.showIfOptionId,
+      conditionOptionIds: question.conditionOptionIds,
       totalForQuestion: questionTotal,
     };
 
@@ -805,7 +729,7 @@ function rejectAnswer(message) {
 // par l'appelant) et retourne les lignes Answer à créer. Un tableau
 // en retour, pas un objet : CHOIX_MULTIPLE peut produire plusieurs
 // lignes pour une seule réponse (une ligne par option cochée).
-function buildAnswerRows(question, answer) {
+function buildAnswerRows(question, answer, answersByQuestionId) {
   switch (question.type) {
     case 'CHOIX_UNIQUE':
     case 'OUI_NON': {
@@ -835,12 +759,31 @@ function buildAnswerRows(question, answer) {
       // schéma le rejetterait de toute façon, mais autant l'éviter
       // proprement plutôt que de laisser Postgres lever une erreur).
       const uniqueOptionIds = [...new Set(answer.optionIds)];
+
+      // S5R-05 : pas plus de cases que la réponse à une question
+      // « Nombre » précédente (ex. lieux de stationnement ≤ véhicules).
+      // Pas de réponse à cette question de référence → pas de limite.
+      if (question.maxChoicesFromId) {
+        const limit = answersByQuestionId.get(question.maxChoicesFromId)?.valueNumber;
+        if (typeof limit === 'number' && uniqueOptionIds.length > limit) {
+          rejectAnswer(`« ${question.label} » : ${limit} réponse${limit > 1 ? 's' : ''} au maximum`);
+        }
+      }
+
       return uniqueOptionIds.map((optionId) => ({ questionId: question.id, optionId }));
     }
 
     case 'NOMBRE': {
       if (typeof answer.valueNumber !== 'number') {
         rejectAnswer(`« ${question.label} » attend un nombre (valueNumber)`);
+      }
+      // S5R-05 : bornes fixées par l'administratrice (ex. au moins 1
+      // véhicule professionnel quand on vient de répondre « Oui »)
+      if (question.minValue !== null && answer.valueNumber < question.minValue) {
+        rejectAnswer(`« ${question.label} » : la valeur doit être au moins ${question.minValue}`);
+      }
+      if (question.maxValue !== null && answer.valueNumber > question.maxValue) {
+        rejectAnswer(`« ${question.label} » : la valeur doit être au plus ${question.maxValue}`);
       }
       return [{ questionId: question.id, valueNumber: answer.valueNumber }];
     }
@@ -883,7 +826,8 @@ export async function submitResponse(req, res, next) {
 
     const survey = await prisma.survey.findUnique({
       where: { id: surveyId },
-      include: { questions: { include: { options: true } } },
+      // conditions : nécessaires pour rejouer le parcours (S5R-05)
+      include: { questions: { include: { options: true, conditions: { select: { optionId: true } } } } },
     });
 
     if (!survey) {
@@ -934,19 +878,22 @@ export async function submitResponse(req, res, next) {
     // c'est le seul sens qui permet de détecter une question OBLIGATOIRE
     // restée sans réponse — l'inverse (parcourir les réponses) ne
     // remarquerait jamais une absence.
+    // S5R-05 : on REJOUE le parcours de la personne avec le même moteur
+    // que le questionnaire (lib/surveyFlow.js) — conditions multiples
+    // (OU) et fins anticipées compris. Seules les questions qu'elle a
+    // réellement VUES comptent : obligatoires pour elle, et seules leurs
+    // réponses sont enregistrées (une réponse à une question qu'elle n'a
+    // pas pu voir est ignorée).
+    const flowQuestions = survey.questions.map(withConditionIds);
+    const chosenOptionIds = (questionId) => {
+      const a = answersByQuestionId.get(questionId);
+      return a?.optionIds ?? (a?.optionId ? [a.optionId] : []);
+    };
+    const visibleIds = visibleQuestionIds(flowQuestions, chosenOptionIds);
+
     const answerRows = [];
-    for (const question of survey.questions) {
-      // Question conditionnelle (showIfOptionId) jamais montrée au
-      // répondant : on cherche si l'option qui la déclenche a été
-      // choisie PARMI TOUTES les réponses soumises — inutile de
-      // connaître l'ordre des questions pour ça, l'id de l'option
-      // suffit à lui seul à retrouver la question qui la possède.
-      const gateSatisfied = !question.showIfOptionId
-        || answers.some((a) => a.optionId === question.showIfOptionId
-          || a.optionIds?.includes(question.showIfOptionId));
-
-      if (!gateSatisfied) continue; // jamais montrée : ni obligatoire, ni sa réponse éventuelle prise en compte
-
+    for (const questionId of visibleIds) {
+      const question = questionsById.get(questionId);
       const answer = answersByQuestionId.get(question.id);
 
       if (!answer) {
@@ -956,7 +903,7 @@ export async function submitResponse(req, res, next) {
         continue; // question optionnelle non répondue : rien à créer
       }
 
-      answerRows.push(...buildAnswerRows(question, answer));
+      answerRows.push(...buildAnswerRows(question, answer, answersByQuestionId));
     }
 
     // $transaction : le bulletin (SurveyResponse) et TOUTES ses lignes
@@ -1003,13 +950,27 @@ export async function submitResponse(req, res, next) {
     // vraiment pour l'enquête, un souci sur la synchro du profil ne
     // doit jamais faire échouer la soumission elle-même.
     const profileUpdate = {};
+    const visibleSet = new Set(visibleIds);
     for (const question of survey.questions) {
-      if (!question.syncsToProfile) continue;
+      // Seules les questions VUES par la personne mettent à jour son profil
+      if (!question.syncsToProfile || !visibleSet.has(question.id)) continue;
       const answer = answersByQuestionId.get(question.id);
       if (!answer?.optionId) continue;
       const option = question.options.find((o) => o.id === answer.optionId);
-      if (option?.syncValue) profileUpdate[question.syncsToProfile] = option.syncValue;
+      if (!option?.syncValue) continue;
+      // S5R-05 : « travaille à Senlis » est un oui/non (booléen) ; les
+      // options portent les textes 'true' / 'false', convertis ici
+      profileUpdate[question.syncsToProfile] = question.syncsToProfile === 'travailleASenlis'
+        ? option.syncValue === 'true'
+        : option.syncValue;
     }
+    // Cohérence du volet « travail » : « non » efface le quartier et le
+    // rôle de travail ; un quartier de travail donné implique « oui »
+    if (profileUpdate.travailleASenlis === false) {
+      profileUpdate.travailleQuartier = null;
+      profileUpdate.travailType = null;
+    }
+    if (profileUpdate.travailleQuartier) profileUpdate.travailleASenlis = true;
     // Même garde-fou que updateProfile (authController.js) : si la
     // situation change pour autre chose qu'AUTRE_QUARTIER SANS que
     // cette même enquête ne resynchronise aussi le quartier, l'ancien

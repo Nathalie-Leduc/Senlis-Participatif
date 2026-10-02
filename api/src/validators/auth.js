@@ -111,6 +111,8 @@ export const registerSchema = z.object({
   quartier: quartier.optional(),
   travailleQuartier: travailleQuartier.optional(),
   travailType: travailType.optional(),
+  // S5R-05 : la case « Je travaille à Senlis », dite explicitement
+  travailleASenlis: z.boolean().optional(),
 }).superRefine(requireQuartierIfAutreQuartier);
 
 export const loginSchema = z.object({
@@ -152,6 +154,7 @@ export const updateProfileSchema = z.object({
   // ex. la personne décoche "je travaille à Senlis" après coup).
   travailleQuartier: travailleQuartier.nullable().optional(),
   travailType: travailType.nullable().optional(),
+  travailleASenlis: z.boolean().nullable().optional(),
   // Exigé par le contrôleur SEULEMENT si l'email change (S5A-06)
   currentPassword: z.string().optional(),
 }).superRefine(requireQuartierIfAutreQuartier);

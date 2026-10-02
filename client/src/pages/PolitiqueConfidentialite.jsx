@@ -66,7 +66,7 @@ export default function PolitiqueConfidentialite() {
               'Exécution du service que vous demandez (art. 6.1.b)',
             ],
             [
-              'Profil déclaré : lieu de résidence (centre historique, autre quartier — lequel —, hors Senlis) et, si vous le précisez, quartier de travail et rôle (commerçant·e ou salarié·e)',
+              'Profil déclaré : lieu de résidence (centre historique, autre quartier — lequel —, hors Senlis), si vous travaillez à Senlis et, si oui, votre quartier de travail et votre rôle (commerçant·e ou salarié·e)',
               'Vous proposer les enquêtes qui vous concernent, et produire des résultats agrégés par type de public (ex. « résidents du centre »)',
               'Exécution du service (art. 6.1.b) ; pour les statistiques agrégées, notre intérêt légitime à montrer que chaque public a été entendu (art. 6.1.f)',
             ],
