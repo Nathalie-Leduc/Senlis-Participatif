@@ -43,3 +43,29 @@ describe('toAssetUrl', () => {
     expect(toAssetUrl(null, 'https://api.x.fr/api/v1')).toBeNull();
   });
 });
+
+// ── Messages d'erreur (correctif du 02/10/2026) ───────────
+describe('apiFetch — messages d’erreur', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("un 429 en texte brut n'est plus présenté comme une « erreur réseau »", async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false, status: 429, json: async () => { throw new SyntaxError('pas du JSON'); },
+    });
+    await expect(api.post('/auth/login', {})).rejects.toMatchObject({
+      status: 429, message: expect.stringMatching(/Trop de tentatives/),
+    });
+  });
+
+  it("une réponse JSON de l'API est transmise telle quelle (code + message)", async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false, status: 429, json: async () => ({ error: { code: 'RATE_LIMITED', message: 'Trop de tentatives — réessayez dans 12 minutes.' } }),
+    });
+    await expect(api.post('/auth/login', {})).rejects.toMatchObject({ code: 'RATE_LIMITED', message: /12 minutes/ });
+  });
+
+  it('une VRAIE coupure (serveur injoignable) donne NETWORK_ERROR', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('NetworkError when attempting to fetch resource.'));
+    await expect(api.get('/health')).rejects.toMatchObject({ status: 0, code: 'NETWORK_ERROR' });
+  });
+});
