@@ -56,19 +56,36 @@ export const assetUrl = (path) => toAssetUrl(path, API_URL);
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('token');
 
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
-    ...options,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...options.headers,
+      },
+      ...options,
+    });
+  } catch {
+    // VRAIE erreur réseau : le serveur n'a pas répondu du tout (API
+    // arrêtée, connexion coupée). C'est le seul cas où « réseau » est
+    // le bon mot.
+    throw { status: 0, code: 'NETWORK_ERROR', message: 'Impossible de joindre le serveur — vérifiez votre connexion, puis réessayez.' };
+  }
 
   // Les erreurs API arrivent en JSON normalisé
   if (!response.ok) {
+    // Si le corps n'est pas du JSON, le serveur A répondu : ce n'est donc
+    // pas une erreur réseau. Avant, une réponse 429 en texte brut
+    // s'affichait « Erreur réseau inattendue » — trompeur (cas réel du
+    // 02/10/2026 : la connexion admin semblait cassée, elle était
+    // simplement freinée par le limiteur anti-force brute).
     const error = await response.json().catch(() => ({
-      error: { message: 'Erreur réseau inattendue' },
+      error: {
+        message: response.status === 429
+          ? 'Trop de tentatives — patientez quelques minutes avant de réessayer.'
+          : `Erreur inattendue du serveur (code ${response.status}).`,
+      },
     }));
     throw { status: response.status, ...error.error };
   }

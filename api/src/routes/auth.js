@@ -7,7 +7,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
+import { createAuthLimiter } from '../middlewares/rateLimiters.js';
 import { validate } from '../middlewares/validate.js';
 import { auth } from '../middlewares/auth.js';
 import * as ctrl from '../controllers/authController.js';
@@ -25,17 +25,10 @@ import {
 
 const router = Router();
 
-// Rate limit strict pour les routes d'authentification :
-// 10 tentatives par fenêtre de 15 minutes par IP.
-// Analogie : le videur autorise 10 entrées ratées, puis
-// te fait attendre 15 min dehors. Ça bloque le bruteforce
-// sans gêner un humain normal.
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  // ⚠️ En test, une suite Vitest enchaîne des dizaines de register/login
-  // depuis la même IP en quelques secondes → on desserre la limite.
-  max: process.env.NODE_ENV === 'test' ? 1000 : 10,
-});
+// Rate limit des routes d'authentification : 10 ÉCHECS par fenêtre de
+// 15 minutes et par IP en production (les réussites ne comptent pas),
+// réponse JSON lisible par le client — voir middlewares/rateLimiters.js.
+const authLimiter = createAuthLimiter();
 
 // ── Routes publiques (🔓) ───────────────────────────────
 
