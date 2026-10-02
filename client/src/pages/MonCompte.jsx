@@ -18,7 +18,8 @@ export default function MonCompte() {
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
   const [situation, setSituation] = useState(user?.situation || '');
   const [quartier, setQuartier] = useState(user?.quartier || '');
-  const [travailleASenlis, setTravailleASenlis] = useState(Boolean(user?.travailleQuartier));
+  // S5R-05 : le profil dit désormais explicitement oui / non / inconnu
+  const [travailleASenlis, setTravailleASenlis] = useState(user?.travailleASenlis ?? Boolean(user?.travailleQuartier));
   const [travailleQuartier, setTravailleQuartier] = useState(user?.travailleQuartier || '');
   const [travailType, setTravailType] = useState(user?.travailType || '');
   const [message, setMessage] = useState(null);
@@ -64,6 +65,7 @@ export default function MonCompte() {
       // une valeur précédente (voir updateProfile côté contrôleur).
       payload.travailleQuartier = travailleASenlis ? (travailleQuartier || null) : null;
       payload.travailType = travailleASenlis ? (travailType || null) : null;
+      payload.travailleASenlis = travailleASenlis;
       await api.patch('/auth/me', payload);
       // Confirmation propre à CETTE action, affichée juste sous le
       // bouton — le message partagé tout en haut de la page passe
@@ -261,7 +263,7 @@ export default function MonCompte() {
           onClick={handleUpdateSituation}
           disabled={!situation
             || (situation === user?.situation && quartier === (user?.quartier || '')
-              && travailleASenlis === Boolean(user?.travailleQuartier)
+              && travailleASenlis === (user?.travailleASenlis ?? Boolean(user?.travailleQuartier))
               && travailleQuartier === (user?.travailleQuartier || '')
               && travailType === (user?.travailType || ''))}
           className="btn" style={{ background: '#EFEBE2', color: '#26333A' }}

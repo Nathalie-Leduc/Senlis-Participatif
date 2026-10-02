@@ -55,7 +55,7 @@ export function isTooSmall(count, min = MIN_GROUP_SIZE) {
  *
  * @param {Array<object>} questions
  * @returns {Array<object>} nouvelles questions, les trop petites
- *   réduites à { id, label, type, showIfOptionId, masked: true,
+ *   réduites à { id, label, type, conditionOptionIds, masked: true,
  *   totalForQuestion: null }
  */
 export function maskSmallQuestions(questions, min = MIN_GROUP_SIZE) {
@@ -70,7 +70,7 @@ export function maskSmallQuestions(questions, min = MIN_GROUP_SIZE) {
       id: question.id,
       label: question.label,
       type: question.type,
-      showIfOptionId: question.showIfOptionId,
+      conditionOptionIds: question.conditionOptionIds,
       totalForQuestion: null,
       masked: true,
     };

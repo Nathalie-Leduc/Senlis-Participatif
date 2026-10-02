@@ -35,9 +35,9 @@ describe('isTooSmall — seuil de confidentialité', () => {
 
 describe('maskSmallQuestions', () => {
   const questions = [
-    { id: 'q1', label: 'Vue par 12', type: 'OUI_NON', showIfOptionId: null, totalForQuestion: 12, options: [{ id: 'o1', count: 12 }] },
-    { id: 'q2', label: 'Vue par 2', type: 'NOMBRE', showIfOptionId: 'o1', totalForQuestion: 2, stats: { count: 2, average: 3 } },
-    { id: 'q3', label: 'Vue par personne', type: 'NOMBRE', showIfOptionId: 'o9', totalForQuestion: 0, stats: { count: 0 } },
+    { id: 'q1', label: 'Vue par 12', type: 'OUI_NON', conditionOptionIds: [], totalForQuestion: 12, options: [{ id: 'o1', count: 12 }] },
+    { id: 'q2', label: 'Vue par 2', type: 'NOMBRE', conditionOptionIds: ['o1'], totalForQuestion: 2, stats: { count: 2, average: 3 } },
+    { id: 'q3', label: 'Vue par personne', type: 'NOMBRE', conditionOptionIds: ['o9'], totalForQuestion: 0, stats: { count: 0 } },
   ];
 
   it('garde intactes les questions assez grandes (ou vides), marquées masked: false', () => {
@@ -49,7 +49,7 @@ describe('maskSmallQuestions', () => {
   it('retire comptes, statistiques et effectif exact des questions trop petites', () => {
     const q2 = maskSmallQuestions(questions)[1];
     expect(q2).toEqual({
-      id: 'q2', label: 'Vue par 2', type: 'NOMBRE', showIfOptionId: 'o1',
+      id: 'q2', label: 'Vue par 2', type: 'NOMBRE', conditionOptionIds: ['o1'],
       totalForQuestion: null, masked: true,
     });
     expect(q2.stats).toBeUndefined();

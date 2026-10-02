@@ -123,7 +123,8 @@ export default function AdminSurveyStats() {
           séparé par segment. ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {results.questions.map((question) => {
-          const trigger = question.showIfOptionId ? triggerLookup.get(question.showIfOptionId) : null;
+          // S5R-05 : plusieurs conditions possibles (il suffit d'une — OU)
+          const triggers = (question.conditionOptionIds || []).map((id) => triggerLookup.get(id)).filter(Boolean);
           // Un segment peut arriver MASQUÉ en entier (moins de 5
           // bulletins), ou seulement pour cette question (question
           // branchée vue par trop peu de personnes du segment) — l'API
@@ -139,9 +140,9 @@ export default function AdminSurveyStats() {
               <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 18, marginBottom: 4 }}>
                 {question.label}
               </h2>
-              {trigger && (
+              {triggers.length > 0 && (
                 <p style={{ fontSize: 13, color: '#1E5F7C', marginBottom: 10 }}>
-                  Affichée si « {trigger.questionLabel} » = « {trigger.optionLabel} »
+                  Affichée si {triggers.map((t) => `« ${t.questionLabel} » = « ${t.optionLabel} »`).join(' ou ')}
                   {' · '}posée à {question.totalForQuestion} répondant{question.totalForQuestion > 1 ? 's' : ''} concerné{question.totalForQuestion > 1 ? 's' : ''}
                 </p>
               )}

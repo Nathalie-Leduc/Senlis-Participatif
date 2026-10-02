@@ -539,7 +539,7 @@ describe('Publication des résultats et vue détaillée admin', () => {
       const proNon = proQ.options.find((o) => o.label === 'Non');
 
       // « Combien ? » ne s'affiche que si « véhicule professionnel = Oui »
-      await prisma.question.update({ where: { id: countQ.id }, data: { showIfOptionId: proOui.id } });
+      await prisma.questionCondition.create({ data: { questionId: countQ.id, optionId: proOui.id } });
 
       // Segment « centre = Oui » : 6 bulletins (assez grand), dont
       // seulement 2 ont vu la question branchée « Combien ? »

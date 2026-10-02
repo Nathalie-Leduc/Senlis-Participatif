@@ -32,6 +32,9 @@ const questionOptionSchema = z.object({
   // validation dépend de la question PARENTE, impossible à exprimer
   // au niveau d'une option isolée.
   syncValue: z.string().trim().min(1).optional(),
+  // S5R-05 : choisir cette option termine l'enquête (CHOIX_UNIQUE et
+  // OUI_NON uniquement — vérifié dans questionSchema plus bas)
+  endsSurvey: z.boolean().optional(),
 });
 
 // Une seule liste de valeurs valides par champ profil ciblé — la
@@ -44,6 +47,8 @@ const SYNC_VALID_VALUES = {
   quartier: ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
   travailleQuartier: ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
   travailType: ['COMMERCANT', 'SALARIE'],
+  // S5R-05 : oui / non, écrits en texte dans syncValue ('true' / 'false')
+  travailleASenlis: ['true', 'false'],
 };
 
 // Référence par POSITION (order), pas par id réel : au moment où
@@ -72,6 +77,14 @@ const questionSchema = z.object({
   // submitResponse côté contrôleur pour ne pas exiger de réponse à
   // une question jamais montrée).
   showIf: showIfSchema.optional(),
+  // S5R-05 : plusieurs conditions, il suffit que L'UNE soit remplie (OU)
+  showIfAny: z.array(showIfSchema).min(1).max(20).optional(),
+  // S5R-05 : bornes d'une réponse NOMBRE
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  // S5R-05 : CHOIX_MULTIPLE — pas plus de cases que la réponse à cette
+  // question NOMBRE précédente (vérifié à la création, par position)
+  maxChoicesFrom: z.object({ questionOrder: z.number().int().min(0) }).optional(),
   // Une seule valeur reconnue pour l'instant : 'VILLE_FR' (suggestions
   // de commune via l'API officielle geo.api.gouv.fr côté client).
   // z.literal plutôt que z.string() : toute AUTRE valeur est rejetée
@@ -81,8 +94,25 @@ const questionSchema = z.object({
   // champ du profil du répondant — voir SYNC_VALID_VALUES plus haut
   // pour les valeurs attendues sur chaque option, et submitResponse
   // côté contrôleur pour l'application réelle.
-  syncsToProfile: z.enum(['situation', 'quartier', 'travailleQuartier', 'travailType']).optional(),
+  syncsToProfile: z.enum(['situation', 'quartier', 'travailleQuartier', 'travailType', 'travailleASenlis']).optional(),
 }).superRefine((q, ctx) => {
+  // ── Règles S5R-05 : chaque réglage n'a de sens que pour un type ──
+  const issue = (path, message) => ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+  if ((q.minValue !== undefined || q.maxValue !== undefined) && q.type !== 'NOMBRE') {
+    issue(['minValue'], 'Les bornes minimum/maximum ne concernent que les questions « Nombre »');
+  }
+  if (q.minValue !== undefined && q.maxValue !== undefined && q.minValue > q.maxValue) {
+    issue(['maxValue'], 'Le maximum doit être supérieur ou égal au minimum');
+  }
+  if (q.maxChoicesFrom && q.type !== 'CHOIX_MULTIPLE') {
+    issue(['maxChoicesFrom'], 'La limite du nombre de cases ne concerne que les questions à choix multiple');
+  }
+  if ((q.options || []).some((o) => o.endsSurvey) && !['CHOIX_UNIQUE', 'OUI_NON'].includes(q.type)) {
+    issue(['options'], "« Termine l'enquête » ne concerne que les questions à choix unique ou Oui/Non");
+  }
+  if (q.syncsToProfile === 'travailleASenlis' && q.type !== 'OUI_NON') {
+    issue(['syncsToProfile'], '« Travaille à Senlis » se synchronise depuis une question Oui/Non');
+  }
   if (q.uiHint && q.type !== 'TEXTE_LIBRE') {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -105,7 +135,7 @@ const questionSchema = z.object({
         path: ['syncsToProfile'],
         message: 'syncsToProfile n\'a de sens que pour une question CHOIX_UNIQUE ou OUI_NON',
       });
-    } else if (q.type === 'CHOIX_UNIQUE') {
+    } else if (q.type === 'CHOIX_UNIQUE' || q.syncsToProfile === 'travailleASenlis') {
       const validValues = SYNC_VALID_VALUES[q.syncsToProfile];
       (q.options || []).forEach((opt, index) => {
         if (opt.syncValue && !validValues.includes(opt.syncValue)) {

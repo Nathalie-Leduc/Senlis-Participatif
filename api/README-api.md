@@ -52,6 +52,7 @@ La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres
 | `npx prisma migrate dev` | Nouvelle migration en dev (base uniquement) |
 | `npx prisma generate` | Régénère le client Prisma — **obligatoire après chaque migration** : depuis Prisma 7, `migrate dev` ne le fait plus |
 | `npm run migrate:test` | Applique les migrations à la base de test |
+| `npx prisma migrate deploy` | Applique les migrations **telles qu'écrites**, sans en générer — à utiliser pour une migration écrite à la main (ex. `survey_engine_v2`, qui déplace des données) |
 | `npx prisma migrate deploy` | Applique les migrations (prod / CI) |
 | `npx prisma studio` | Explorateur visuel de la BDD |
 
