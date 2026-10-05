@@ -1,6 +1,6 @@
 {
   "name": "senlis-participatif-api",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "API REST — Senlis Participatif",
   "type": "module",
@@ -9,6 +9,8 @@
     "start": "node --env-file-if-exists=.env src/index.js",
     "postinstall": "prisma generate",
     "seed": "node --env-file-if-exists=.env prisma/seed.js",
+    "seed:prod": "node --env-file-if-exists=.env prisma/seed-prod.js",
+    "purge": "node --env-file-if-exists=.env scripts/purge.js",
     "migrate:test": "dotenv -e .env.test -- npx prisma migrate deploy",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -19,21 +21,21 @@
     "@prisma/client": "7.8.0",
     "argon2": "^0.41.1",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.2.0",
-    "nodemailer": "^9.0.0",
+    "nodemailer": "^10.0.13",
     "pg": "^8.22.0",
+    "prisma": "7.8.0",
     "sharp": "^0.35.3",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.19.0",
-    "dotenv": "^17.2.0",
-    "prisma": "7.8.0",
     "supertest": "^7.1.0",
     "vitest": "^4.1.9"
   }

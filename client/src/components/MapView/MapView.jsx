@@ -119,9 +119,16 @@ export default function MapView({
       // molette, volontairement.
       scrollWheelZoom={false}
     >
+      {/* S5A-08 : adresse unique « tile.openstreetmap.org », sans les
+          sous-domaines {s} (a., b., c.) — OpenStreetMap les a abandonnés :
+          ils servaient autrefois à contourner la limite de connexions
+          simultanées des navigateurs, devenue inutile avec HTTP/2.
+          maxZoom 19 : niveau le plus fin fourni par le serveur de tuiles
+          (au-delà, il répondrait par des images vides). */}
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        maxZoom={19}
       />
 
       {/* La couche IRIS est rendue AVANT le périmètre et les

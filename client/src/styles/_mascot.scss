@@ -25,3 +25,158 @@
   &::after { content: ''; position: absolute; bottom: -8px; left: 18px; border: 8px solid transparent; border-top-color: $nonette; border-bottom: 0; }
   @include motion { animation: bubbleFloat 3s ease-in-out infinite; }
 }
+
+// ── Guide « Cerf-tifié utile ! » (S5R-04, maquette 17) ─────────
+// Bouton rond (le visage du cerf) en bas à GAUCHE — le bas-droit est
+// réservé au bouton d'accessibilité ♿ — et panneau d'aide au-dessus.
+.guide-widget {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 1500;
+}
+
+.guide-toggle {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 3px solid $dore;
+  background: $blanc;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(212, 168, 74, .25);
+
+  @include motion {
+    transition: transform .3s $ease-bounce, box-shadow .3s;
+    &:hover { transform: scale(1.08) rotate(-5deg); box-shadow: 0 10px 36px rgba(212, 168, 74, .35); }
+  }
+
+  // Pastille « 1 » : il y a un message à lire (jusqu'à la 1re ouverture)
+  &--new::after {
+    content: '1';
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid $blanc;
+    background: $brique;
+    color: $blanc;
+    font: 700 11px $font-body;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    @include motion { animation: pulse 2s ease-in-out infinite; }
+  }
+}
+
+.guide-panel {
+  position: absolute;
+  bottom: 78px;
+  left: 0;
+  width: min(330px, calc(100vw - 40px));
+  // Même compensation du zoom que le module ♿ (S5R-03) : le panneau
+  // tient toujours dans l'écran, même texte agrandi
+  max-height: calc((100vh - 120px) / var(--a11y-font-scale, 1));
+  max-height: calc((100dvh - 120px) / var(--a11y-font-scale, 1));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: $blanc;
+  border: 2px solid $dore-light;
+  border-radius: 24px 24px 24px 8px;
+  box-shadow: 0 12px 48px rgba(38, 51, 58, .18);
+  @include motion { animation: guideSlideUp .35s $ease-bounce; }
+}
+
+@keyframes guideSlideUp {
+  from { transform: translateY(20px) scale(.92); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px 14px 18px;
+  // Ardoise sur doré : 5,9:1 (le blanc de la maquette : 2,2:1)
+  background: linear-gradient(135deg, $dore 0%, #E0B85C 100%);
+  color: $ardoise;
+  flex-shrink: 0;
+
+  svg { flex-shrink: 0; }
+  h2 { font-family: $font-display; font-size: 17px; margin: 0; }
+  p { font-size: 12px; margin: 0; }
+}
+
+.guide-head-text { flex: 1; }
+
+.guide-close {
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: $ardoise;
+  font-size: 18px;
+  cursor: pointer;
+  &:hover { background: rgba(255, 255, 255, .35); }
+}
+
+.guide-msgs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+
+.guide-msg {
+  margin: 0 0 8px;
+  padding: 12px 16px;
+  background: $pierre;
+  border-radius: 16px 16px 16px 4px;
+  color: $ardoise;
+  font-size: 14px;
+  line-height: 1.5;
+  @include motion { animation: guideMsgPop .3s $ease-bounce; }
+
+  // La question posée par la personne : à droite, comme dans une messagerie
+  &--user {
+    margin-left: auto;
+    width: fit-content;
+    max-width: 85%;
+    background: $dore-light;
+    border-radius: 16px 16px 4px 16px;
+    font-weight: 600;
+  }
+}
+
+@keyframes guideMsgPop {
+  from { transform: translateY(6px) scale(.96); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 16px 16px;
+  flex-shrink: 0;
+}
+
+.guide-btn {
+  min-height: 40px;
+  padding: 7px 14px;
+  border: 2px solid $dore;
+  border-radius: $radius-pill;
+  background: $blanc;
+  // Doré foncé : 5,1:1 sur blanc (le doré de la maquette : 2,2:1)
+  color: #8B6914;
+  font: 600 13px $font-body;
+  cursor: pointer;
+  &:hover { background: $dore; color: $ardoise; }
+}

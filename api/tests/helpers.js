@@ -44,6 +44,10 @@ export function buildUser(overrides = {}) {
     email: `test${counter}@senlis-test.fr`,
     password: 'MotDePasse123!',
     pseudo: `testeur${counter}`,
+    // Obligatoire depuis S5-12 (situation citoyen) — CENTRE_RESIDENT
+    // par défaut, sans conséquence sur ce que les tests vérifient
+    // habituellement ; surchargeable comme n'importe quel autre champ.
+    situation: 'CENTRE_RESIDENT',
     ...overrides,
   };
 }
@@ -196,4 +200,32 @@ export async function makeAdminUser() {
     .send({ challengeToken: loginRes.body.challengeToken, code });
 
   return { user: verifyRes.body.user, token: verifyRes.body.token };
+}
+
+/**
+ * Crée un utilisateur DIRECTEMENT en base (vérifié, sans passer par
+ * l'inscription ni Argon2) — pour les tests de STATISTIQUES qui ont
+ * besoin de beaucoup de participants (≥ 5 pour franchir le seuil de
+ * confidentialité, voir src/lib/privacy.js) : passer par makeCitizen()
+ * coûterait deux hachages Argon2 par personne, soit plusieurs
+ * secondes pour une simple mise en place.
+ *
+ * ⚠️ Le passwordHash est factice : ce compte ne peut PAS se connecter.
+ * À réserver aux tests qui écrivent eux-mêmes les votes/réponses en
+ * base, jamais à ceux qui testent un parcours HTTP authentifié.
+ *
+ * @param {object} overrides - ex. { situation: 'HORS_SENLIS' }
+ */
+export function seedUser(overrides = {}) {
+  counter += 1;
+  return prisma.user.create({
+    data: {
+      email: `seed${counter}@senlis-test.fr`,
+      pseudo: `seed${counter}`,
+      passwordHash: 'pas-un-vrai-hash-argon2',
+      emailVerified: true,
+      situation: 'CENTRE_RESIDENT',
+      ...overrides,
+    },
+  });
 }

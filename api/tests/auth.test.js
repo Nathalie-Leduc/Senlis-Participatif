@@ -14,6 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
+import prisma from '../src/lib/prisma.js';
 import { sendMailMock } from './setup.js';
 import { buildUser, extractTokenFromEmail } from './helpers.js';
 
@@ -114,19 +115,24 @@ describe('Auth — parcours complet', () => {
     expect(res.body.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('refuse un jeton de vérification déjà utilisé (usage unique)', async () => {
+  it('un jeton de vérification reste à usage unique : il ne peut pas re-vérifier un compte repassé en « non vérifié »', async () => {
+    // S5R-01 : réutiliser un lien sur un compte DÉJÀ vérifié répond
+    // désormais « déjà vérifiée » (voir email-verification.test.js).
+    // Mais le jeton reste bien consommé : si le compte redevient non
+    // vérifié (changement d'email), l'ancien lien ne doit rien valider.
     const user = buildUser();
     await request(app).post(`${API}/register`).send(user);
     const token = extractTokenFromEmail(sendMailMock.mock.calls[0][0]);
 
     await request(app).post(`${API}/verify-email`).send({ token });
+    await prisma.user.update({ where: { email: user.email }, data: { emailVerified: false } });
 
-    // Deuxième utilisation du MÊME jeton → doit échouer, comme
-    // un ticket de consigne qu'on essaie de réutiliser.
     const res = await request(app).post(`${API}/verify-email`).send({ token });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_TOKEN');
+    const inDb = await prisma.user.findUnique({ where: { email: user.email } });
+    expect(inDb.emailVerified).toBe(false);
   });
 
   it('mot de passe oublié → réinitialisation → connexion avec le nouveau mot de passe', async () => {
@@ -175,5 +181,68 @@ describe('Auth — parcours complet', () => {
     // réponse HTTP est identique au cas où il existerait — sinon
     // on révélerait quels emails sont inscrits.
     expect(sendMailMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('Changement de mot de passe', () => {
+  it('change le mot de passe avec succès', async () => {
+    const built = buildUser();
+    await request(app).post(`${API}/register`).send(built);
+    const verifyToken = extractTokenFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+    await request(app).post(`${API}/verify-email`).send({ token: verifyToken });
+    const loginRes = await request(app).post(`${API}/login`).send({ email: built.email, password: built.password });
+
+    const res = await request(app)
+      .put(`${API}/me/password`)
+      .set('Authorization', `Bearer ${loginRes.body.token}`)
+      .send({ currentPassword: built.password, newPassword: 'UnAutreMotDePasse123!' });
+
+    expect(res.status).toBe(200);
+
+    // La vraie preuve : le NOUVEAU mot de passe permet de se
+    // reconnecter, l'ANCIEN ne le permet plus.
+    const loginWithNew = await request(app).post(`${API}/login`).send({ email: built.email, password: 'UnAutreMotDePasse123!' });
+    expect(loginWithNew.status).toBe(200);
+    const loginWithOld = await request(app).post(`${API}/login`).send({ email: built.email, password: built.password });
+    expect(loginWithOld.status).toBe(401);
+  });
+
+  it('401 — refuse si le mot de passe actuel est incorrect', async () => {
+    const built = buildUser();
+    await request(app).post(`${API}/register`).send(built);
+    const verifyToken = extractTokenFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+    await request(app).post(`${API}/verify-email`).send({ token: verifyToken });
+    const loginRes = await request(app).post(`${API}/login`).send({ email: built.email, password: built.password });
+
+    const res = await request(app)
+      .put(`${API}/me/password`)
+      .set('Authorization', `Bearer ${loginRes.body.token}`)
+      .send({ currentPassword: 'CeNestPasLeBonMotDePasse!', newPassword: 'UnAutreMotDePasse123!' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('INVALID_CREDENTIALS');
+  });
+
+  it('400 PASSWORD_UNCHANGED — refuse un nouveau mot de passe identique à l\'actuel', async () => {
+    const built = buildUser();
+    await request(app).post(`${API}/register`).send(built);
+    const verifyToken = extractTokenFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+    await request(app).post(`${API}/verify-email`).send({ token: verifyToken });
+    const loginRes = await request(app).post(`${API}/login`).send({ email: built.email, password: built.password });
+
+    const res = await request(app)
+      .put(`${API}/me/password`)
+      .set('Authorization', `Bearer ${loginRes.body.token}`)
+      .send({ currentPassword: built.password, newPassword: built.password });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PASSWORD_UNCHANGED');
+  });
+
+  it('refuse sans authentification', async () => {
+    const res = await request(app)
+      .put(`${API}/me/password`)
+      .send({ currentPassword: 'x', newPassword: 'UnAutreMotDePasse123!' });
+    expect(res.status).toBe(401);
   });
 });

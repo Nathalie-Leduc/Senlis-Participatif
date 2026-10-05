@@ -21,7 +21,14 @@ const STORAGE_KEY = 'senlis-a11y-settings';
 const DEFAULTS = {
   contrast: 'none', // 'none' | 'dark' | 'light' | 'mono'
   fontScale: 1, // 1 → 1.5
-  lineSpacing: false,
+  // S5R-03 (recette) : l'interligne n'avait qu'un cran (« augmenté ou
+  // non »). Désormais 4 niveaux : 'normal' (celui du site) puis 1.5,
+  // 1.8 et 2 — 1.5 étant la valeur de référence du critère WCAG 1.4.12.
+  lineHeight: 'normal', // 'normal' | 1.5 | 1.8 | 2
+  // Espacement des lettres (0,12 × la taille du texte), des mots (0,16 ×)
+  // et des paragraphes (2 ×) : les valeurs exactes du critère WCAG
+  // 1.4.12 / RGAA 10.12. Utile notamment en cas de dyslexie.
+  textSpacing: false,
   underlineLinks: false,
   reduceMotion: false,
   // Quel profil rapide est actuellement appliqué ('malvoyance' |
@@ -32,10 +39,22 @@ const DEFAULTS = {
 
 const AccessibilityContext = createContext(null);
 
+/**
+ * Réglages enregistrés AVANT S5R-03 : `lineSpacing: true` voulait dire
+ * « interligne 2 ». On le traduit dans le nouveau format, pour que la
+ * personne retrouve exactement ce qu'elle avait choisi.
+ * Exportée pour les tests.
+ */
+export function migrateSettings(saved) {
+  const { lineSpacing, ...rest } = saved;
+  if (lineSpacing === true && rest.lineHeight === undefined) rest.lineHeight = 2;
+  return rest;
+}
+
 function loadSettings() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULTS, ...JSON.parse(raw) } : DEFAULTS;
+    return raw ? { ...DEFAULTS, ...migrateSettings(JSON.parse(raw)) } : DEFAULTS;
   } catch {
     // localStorage indisponible (navigation privée stricte, quota) ou
     // JSON corrompu — on repart des valeurs par défaut plutôt que de
@@ -64,7 +83,13 @@ export function AccessibilityProvider({ children }) {
     // comme le ferait le zoom natif du navigateur — indépendant de la
     // façon dont chaque composant a écrit sa taille de police.
     root.style.zoom = settings.fontScale === 1 ? '' : String(settings.fontScale);
-    root.classList.toggle('a11y-line-spacing', settings.lineSpacing);
+    // Interligne : une variable CSS (la valeur) + une classe (le
+    // déclencheur), comme pour la taille du texte
+    const customLineHeight = settings.lineHeight !== 'normal';
+    root.classList.toggle('a11y-line-height', customLineHeight);
+    if (customLineHeight) root.style.setProperty('--a11y-line-height', String(settings.lineHeight));
+    else root.style.removeProperty('--a11y-line-height');
+    root.classList.toggle('a11y-text-spacing', settings.textSpacing);
     root.classList.toggle('a11y-underline-links', settings.underlineLinks);
     root.classList.toggle('a11y-reduce-motion', settings.reduceMotion);
 
@@ -98,7 +123,7 @@ export function AccessibilityProvider({ children }) {
 
       const profileSettings = {
         malvoyance: { contrast: 'dark', fontScale: 1.3, underlineLinks: true },
-        dyslexie: { lineSpacing: true, fontScale: 1.15, underlineLinks: true },
+        dyslexie: { lineHeight: 1.8, textSpacing: true, fontScale: 1.15, underlineLinks: true },
         calme: { reduceMotion: true, contrast: 'none' },
       }[profile];
 

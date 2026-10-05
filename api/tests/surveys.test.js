@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import app from '../src/app.js';
 import prisma from '../src/lib/prisma.js';
-import { makeCitizen, makeAdminUser, seedSurvey } from './helpers.js';
+import { makeCitizen, makeAdminUser, seedSurvey, seedUser } from './helpers.js';
 
 const API = '/api/v1/surveys';
 
@@ -201,7 +201,11 @@ describe('Enquêtes — soumission de réponse', () => {
 
 describe('Enquêtes — agrégats (résultats)', () => {
   it('les résultats reflètent fidèlement plusieurs réponses réelles', async () => {
-    const survey = await seedSurvey();
+    // resultsPublished: true — sans ça, GET .../results renvoie 403
+    // depuis S5-14 (les résultats restent privés tant que l'admin ne
+    // les publie pas). Ce test vérifie l'AGRÉGATION elle-même, pas le
+    // garde-fou de publication (qui a ses propres tests dédiés).
+    const survey = await seedSurvey({ resultsPublished: true });
     const oui = survey.questions[0].options.find((o) => o.label === 'Oui');
     const non = survey.questions[0].options.find((o) => o.label === 'Non');
 
@@ -239,7 +243,7 @@ describe('Enquêtes — agrégats (résultats)', () => {
   }, 10000);
 
   it("une option jamais choisie apparaît quand même à 0, pas absente du résultat", async () => {
-    const survey = await seedSurvey();
+    const survey = await seedSurvey({ resultsPublished: true });
     const { token } = await makeCitizen();
     const oui = survey.questions[0].options.find((o) => o.label === 'Oui');
 
@@ -365,5 +369,427 @@ describe('Enquêtes — CRUD admin & consultation', () => {
 
     const stillThere = await prisma.survey.findUnique({ where: { id: survey.id } });
     expect(stillThere).not.toBeNull();
+  });
+});
+
+describe('Publication des résultats et vue détaillée admin', () => {
+  it("403 RESULTS_NOT_PUBLISHED — un visiteur non connecté ne voit pas les résultats tant que ce n'est pas publié", async () => {
+    const survey = await seedSurvey({ resultsPublished: false });
+    const res = await request(app).get(`${API}/${survey.slug}/results`);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('RESULTS_NOT_PUBLISHED');
+  });
+
+  it("403 RESULTS_NOT_PUBLISHED — un citoyen connecté (non-admin) ne voit pas non plus les résultats", async () => {
+    const survey = await seedSurvey({ resultsPublished: false });
+    const { token } = await makeCitizen();
+    const res = await request(app).get(`${API}/${survey.slug}/results`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('RESULTS_NOT_PUBLISHED');
+  });
+
+  it("un admin voit les résultats même AVANT publication", async () => {
+    const survey = await seedSurvey({ resultsPublished: false });
+    const { token } = await makeAdminUser();
+    const res = await request(app).get(`${API}/${survey.slug}/results`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+  });
+
+  describe('GET /surveys/:id/stats — vue détaillée', () => {
+    it('refuse sans authentification', async () => {
+      const survey = await seedSurvey();
+      const res = await request(app).get(`${API}/${survey.id}/stats`);
+      expect(res.status).toBe(401);
+    });
+
+    it('refuse à un citoyen non-admin', async () => {
+      const survey = await seedSurvey();
+      const { token } = await makeCitizen();
+      const res = await request(app).get(`${API}/${survey.id}/stats`).set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(403);
+    });
+
+    it("répond 200 pour un admin, même si les résultats ne sont pas publiés", async () => {
+      const survey = await seedSurvey({ resultsPublished: false });
+      const { token } = await makeAdminUser();
+      const res = await request(app).get(`${API}/${survey.id}/stats`).set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+    });
+
+    it('404 pour une enquête inexistante', async () => {
+      const { token } = await makeAdminUser();
+      const res = await request(app).get(`${API}/00000000-0000-0000-0000-000000000000/stats`).set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('Segmentation des résultats (S5-21)', () => {
+    // Dépose un bulletin DIRECTEMENT en base pour un nouvel utilisateur
+    // (voir seedUser dans helpers.js) — les tests de segmentation ont
+    // besoin d'au moins 5 bulletins par segment pour franchir le seuil
+    // de confidentialité, trop lent via l'inscription HTTP complète.
+    // answers : [{ questionId, optionId? , valueText?, valueNumber? }]
+    async function seedResponse(surveyId, answers) {
+      const user = await seedUser();
+      return prisma.surveyResponse.create({
+        data: { surveyId, userId: user.id, answers: { create: answers } },
+      });
+    }
+
+    it('segmente par une question OUI_NON — les effectifs de chaque segment correspondent aux vrais bulletins', async () => {
+      const survey = await seedSurvey();
+      const { token: adminToken } = await makeAdminUser();
+      const question = survey.questions[0];
+      const oui = question.options.find((o) => o.label === 'Oui');
+
+      for (let i = 0; i < 5; i++) {
+        await seedResponse(survey.id, [{ questionId: question.id, optionId: oui.id }]);
+      }
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=${question.id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.segmentedBy.questionId).toBe(question.id);
+      expect(res.body.segmentedBy.minGroupSize).toBe(5);
+
+      const ouiSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Oui');
+      const nonSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Non');
+      expect(ouiSegment).toMatchObject({ masked: false, totalResponses: 5 });
+      // Groupe VIDE : pas masqué (il ne révèle l'opinion de personne)
+      expect(nonSegment).toMatchObject({ masked: false, totalResponses: 0 });
+      expect(ouiSegment.totalResponses + nonSegment.totalResponses).toBe(res.body.totalResponses);
+    });
+
+    it('masque un segment de 1 à 4 bulletins — ni effectif exact, ni réponses', async () => {
+      const survey = await seedSurvey();
+      const { token: adminToken } = await makeAdminUser();
+      const question = survey.questions[0];
+      const oui = question.options.find((o) => o.label === 'Oui');
+      const non = question.options.find((o) => o.label === 'Non');
+
+      for (let i = 0; i < 5; i++) await seedResponse(survey.id, [{ questionId: question.id, optionId: oui.id }]);
+      for (let i = 0; i < 2; i++) await seedResponse(survey.id, [{ questionId: question.id, optionId: non.id }]);
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=${question.id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const nonSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Non');
+      expect(nonSegment).toEqual({
+        optionId: non.id, optionLabel: 'Non', masked: true, totalResponses: null, questions: [],
+      });
+      // Le résultat GLOBAL, lui, reste complet : 7 bulletins au total
+      expect(res.body.totalResponses).toBe(7);
+    });
+
+    it("ne renvoie jamais le texte libre brut à l'intérieur d'un segment (seulement son nombre)", async () => {
+      const survey = await seedSurvey({
+        questions: {
+          create: [
+            { label: 'Résidez-vous dans le centre ?', type: 'OUI_NON', required: true, order: 0,
+              options: { create: [{ label: 'Oui', order: 0 }, { label: 'Non', order: 1 }] } },
+            { label: 'Un commentaire ?', type: 'TEXTE_LIBRE', required: false, order: 1 },
+          ],
+        },
+      });
+      const { token: adminToken } = await makeAdminUser();
+      const [segmentQ, textQ] = survey.questions.sort((a, b) => a.order - b.order);
+      const oui = segmentQ.options.find((o) => o.label === 'Oui');
+
+      for (let i = 0; i < 5; i++) {
+        await seedResponse(survey.id, [
+          { questionId: segmentQ.id, optionId: oui.id },
+          { questionId: textQ.id, valueText: `J'habite au ${i} rue de la République` },
+        ]);
+      }
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=${segmentQ.id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      // Global : texte brut disponible pour l'admin (comportement inchangé)
+      const globalText = res.body.questions.find((q) => q.id === textQ.id);
+      expect(globalText.answers).toHaveLength(5);
+
+      // Segment : le nombre, jamais le contenu
+      const ouiSegment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Oui');
+      const segmentText = ouiSegment.questions.find((q) => q.id === textQ.id);
+      expect(segmentText.totalAnswered).toBe(5);
+      expect(segmentText.answers).toBeUndefined();
+    });
+
+    it("masque, dans un segment assez grand, une question branchée vue par moins de 5 personnes", async () => {
+      const survey = await seedSurvey({
+        questions: {
+          create: [
+            { label: 'Résidez-vous dans le centre ?', type: 'OUI_NON', required: true, order: 0,
+              options: { create: [{ label: 'Oui', order: 0 }, { label: 'Non', order: 1 }] } },
+            { label: 'Avez-vous un véhicule professionnel ?', type: 'OUI_NON', required: true, order: 1,
+              options: { create: [{ label: 'Oui', order: 0 }, { label: 'Non', order: 1 }] } },
+            { label: 'Combien ?', type: 'NOMBRE', required: false, order: 2 },
+          ],
+        },
+      });
+      const { token: adminToken } = await makeAdminUser();
+      const [segmentQ, proQ, countQ] = survey.questions.sort((a, b) => a.order - b.order);
+      const centreOui = segmentQ.options.find((o) => o.label === 'Oui');
+      const proOui = proQ.options.find((o) => o.label === 'Oui');
+      const proNon = proQ.options.find((o) => o.label === 'Non');
+
+      // « Combien ? » ne s'affiche que si « véhicule professionnel = Oui »
+      await prisma.questionCondition.create({ data: { questionId: countQ.id, optionId: proOui.id } });
+
+      // Segment « centre = Oui » : 6 bulletins (assez grand), dont
+      // seulement 2 ont vu la question branchée « Combien ? »
+      for (let i = 0; i < 6; i++) {
+        const hasPro = i < 2;
+        await seedResponse(survey.id, [
+          { questionId: segmentQ.id, optionId: centreOui.id },
+          { questionId: proQ.id, optionId: hasPro ? proOui.id : proNon.id },
+          ...(hasPro ? [{ questionId: countQ.id, valueNumber: 1 }] : []),
+        ]);
+      }
+
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=${segmentQ.id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const segment = res.body.segmentedBy.segments.find((s) => s.optionLabel === 'Oui');
+      expect(segment).toMatchObject({ masked: false, totalResponses: 6 });
+
+      const visible = segment.questions.find((q) => q.id === proQ.id);
+      expect(visible).toMatchObject({ masked: false, totalForQuestion: 6 });
+
+      const hidden = segment.questions.find((q) => q.id === countQ.id);
+      expect(hidden).toMatchObject({ masked: true, totalForQuestion: null });
+      expect(hidden.stats).toBeUndefined();
+    });
+
+    it('400 INVALID_SEGMENT_QUESTION — refuse de segmenter par une question CHOIX_MULTIPLE', async () => {
+      const { token } = await makeAdminUser();
+      const created = await request(app)
+        .post(API)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          title: 'Enquête de test',
+          description: 'Description suffisamment longue pour passer la validation Zod.',
+          status: 'DRAFT',
+          questions: [
+            { label: 'Question CHOIX_MULTIPLE de test', type: 'CHOIX_MULTIPLE', required: false, options: [{ label: 'A' }, { label: 'B' }] },
+          ],
+        });
+      const surveyId = created.body.survey.id;
+      const questionId = created.body.survey.questions[0].id;
+
+      const res = await request(app)
+        .get(`${API}/${surveyId}/stats?segmentBy=${questionId}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_SEGMENT_QUESTION');
+    });
+
+    it("400 INVALID_SEGMENT_QUESTION — refuse un id de question qui n'appartient pas à cette enquête", async () => {
+      const survey = await seedSurvey();
+      const { token } = await makeAdminUser();
+      const res = await request(app)
+        .get(`${API}/${survey.id}/stats?segmentBy=00000000-0000-0000-0000-000000000000`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_SEGMENT_QUESTION');
+    });
+  });
+});
+
+describe('uiHint — "ville avec suggestions" (S5-18)', () => {
+  it('accepte uiHint "VILLE_FR" sur une question TEXTE_LIBRE', async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          { label: 'Quelle est cette ville ?', type: 'TEXTE_LIBRE', required: true, uiHint: 'VILLE_FR' },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.survey.questions[0].uiHint).toBe('VILLE_FR');
+  });
+
+  it("rejette uiHint sur une question qui n'est pas TEXTE_LIBRE", async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          { label: 'Question CHOIX_UNIQUE de test', type: 'CHOIX_UNIQUE', required: true, uiHint: 'VILLE_FR', options: [{ label: 'Oui' }, { label: 'Non' }] },
+        ],
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejette toute valeur de uiHint autre que "VILLE_FR"', async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          { label: 'Quelle est cette ville ?', type: 'TEXTE_LIBRE', required: true, uiHint: 'AUTRE_CHOSE' },
+        ],
+      });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('Synchronisation profil depuis une réponse (syncsToProfile)', () => {
+  it('répondre à une question flaguée met à jour le champ correspondant du profil', async () => {
+    const { token: adminToken } = await makeAdminUser();
+    const created = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'OPEN',
+        questions: [
+          {
+            label: 'Où résidez-vous ?',
+            type: 'CHOIX_UNIQUE',
+            required: true,
+            syncsToProfile: 'situation',
+            options: [
+              { label: 'Je réside dans le centre historique', syncValue: 'CENTRE_RESIDENT' },
+              { label: 'Je ne réside pas à Senlis', syncValue: 'HORS_SENLIS' },
+            ],
+          },
+        ],
+      });
+    const survey = created.body.survey;
+    const centreOption = survey.questions[0].options.find((o) => o.syncValue === 'CENTRE_RESIDENT');
+
+    const { token: citizenToken, user } = await makeCitizen();
+    const res = await request(app)
+      .post(`${API}/${survey.id}/responses`)
+      .set('Authorization', `Bearer ${citizenToken}`)
+      .send({ answers: [{ questionId: survey.questions[0].id, optionId: centreOption.id }] });
+
+    expect(res.status).toBe(201);
+
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(updated.situation).toBe('CENTRE_RESIDENT');
+  });
+
+  it("une option sans syncValue ne modifie rien sur le profil", async () => {
+    const { token: adminToken } = await makeAdminUser();
+    const created = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'OPEN',
+        questions: [
+          {
+            label: 'Où résidez-vous ?',
+            type: 'CHOIX_UNIQUE',
+            required: true,
+            syncsToProfile: 'situation',
+            options: [
+              { label: 'Je réside dans le centre historique', syncValue: 'CENTRE_RESIDENT' },
+              { label: 'Je préfère ne pas répondre' }, // pas de syncValue
+            ],
+          },
+        ],
+      });
+    const survey = created.body.survey;
+    const noSyncOption = survey.questions[0].options.find((o) => !o.syncValue);
+
+    const { token: citizenToken, user } = await makeCitizen();
+    // buildUser() fixe déjà une situation par défaut à l'inscription
+    // (registerSchema l'exige) — on capture sa VRAIE valeur de départ
+    // plutôt que de supposer null, pour vérifier qu'elle reste bien
+    // INCHANGÉE après coup, peu importe ce qu'elle valait avant.
+    const before = await prisma.user.findUnique({ where: { id: user.id } });
+
+    await request(app)
+      .post(`${API}/${survey.id}/responses`)
+      .set('Authorization', `Bearer ${citizenToken}`)
+      .send({ answers: [{ questionId: survey.questions[0].id, optionId: noSyncOption.id }] });
+
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(updated.situation).toBe(before.situation);
+  });
+
+  it('400 — syncsToProfile refusé sur une question qui n\'est ni CHOIX_UNIQUE ni OUI_NON', async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          {
+            label: 'Question NOMBRE de test', type: 'NOMBRE', required: true, syncsToProfile: 'situation',
+          },
+        ],
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("400 — syncValue refusé s'il ne correspond à aucune valeur valide pour le champ ciblé", async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          {
+            label: 'Où résidez-vous ?',
+            type: 'CHOIX_UNIQUE',
+            required: true,
+            syncsToProfile: 'situation',
+            options: [
+              { label: 'Un libellé quelconque', syncValue: 'VALEUR_QUI_NEXISTE_PAS' },
+              { label: 'Un autre' },
+            ],
+          },
+        ],
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it('accepte syncsToProfile sur une question OUI_NON (préremplissage uniquement, jamais d\'écriture)', async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app)
+      .post(API)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Enquête de test',
+        description: 'Description suffisamment longue pour passer la validation Zod.',
+        status: 'DRAFT',
+        questions: [
+          { label: 'Travaillez-vous à Senlis ?', type: 'OUI_NON', required: true, syncsToProfile: 'travailleQuartier' },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.survey.questions[0].syncsToProfile).toBe('travailleQuartier');
   });
 });

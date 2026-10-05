@@ -14,7 +14,12 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
+import { MIN_GROUP_SIZE, isTooSmall, maskSmallQuestions } from '../lib/privacy.js';
+import { visibleQuestionIds, withConditionIds } from '../lib/surveyFlow.js';
+import { audienceOf, matchesAudience, isEveryone, AUDIENCE_PROFILE_SELECT } from '../lib/audience.js';
+import { toNestedQuestionsCreate, resolveReferences, questionsUnchanged } from '../services/surveyBuilder.js';
 
 const VISIBLE_STATUSES = ['OPEN', 'CLOSED'];
 
@@ -23,8 +28,14 @@ const LIST_SELECT = {
   slug: true,
   title: true,
   description: true,
-  audience: true,
+  // Public visé (S5R-07) : les 4 listes de critères, regroupées en un
+  // objet `audience` par serializeAudience avant l'envoi au client
+  audienceSituations: true,
+  audienceQuartiers: true,
+  audienceWorkQuartiers: true,
+  audienceWorkTypes: true,
   status: true,
+  resultsPublished: true,
   opensAt: true,
   closesAt: true,
 };
@@ -36,38 +47,50 @@ const LIST_SELECT = {
 const QUESTIONS_INCLUDE = {
   questions: {
     orderBy: { order: 'asc' },
-    include: { options: { orderBy: { order: 'asc' } } },
+    include: {
+      options: { orderBy: { order: 'asc' } },
+      // S5R-05 : les conditions d'affichage (OU) de chaque question
+      conditions: { select: { optionId: true } },
+    },
   },
 };
 
-// Transforme le tableau "questions" reçu du client (Zod) en nested
-// write Prisma. Réutilisée par create() ET update() pour ne pas
-// dupliquer la même transformation à deux endroits.
-//
-// order = index dans le tableau, jamais une valeur envoyée par le
-// client : ça élimine toute une classe d'erreurs (doublons, trous,
-// ordres qui ne commencent pas à 0) sans avoir à les valider.
-function toNestedQuestionsCreate(questions) {
-  return questions.map((q, index) => {
-    // OUI_NON a besoin de 2 options pour fonctionner (voir Answer
-    // dans schema.prisma), mais on ne veut pas obliger l'admin à
-    // taper "Oui"/"Non" à chaque fois — seulement s'il veut les
-    // personnaliser (ex. "Oui, systématiquement" / "Non, jamais").
-    const options = q.options
-      ?? (q.type === 'OUI_NON' ? [{ label: 'Oui' }, { label: 'Non' }] : undefined);
-
-    return {
-      label: q.label,
-      helpText: q.helpText,
-      type: q.type,
-      required: q.required ?? true,
-      order: index,
-      options: options
-        ? { create: options.map((o, optionIndex) => ({ label: o.label, order: optionIndex })) }
-        : undefined,
-    };
-  });
+/**
+ * Forme renvoyée au client : chaque question porte
+ * `conditionOptionIds: [...]` (plus simple à exploiter qu'une liste
+ * d'objets { optionId }). Voir lib/surveyFlow.js.
+ */
+function serializeSurvey(survey) {
+  return survey && { ...serializeAudience(survey), questions: survey.questions?.map(withConditionIds) };
 }
+
+/**
+ * S5R-07 : les 4 colonnes de critères deviennent un seul objet
+ * `audience` ({ situations, quartiers, workQuartiers, workTypes }),
+ * plus simple à lire et à renvoyer tel quel depuis le formulaire.
+ */
+function serializeAudience(survey) {
+  const {
+    audienceSituations, audienceQuartiers, audienceWorkQuartiers, audienceWorkTypes, ...rest
+  } = survey;
+  return { ...rest, audience: audienceOf({ audienceSituations, audienceQuartiers, audienceWorkQuartiers, audienceWorkTypes }) };
+}
+
+/** Objet `audience` reçu (Zod) → colonnes Prisma. */
+function audienceToFields(audience) {
+  if (!audience) return {};
+  return {
+    audienceSituations: audience.situations ?? [],
+    // Les quartiers de résidence n'ont de sens qu'avec « autre quartier »
+    audienceQuartiers: (audience.situations ?? []).includes('AUTRE_QUARTIER') ? (audience.quartiers ?? []) : [],
+    audienceWorkQuartiers: audience.workQuartiers ?? [],
+    audienceWorkTypes: audience.workTypes ?? [],
+  };
+}
+
+// Transformation des questions reçues et résolution des références
+// (conditions, limites de cases) : voir services/surveyBuilder.js,
+// partagé avec le seed de production (S5R-05).
 
 // ── GET /surveys/admin — liste ADMIN, tous statuts confondus ───
 export async function listAdmin(req, res, next) {
@@ -87,7 +110,7 @@ export async function listAdmin(req, res, next) {
     ]);
 
     res.json({
-      items,
+      items: items.map(serializeAudience),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) {
@@ -113,7 +136,7 @@ export async function list(req, res, next) {
     ]);
 
     res.json({
-      items,
+      items: items.map(serializeAudience),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) {
@@ -154,7 +177,16 @@ export async function getBySlug(req, res, next) {
       hasResponded = !!existing;
     }
 
-    res.json({ survey, hasResponded });
+    // S5R-07 : la personne connectée fait-elle partie du public visé ?
+    // true / false / null (profil trop incomplet pour le dire, ou visiteur
+    // anonyme) — affiché à titre INDICATIF : tout le monde peut répondre.
+    let inAudience = null;
+    if (req.user) {
+      const profile = await prisma.user.findUnique({ where: { id: req.user.userId }, select: AUDIENCE_PROFILE_SELECT });
+      inAudience = matchesAudience(audienceOf(survey), profile);
+    }
+
+    res.json({ survey: serializeSurvey(survey), hasResponded, inAudience });
   } catch (err) {
     next(err);
   }
@@ -167,54 +199,40 @@ export async function create(req, res, next) {
 
     const slug = await generateUniqueSlug(title, prisma.survey);
 
-    const survey = await prisma.survey.create({
-      data: {
-        slug,
-        title,
-        description,
-        audience: audience || 'TOUS',
-        status: status || 'DRAFT',
-        opensAt,
-        closesAt,
-        questions: { create: toNestedQuestionsCreate(questions) },
-      },
-      include: QUESTIONS_INCLUDE,
+    // $transaction : la création ET la résolution du branchement
+    // doivent réussir ENSEMBLE — un crash entre les deux laisserait
+    // une enquête avec des questions mais un branchement à moitié posé.
+    const survey = await prisma.$transaction(async (tx) => {
+      const created = await tx.survey.create({
+        data: {
+          slug,
+          title,
+          description,
+          ...audienceToFields(audience), // S5R-07 : rien = tout le monde
+          status: status || 'DRAFT',
+          opensAt,
+          closesAt,
+          questions: { create: toNestedQuestionsCreate(questions) },
+        },
+      });
+
+      await resolveReferences(tx, created.id, questions);
+
+      return tx.survey.findUnique({ where: { id: created.id }, include: QUESTIONS_INCLUDE });
     });
 
-    res.status(201).json({ survey });
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.SURVEY_CREATED,
+      targetType: 'Survey',
+      targetId: survey.id,
+      details: { title: survey.title, status: survey.status },
+    });
+
+    res.status(201).json({ survey: serializeSurvey(survey) });
   } catch (err) {
     next(err);
   }
-}
-
-// Compare les questions déjà en base à celles reçues dans la requête,
-// pour savoir si l'admin a RÉELLEMENT touché aux questions ou si le
-// formulaire renvoie juste, sans y toucher, ce qui était déjà là (le
-// constructeur envoie toujours l'état complet, même quand seul le
-// statut a changé — voir plus bas). Ignore délibérément les id (le
-// payload entrant n'en a pas) : seuls label/type/required/order et
-// les libellés d'options comptent pour dire "pareil" ou "différent".
-function questionsUnchanged(existingQuestions, incomingQuestions) {
-  if (existingQuestions.length !== incomingQuestions.length) return false;
-
-  return existingQuestions.every((existingQuestion, index) => {
-    const incoming = incomingQuestions[index];
-
-    if (existingQuestion.label !== incoming.label) return false;
-    if ((existingQuestion.helpText || '') !== (incoming.helpText || '')) return false;
-    if (existingQuestion.type !== incoming.type) return false;
-    if (existingQuestion.required !== (incoming.required ?? true)) return false;
-
-    const existingLabels = existingQuestion.options.map((o) => o.label);
-    // OUI_NON sans options fournies = "garder les options actuelles"
-    // (même contrat qu'à la création) — pas une vraie différence.
-    const incomingLabels = incoming.options?.length
-      ? incoming.options.map((o) => o.label)
-      : (existingQuestion.type === 'OUI_NON' ? existingLabels : []);
-
-    if (existingLabels.length !== incomingLabels.length) return false;
-    return existingLabels.every((label, i) => label === incomingLabels[i]);
-  });
 }
 
 // ── PATCH /surveys/:id — éditer (admin) ─────────────────
@@ -243,7 +261,8 @@ export async function update(req, res, next) {
       throw error;
     }
 
-    const { questions, ...surveyFields } = req.body;
+    // audience (S5R-07) est converti à part en colonnes Prisma
+    const { questions, audience: audienceInput, ...surveyFields } = req.body;
 
     // Le formulaire admin envoie TOUJOURS le questionnaire complet,
     // même quand seul le statut a changé — donc `questions` étant
@@ -279,17 +298,42 @@ export async function update(req, res, next) {
         await tx.question.deleteMany({ where: { surveyId: id } });
       }
 
-      return tx.survey.update({
+      await tx.survey.update({
         where: { id },
         data: {
           ...surveyFields,
+          ...audienceToFields(audienceInput),
           ...(questionsActuallyChanged && { questions: { create: toNestedQuestionsCreate(questions) } }),
         },
-        include: QUESTIONS_INCLUDE,
       });
+
+      if (questionsActuallyChanged) {
+        await resolveReferences(tx, id, questions);
+      }
+
+      return tx.survey.findUnique({ where: { id }, include: QUESTIONS_INCLUDE });
     });
 
-    res.json({ survey });
+    // Noms des champs modifiés + les changements qui comptent le plus
+    // pour la suite : statut (ouvrir / clore) et publication des résultats.
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.SURVEY_UPDATED,
+      targetType: 'Survey',
+      targetId: id,
+      details: {
+        title: survey.title,
+        fields: Object.keys(req.body),
+        ...(req.body.status && req.body.status !== existing.status && {
+          status: { from: existing.status, to: req.body.status },
+        }),
+        ...(req.body.resultsPublished !== undefined && req.body.resultsPublished !== existing.resultsPublished && {
+          resultsPublished: req.body.resultsPublished,
+        }),
+      },
+    });
+
+    res.json({ survey: serializeSurvey(survey) });
   } catch (err) {
     next(err);
   }
@@ -323,6 +367,14 @@ export async function remove(req, res, next) {
 
     await prisma.survey.delete({ where: { id } });
 
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.SURVEY_DELETED,
+      targetType: 'Survey',
+      targetId: id,
+      details: { title: existing.title },
+    });
+
     res.status(204).end();
   } catch (err) {
     next(err);
@@ -347,6 +399,220 @@ export async function remove(req, res, next) {
 // d'une question CHOIX_MULTIPLE peuvent dépasser 100% au total.
 const AGGREGATABLE_CHOICE_TYPES = ['CHOIX_UNIQUE', 'CHOIX_MULTIPLE', 'OUI_NON'];
 
+// ── Agrégation des résultats — partagée entre la vue publique
+// (getResults) et la vue admin détaillée (getDetailedResults) ──
+//
+// `detailed` change deux choses : le contenu brut des réponses
+// TEXTE_LIBRE (jamais exposé publiquement) et la présence d'un
+// écart audience/situation déclarée (utile pour l'admin, dénué de
+// sens pour un visiteur qui n'a pas à connaître les autres citoyens).
+// responseIds (optionnel) restreint le calcul à un SOUS-ENSEMBLE des
+// bulletins de l'enquête — c'est ce qui permet la segmentation
+// (S5-21) sans dupliquer toute cette logique d'agrégation : null
+// veut dire "tout le monde", comme avant.
+async function computeResults(survey, { detailed = false, responseIds = null } = {}) {
+  const totalResponses = await prisma.surveyResponse.count({
+    where: responseIds ? { id: { in: responseIds } } : { surveyId: survey.id },
+  });
+
+  const choiceQuestionIds = survey.questions
+    .filter((q) => AGGREGATABLE_CHOICE_TYPES.includes(q.type))
+    .map((q) => q.id);
+  const numberQuestionIds = survey.questions
+    .filter((q) => q.type === 'NOMBRE')
+    .map((q) => q.id);
+  const textQuestionIds = survey.questions
+    .filter((q) => q.type === 'TEXTE_LIBRE')
+    .map((q) => q.id);
+
+  // Ajouté à chaque `where` d'Answer ci-dessous quand une
+  // segmentation est demandée — {} ne change rien à une requête
+  // Prisma, donc pas besoin de dupliquer chaque clause en deux
+  // versions (avec/sans filtre).
+  const responseFilter = responseIds ? { responseId: { in: responseIds } } : {};
+
+  const [optionCounts, numberStats, textCounts, rawTextAnswers, situationCounts, responsesForFlow] = await Promise.all([
+    choiceQuestionIds.length
+      ? prisma.answer.groupBy({
+        by: ['questionId', 'optionId'],
+        where: { questionId: { in: choiceQuestionIds }, optionId: { not: null }, ...responseFilter },
+        _count: true,
+      })
+      : [],
+    numberQuestionIds.length
+      ? prisma.answer.groupBy({
+        by: ['questionId'],
+        where: { questionId: { in: numberQuestionIds }, ...responseFilter },
+        _count: { valueNumber: true },
+        _avg: { valueNumber: true },
+        _min: { valueNumber: true },
+        _max: { valueNumber: true },
+      })
+      : [],
+    textQuestionIds.length
+      ? prisma.answer.groupBy({
+        by: ['questionId'],
+        where: { questionId: { in: textQuestionIds }, ...responseFilter },
+        _count: { valueText: true },
+      })
+      : [],
+    // Contenu brut du texte libre : demandé UNIQUEMENT par la vue
+    // admin détaillée — inutile de le charger (et de le renvoyer) pour
+    // la vue publique, qui n'affiche qu'un compte.
+    detailed && textQuestionIds.length
+      ? prisma.answer.findMany({
+        where: { questionId: { in: textQuestionIds }, valueText: { not: null }, ...responseFilter },
+        select: { questionId: true, valueText: true },
+      })
+      : [],
+    // Profil déclaré des répondants — pour confronter au public visé
+    // (S5R-07 : situation ET volet travail, voir lib/audience.js).
+    // Uniquement pour la vue admin détaillée : la répartition des
+    // situations des AUTRES citoyens n'a rien à faire dans une vue
+    // publique.
+    detailed
+      ? prisma.surveyResponse.findMany({
+        where: responseIds ? { id: { in: responseIds } } : { surveyId: survey.id },
+        select: { user: { select: AUDIENCE_PROFILE_SELECT } },
+      })
+      : [],
+    // S5R-05 : les options choisies par chaque répondant, pour rejouer
+    // son parcours et savoir quelles questions il a VUES (voir plus bas)
+    prisma.surveyResponse.findMany({
+      where: responseIds ? { id: { in: responseIds } } : { surveyId: survey.id },
+      select: { answers: { where: { optionId: { not: null } }, select: { questionId: true, optionId: true } } },
+    }),
+  ]);
+
+  // Map à plat questionId+optionId → compte (nested) ET optionId seul
+  // → compte (flat) — la version flat sert à retrouver combien de
+  // personnes ont vu une question BRANCHÉE (celles qui ont choisi
+  // l'option qui la déclenche), sans avoir à savoir à quelle question
+  // cette option appartient.
+  const optionCountsByQuestion = new Map();
+  for (const row of optionCounts) {
+    if (!optionCountsByQuestion.has(row.questionId)) {
+      optionCountsByQuestion.set(row.questionId, new Map());
+    }
+    optionCountsByQuestion.get(row.questionId).set(row.optionId, row._count);
+  }
+  const numberStatsByQuestion = new Map(numberStats.map((row) => [row.questionId, row]));
+  const textCountsByQuestion = new Map(
+    textCounts.map((row) => [row.questionId, row._count.valueText]),
+  );
+  const rawTextByQuestion = new Map();
+  for (const row of rawTextAnswers) {
+    if (!rawTextByQuestion.has(row.questionId)) rawTextByQuestion.set(row.questionId, []);
+    rawTextByQuestion.get(row.questionId).push(row.valueText);
+  }
+
+  // ── Combien de personnes ont VU chaque question ? (S5R-05) ──
+  // C'est la base des pourcentages : « 80 % des personnes à qui on a
+  // posé la question », pas « 12 % de tous les répondants » (une
+  // question conditionnelle n'est vue que par une partie d'entre eux).
+  // Avec des conditions multiples (OU) et des fins anticipées, ce nombre
+  // ne se déduit plus d'un simple compteur : on REJOUE le parcours de
+  // chaque répondant avec le même moteur que le questionnaire
+  // (lib/surveyFlow.js).
+  const flowQuestions = survey.questions.map(withConditionIds);
+  const seenCount = new Map();
+  for (const response of responsesForFlow) {
+    const chosen = new Map();
+    for (const a of response.answers) {
+      if (!chosen.has(a.questionId)) chosen.set(a.questionId, []);
+      chosen.get(a.questionId).push(a.optionId);
+    }
+    for (const id of visibleQuestionIds(flowQuestions, (qid) => chosen.get(qid) ?? [])) {
+      seenCount.set(id, (seenCount.get(id) || 0) + 1);
+    }
+  }
+
+  const questions = flowQuestions.map((question) => {
+    const questionTotal = seenCount.get(question.id) || 0;
+
+    const base = {
+      id: question.id,
+      label: question.label,
+      type: question.type,
+      required: question.required,
+      conditionOptionIds: question.conditionOptionIds,
+      totalForQuestion: questionTotal,
+    };
+
+    if (AGGREGATABLE_CHOICE_TYPES.includes(question.type)) {
+      const countsForQuestion = optionCountsByQuestion.get(question.id);
+      const options = question.options.map((option) => {
+        const count = countsForQuestion?.get(option.id) || 0;
+        return {
+          id: option.id,
+          label: option.label,
+          count,
+          percentage: questionTotal > 0
+            ? Math.round((count / questionTotal) * 1000) / 10
+            : 0,
+        };
+      });
+      return { ...base, options };
+    }
+
+    if (question.type === 'NOMBRE') {
+      const stats = numberStatsByQuestion.get(question.id);
+      return {
+        ...base,
+        stats: {
+          count: stats?._count.valueNumber || 0,
+          average: stats?._avg.valueNumber ?? null,
+          min: stats?._min.valueNumber ?? null,
+          max: stats?._max.valueNumber ?? null,
+        },
+      };
+    }
+
+    // TEXTE_LIBRE : contenu brut réservé à la vue admin détaillée —
+    // la vue publique n'expose que le nombre de réponses (jamais leur
+    // contenu, qui pourrait identifier quelqu'un par recoupement).
+    return {
+      ...base,
+      totalAnswered: textCountsByQuestion.get(question.id) || 0,
+      ...(detailed && { answers: rawTextByQuestion.get(question.id) || [] }),
+    };
+  });
+
+  const result = {
+    survey: { id: survey.id, slug: survey.slug, title: survey.title, status: survey.status },
+    totalResponses,
+    questions,
+  };
+
+  if (detailed) {
+    // Écart audience ciblée / situation réellement déclarée — une
+    // enquête RESIDENTS qui reçoit majoritairement des réponses de
+    // gens HORS_SENLIS, ça se voit ici, pas ailleurs.
+    const situationBreakdown = {};
+    for (const { user } of situationCounts) {
+      const key = user?.situation || 'NON_RENSEIGNEE';
+      situationBreakdown[key] = (situationBreakdown[key] || 0) + 1;
+    }
+    // S5R-07 : combien de répondants font partie du public visé ?
+    // (profil ACTUEL des comptes ; « inconnu » = profil incomplet ou
+    // compte supprimé depuis la réponse)
+    const audience = audienceOf(survey);
+    const audienceBreakdown = { inAudience: 0, outOfAudience: 0, unknown: 0 };
+    for (const { user } of situationCounts) {
+      const match = matchesAudience(audience, user);
+      if (match === true) audienceBreakdown.inAudience += 1;
+      else if (match === false) audienceBreakdown.outOfAudience += 1;
+      else audienceBreakdown.unknown += 1;
+    }
+    result.audience = audience;
+    result.audienceIsEveryone = isEveryone(audience);
+    result.audienceBreakdown = audienceBreakdown;
+    result.situationBreakdown = situationBreakdown;
+  }
+
+  return result;
+}
+
 export async function getResults(req, res, next) {
   try {
     const { slug } = req.params;
@@ -364,121 +630,143 @@ export async function getResults(req, res, next) {
       throw error;
     }
 
-    const totalResponses = await prisma.surveyResponse.count({
-      where: { surveyId: survey.id },
-    });
-
-    const choiceQuestionIds = survey.questions
-      .filter((q) => AGGREGATABLE_CHOICE_TYPES.includes(q.type))
-      .map((q) => q.id);
-    const numberQuestionIds = survey.questions
-      .filter((q) => q.type === 'NOMBRE')
-      .map((q) => q.id);
-    const textQuestionIds = survey.questions
-      .filter((q) => q.type === 'TEXTE_LIBRE')
-      .map((q) => q.id);
-
-    // Promise.all : les trois familles de groupBy sont indépendantes,
-    // pas besoin d'attendre l'une pour lancer l'autre. Un tableau vide
-    // en `where.questionId.in` renverrait de toute façon [] — le if
-    // évite juste une requête Postgres inutile quand une enquête n'a
-    // aucune question de ce type-là.
-    const [optionCounts, numberStats, textCounts] = await Promise.all([
-      choiceQuestionIds.length
-        ? prisma.answer.groupBy({
-          by: ['questionId', 'optionId'],
-          where: { questionId: { in: choiceQuestionIds }, optionId: { not: null } },
-          _count: true,
-        })
-        : [],
-      numberQuestionIds.length
-        ? prisma.answer.groupBy({
-          by: ['questionId'],
-          where: { questionId: { in: numberQuestionIds } },
-          _count: { valueNumber: true },
-          _avg: { valueNumber: true },
-          _min: { valueNumber: true },
-          _max: { valueNumber: true },
-        })
-        : [],
-      textQuestionIds.length
-        ? prisma.answer.groupBy({
-          by: ['questionId'],
-          where: { questionId: { in: textQuestionIds } },
-          _count: { valueText: true },
-        })
-        : [],
-    ]);
-
-    // Index par questionId pour un accès direct au moment d'assembler
-    // le résultat final, plutôt que de re-scanner ces tableaux pour
-    // chaque question de l'enquête (Map imbriquée pour les options :
-    // question → option → compte).
-    const optionCountsByQuestion = new Map();
-    for (const row of optionCounts) {
-      if (!optionCountsByQuestion.has(row.questionId)) {
-        optionCountsByQuestion.set(row.questionId, new Map());
-      }
-      optionCountsByQuestion.get(row.questionId).set(row.optionId, row._count);
+    // Distinct du statut ouvert/clos : l'admin décide SÉPARÉMENT du
+    // moment où les résultats deviennent publics — voir
+    // Survey.resultsPublished (revue du cahier des charges).
+    // /surveys/:id/stats (getDetailedResults) reste la vue admin,
+    // jamais concernée par ce garde-fou.
+    if (!survey.resultsPublished && !isAdmin) {
+      const error = new Error("Les résultats de cette enquête n'ont pas encore été publiés par l'administration");
+      error.status = 403;
+      error.code = 'RESULTS_NOT_PUBLISHED';
+      throw error;
     }
-    const numberStatsByQuestion = new Map(numberStats.map((row) => [row.questionId, row]));
-    const textCountsByQuestion = new Map(
-      textCounts.map((row) => [row.questionId, row._count.valueText]),
-    );
 
-    const questions = survey.questions.map((question) => {
-      const base = {
-        id: question.id,
-        label: question.label,
-        type: question.type,
-        required: question.required,
+    const result = await computeResults(survey, { detailed: false });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── GET /surveys/:id/stats — résultats détaillés (admin) ──
+//
+// Distincte de getResults : jamais soumise au garde-fou
+// resultsPublished (l'admin voit toujours), contenu brut des
+// réponses TEXTE_LIBRE inclus, et écart audience/situation déclarée.
+//
+// ?segmentBy=<questionId> (optionnel, S5-21) : recalcule les mêmes
+// résultats séparément pour chaque option d'UNE question à choix
+// unique de l'enquête — ex. les résultats "pour les habitants du
+// centre" vs "pour les patrons/gérants" vs... — en plus du total
+// général, jamais à sa place.
+export async function getDetailedResults(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { segmentBy } = req.query;
+
+    const survey = await prisma.survey.findUnique({
+      where: { id },
+      include: QUESTIONS_INCLUDE,
+    });
+
+    if (!survey) {
+      const error = new Error('Enquête introuvable');
+      error.status = 404;
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+
+    const result = await computeResults(survey, { detailed: true });
+
+    if (segmentBy) {
+      const segmentQuestion = survey.questions.find((q) => q.id === segmentBy);
+      if (!segmentQuestion) {
+        const error = new Error('Question de segmentation introuvable sur cette enquête');
+        error.status = 400;
+        error.code = 'INVALID_SEGMENT_QUESTION';
+        throw error;
+      }
+      if (!['CHOIX_UNIQUE', 'OUI_NON'].includes(segmentQuestion.type)) {
+        // CHOIX_MULTIPLE exclu volontairement : un même répondant
+        // pourrait appartenir à PLUSIEURS segments à la fois, et les
+        // effectifs de chaque segment ne s'additionneraient plus au
+        // total général — trompeur pour un document destiné à la
+        // mairie. CHOIX_UNIQUE et OUI_NON partagent la même propriété
+        // qui rend la segmentation sûre : une seule réponse possible
+        // par bulletin.
+        const error = new Error('Seule une question à réponse UNIQUE (choix unique ou oui/non) peut servir à segmenter les résultats');
+        error.status = 400;
+        error.code = 'INVALID_SEGMENT_QUESTION';
+        throw error;
+      }
+
+      // Une seule requête pour retrouver, PAR OPTION de la question de
+      // segmentation, la liste des bulletins (responseId) concernés —
+      // plutôt qu'une requête par option, qui multiplierait les
+      // allers-retours base pour un nombre d'options pourtant réduit.
+      const segmentAnswers = await prisma.answer.findMany({
+        where: { questionId: segmentQuestion.id, optionId: { not: null } },
+        select: { optionId: true, responseId: true },
+      });
+      const responseIdsByOption = new Map();
+      for (const row of segmentAnswers) {
+        if (!responseIdsByOption.has(row.optionId)) responseIdsByOption.set(row.optionId, []);
+        responseIdsByOption.get(row.optionId).push(row.responseId);
+      }
+
+      result.segmentedBy = {
+        questionId: segmentQuestion.id,
+        questionLabel: segmentQuestion.label,
+        // Renvoyé au client pour qu'il affiche la règle (« groupes de
+        // moins de 5 personnes masqués ») sans la recoder en dur.
+        minGroupSize: MIN_GROUP_SIZE,
+        segments: await Promise.all(
+          segmentQuestion.options.map(async (option) => {
+            const responseIds = responseIdsByOption.get(option.id) || [];
+
+            // Segment trop petit (1 à 4 bulletins) : on dit qu'il
+            // existe, jamais combien il pèse ni ce qu'il a répondu —
+            // voir lib/privacy.js. Aucune requête de résultats lancée.
+            if (isTooSmall(responseIds.length)) {
+              return {
+                optionId: option.id,
+                optionLabel: option.label,
+                masked: true,
+                totalResponses: null,
+                questions: [],
+              };
+            }
+
+            // Segment vide (personne n'a choisi cette option) : pas la
+            // peine d'interroger la base pour un résultat qui sera de
+            // toute façon entièrement à zéro.
+            if (responseIds.length === 0) {
+              return { optionId: option.id, optionLabel: option.label, masked: false, totalResponses: 0, questions: [] };
+            }
+
+            // detailed: false → PAS de texte libre brut par segment.
+            // « Un texte + le fait d'être salarié·e de tel quartier »
+            // suffit souvent à reconnaître quelqu'un ; le texte brut
+            // reste consultable dans le résultat GLOBAL, jamais
+            // recoupé avec un profil.
+            const segmentResult = await computeResults(survey, { detailed: false, responseIds });
+            return {
+              optionId: option.id,
+              optionLabel: option.label,
+              masked: false,
+              totalResponses: segmentResult.totalResponses,
+              // Deuxième niveau de masquage : une question branchée
+              // peut n'avoir été vue que par 2 personnes d'un segment
+              // pourtant assez grand.
+              questions: maskSmallQuestions(segmentResult.questions),
+            };
+          }),
+        ),
       };
+    }
 
-      if (AGGREGATABLE_CHOICE_TYPES.includes(question.type)) {
-        const countsForQuestion = optionCountsByQuestion.get(question.id);
-        // Toutes les options à 0 par défaut — sinon une option jamais
-        // choisie n'apparaîtrait pas du tout dans le résultat, et le
-        // front devrait deviner qu'"absente" veut dire 0 (même logique
-        // que getVoteAggregatesForMany pour les propositions).
-        const options = question.options.map((option) => {
-          const count = countsForQuestion?.get(option.id) || 0;
-          return {
-            id: option.id,
-            label: option.label,
-            count,
-            percentage: totalResponses > 0
-              ? Math.round((count / totalResponses) * 1000) / 10
-              : 0,
-          };
-        });
-        return { ...base, options };
-      }
-
-      if (question.type === 'NOMBRE') {
-        const stats = numberStatsByQuestion.get(question.id);
-        return {
-          ...base,
-          stats: {
-            count: stats?._count.valueNumber || 0,
-            average: stats?._avg.valueNumber ?? null,
-            min: stats?._min.valueNumber ?? null,
-            max: stats?._max.valueNumber ?? null,
-          },
-        };
-      }
-
-      // TEXTE_LIBRE : pas de contenu brut exposé par ce point d'entrée
-      // public — juste combien de personnes ont répondu. Consulter les
-      // réponses complètes reste une fonctionnalité admin à part,
-      // hors périmètre de ce ticket.
-      return { ...base, totalAnswered: textCountsByQuestion.get(question.id) || 0 };
-    });
-
-    res.json({
-      survey: { id: survey.id, slug: survey.slug, title: survey.title, status: survey.status },
-      totalResponses,
-      questions,
-    });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -495,7 +783,7 @@ function rejectAnswer(message) {
 // par l'appelant) et retourne les lignes Answer à créer. Un tableau
 // en retour, pas un objet : CHOIX_MULTIPLE peut produire plusieurs
 // lignes pour une seule réponse (une ligne par option cochée).
-function buildAnswerRows(question, answer) {
+function buildAnswerRows(question, answer, answersByQuestionId) {
   switch (question.type) {
     case 'CHOIX_UNIQUE':
     case 'OUI_NON': {
@@ -525,12 +813,31 @@ function buildAnswerRows(question, answer) {
       // schéma le rejetterait de toute façon, mais autant l'éviter
       // proprement plutôt que de laisser Postgres lever une erreur).
       const uniqueOptionIds = [...new Set(answer.optionIds)];
+
+      // S5R-05 : pas plus de cases que la réponse à une question
+      // « Nombre » précédente (ex. lieux de stationnement ≤ véhicules).
+      // Pas de réponse à cette question de référence → pas de limite.
+      if (question.maxChoicesFromId) {
+        const limit = answersByQuestionId.get(question.maxChoicesFromId)?.valueNumber;
+        if (typeof limit === 'number' && uniqueOptionIds.length > limit) {
+          rejectAnswer(`« ${question.label} » : ${limit} réponse${limit > 1 ? 's' : ''} au maximum`);
+        }
+      }
+
       return uniqueOptionIds.map((optionId) => ({ questionId: question.id, optionId }));
     }
 
     case 'NOMBRE': {
       if (typeof answer.valueNumber !== 'number') {
         rejectAnswer(`« ${question.label} » attend un nombre (valueNumber)`);
+      }
+      // S5R-05 : bornes fixées par l'administratrice (ex. au moins 1
+      // véhicule professionnel quand on vient de répondre « Oui »)
+      if (question.minValue !== null && answer.valueNumber < question.minValue) {
+        rejectAnswer(`« ${question.label} » : la valeur doit être au moins ${question.minValue}`);
+      }
+      if (question.maxValue !== null && answer.valueNumber > question.maxValue) {
+        rejectAnswer(`« ${question.label} » : la valeur doit être au plus ${question.maxValue}`);
       }
       return [{ questionId: question.id, valueNumber: answer.valueNumber }];
     }
@@ -573,7 +880,8 @@ export async function submitResponse(req, res, next) {
 
     const survey = await prisma.survey.findUnique({
       where: { id: surveyId },
-      include: { questions: { include: { options: true } } },
+      // conditions : nécessaires pour rejouer le parcours (S5R-05)
+      include: { questions: { include: { options: true, conditions: { select: { optionId: true } } } } },
     });
 
     if (!survey) {
@@ -624,8 +932,22 @@ export async function submitResponse(req, res, next) {
     // c'est le seul sens qui permet de détecter une question OBLIGATOIRE
     // restée sans réponse — l'inverse (parcourir les réponses) ne
     // remarquerait jamais une absence.
+    // S5R-05 : on REJOUE le parcours de la personne avec le même moteur
+    // que le questionnaire (lib/surveyFlow.js) — conditions multiples
+    // (OU) et fins anticipées compris. Seules les questions qu'elle a
+    // réellement VUES comptent : obligatoires pour elle, et seules leurs
+    // réponses sont enregistrées (une réponse à une question qu'elle n'a
+    // pas pu voir est ignorée).
+    const flowQuestions = survey.questions.map(withConditionIds);
+    const chosenOptionIds = (questionId) => {
+      const a = answersByQuestionId.get(questionId);
+      return a?.optionIds ?? (a?.optionId ? [a.optionId] : []);
+    };
+    const visibleIds = visibleQuestionIds(flowQuestions, chosenOptionIds);
+
     const answerRows = [];
-    for (const question of survey.questions) {
+    for (const questionId of visibleIds) {
+      const question = questionsById.get(questionId);
       const answer = answersByQuestionId.get(question.id);
 
       if (!answer) {
@@ -635,24 +957,89 @@ export async function submitResponse(req, res, next) {
         continue; // question optionnelle non répondue : rien à créer
       }
 
-      answerRows.push(...buildAnswerRows(question, answer));
+      answerRows.push(...buildAnswerRows(question, answer, answersByQuestionId));
     }
 
     // $transaction : le bulletin (SurveyResponse) et TOUTES ses lignes
     // de réponse (Answer) doivent être créés ENSEMBLE ou pas du tout —
     // un crash au milieu ne doit jamais laisser un bulletin à moitié
     // rempli en base (le fameux "tout ou rien" du ticket).
-    const response = await prisma.$transaction(async (tx) => {
-      const surveyResponse = await tx.surveyResponse.create({
-        data: { surveyId, userId },
-      });
+    let response;
+    try {
+      response = await prisma.$transaction(async (tx) => {
+        const surveyResponse = await tx.surveyResponse.create({
+          data: { surveyId, userId },
+        });
 
-      await tx.answer.createMany({
-        data: answerRows.map((row) => ({ ...row, responseId: surveyResponse.id })),
-      });
+        await tx.answer.createMany({
+          data: answerRows.map((row) => ({ ...row, responseId: surveyResponse.id })),
+        });
 
-      return surveyResponse;
-    });
+        return surveyResponse;
+      });
+    } catch (txErr) {
+      // P2002 = contrainte unique (userId, surveyId) violée — la
+      // vérification alreadyResponded ci-dessus élimine le cas
+      // séquentiel, mais deux requêtes strictement SIMULTANÉES
+      // peuvent toutes les deux passer cette vérification avant que
+      // l'une des deux n'écrive réellement en base (la vraie course
+      // critique). Sans ce rattrapage, cette seconde requête
+      // remontait un 500 générique au lieu du même 409 que le cas
+      // séquentiel — la base protège bien contre le doublon, mais la
+      // réponse HTTP mentait sur la raison de l'échec.
+      if (txErr.code === 'P2002') {
+        const error = new Error('Vous avez déjà répondu à cette enquête');
+        error.status = 409;
+        error.code = 'ALREADY_RESPONDED';
+        throw error;
+      }
+      throw txErr;
+    }
+
+    // Synchronisation profil (S5-XX) : pour chaque question flaguée
+    // syncsToProfile, si le répondant a choisi une option avec un
+    // syncValue, ce champ du COMPTE est mis à jour en plus du
+    // bulletin lui-même — jamais à sa place. Volontairement APRÈS la
+    // transaction ci-dessus : le bulletin est la donnée qui compte
+    // vraiment pour l'enquête, un souci sur la synchro du profil ne
+    // doit jamais faire échouer la soumission elle-même.
+    const profileUpdate = {};
+    const visibleSet = new Set(visibleIds);
+    for (const question of survey.questions) {
+      // Seules les questions VUES par la personne mettent à jour son profil
+      if (!question.syncsToProfile || !visibleSet.has(question.id)) continue;
+      const answer = answersByQuestionId.get(question.id);
+      if (!answer?.optionId) continue;
+      const option = question.options.find((o) => o.id === answer.optionId);
+      if (!option?.syncValue) continue;
+      // S5R-05 : « travaille à Senlis » est un oui/non (booléen) ; les
+      // options portent les textes 'true' / 'false', convertis ici
+      profileUpdate[question.syncsToProfile] = question.syncsToProfile === 'travailleASenlis'
+        ? option.syncValue === 'true'
+        : option.syncValue;
+    }
+    // Cohérence du volet « travail » : « non » efface le quartier et le
+    // rôle de travail ; un quartier de travail donné implique « oui »
+    if (profileUpdate.travailleASenlis === false) {
+      profileUpdate.travailleQuartier = null;
+      profileUpdate.travailType = null;
+    }
+    if (profileUpdate.travailleQuartier) profileUpdate.travailleASenlis = true;
+    // Même garde-fou que updateProfile (authController.js) : si la
+    // situation change pour autre chose qu'AUTRE_QUARTIER SANS que
+    // cette même enquête ne resynchronise aussi le quartier, l'ancien
+    // quartier n'aurait plus de sens et resterait périmé en base.
+    if (profileUpdate.situation && profileUpdate.situation !== 'AUTRE_QUARTIER' && !profileUpdate.quartier) {
+      profileUpdate.quartier = null;
+    }
+    if (Object.keys(profileUpdate).length) {
+      await prisma.user.update({ where: { id: userId }, data: profileUpdate }).catch((err) => {
+        // Une erreur ici (ex. valeur invalide malgré la validation
+        // Zod côté création d'enquête) ne doit jamais faire échouer
+        // une soumission par ailleurs valide — juste consignée.
+        console.error('Échec de la synchronisation profil après soumission :', err);
+      });
+    }
 
     res.status(201).json({
       response: { id: response.id, submittedAt: response.submittedAt },

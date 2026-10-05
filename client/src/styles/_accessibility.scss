@@ -31,8 +31,40 @@ html.a11y-contrast-mono {
 // base (voir global.scss, qui lit --a11y-font-scale) — plutôt que de
 // dupliquer $font-size-base ici, une seule source de vérité pour la
 // taille "normale".
-html.a11y-line-spacing {
-  body, p, li, blockquote { line-height: 2 !important; }
+// ── Interligne et espacements (S5R-03, WCAG 1.4.12 / RGAA 10.12) ──
+//
+// La VALEUR de l'interligne vient de la variable --a11y-line-height
+// (1.5, 1.8 ou 2), posée par AccessibilityContext ; la classe ne fait
+// que l'activer. !important : de nombreux composants fixent leur
+// lineHeight en style inline, qui l'emporterait sinon.
+html.a11y-line-height {
+  body, p, li, dd, dt, blockquote, label, td, th, caption, figcaption,
+  h1, h2, h3, h4, h5, h6, button, input, select, textarea {
+    line-height: var(--a11y-line-height) !important;
+  }
+}
+
+// Les trois espacements exacts du critère WCAG 1.4.12 : lettres
+// 0,12 × la taille du texte, mots 0,16 ×, paragraphes 2 ×. « em » =
+// « fois la taille du texte de l'élément » : l'espacement suit la taille.
+html.a11y-text-spacing {
+  body * {
+    letter-spacing: .12em !important;
+    word-spacing: .16em !important;
+  }
+  p { margin-bottom: 2em !important; }
+}
+
+// Le panneau lui-même garde sa mise en page compacte : c'est une
+// télécommande, pas le contenu à lire — et ses boutons doivent rester
+// tous visibles d'un coup d'œil.
+html.a11y-line-height .a11y-panel,
+html.a11y-line-height .a11y-panel *,
+html.a11y-text-spacing .a11y-panel,
+html.a11y-text-spacing .a11y-panel * {
+  line-height: 1.35 !important;
+  letter-spacing: normal !important;
+  word-spacing: normal !important;
 }
 
 html.a11y-underline-links a {
@@ -84,8 +116,23 @@ html.a11y-reduce-motion {
   bottom: 84px;
   z-index: 3000;
   width: min(340px, calc(100vw - 40px));
-  max-height: min(70vh, 640px);
+  // S5R-03 (recette) — le bouton ✕ disparaissait au-dessus de l'écran
+  // en profil « Malvoyance ». Cause : l'agrandissement du texte utilise
+  // `zoom` sur <html>, qui agrandit AUSSI ce panneau — y compris sa
+  // hauteur maximale (70vh × 1,3 = 91 % de l'écran, plus le décalage du
+  // bas : le haut sortait de la fenêtre). On divise donc la hauteur
+  // disponible par le facteur de zoom, pour qu'une fois agrandie, elle
+  // tienne exactement dans l'écran.
+  // dvh (« dynamic viewport height ») : sur mobile, tient compte de la
+  // barre d'adresse qui apparaît et disparaît (100vh la déborde) ; la
+  // ligne en vh est gardée pour les navigateurs qui ignorent dvh.
+  // Analogie : une valise qui doit passer dans le coffre — si on
+  // l'agrandit de 30 %, on la remplit d'autant moins.
+  max-height: calc((100vh - 110px) / var(--a11y-font-scale, 1));
+  max-height: calc((100dvh - 110px) / var(--a11y-font-scale, 1));
   overflow-y: auto;
+  // Le défilement du panneau ne fait pas défiler la page derrière
+  overscroll-behavior: contain;
   background: $blanc;
   border-radius: $radius-md;
   box-shadow: $shadow-card-hover;
@@ -96,10 +143,20 @@ html.a11y-reduce-motion {
 }
 
 .a11y-panel-header {
+  // Reste collé en HAUT du panneau pendant le défilement : le titre et
+  // le bouton ✕ restent visibles, quelle que soit la position. Les
+  // marges négatives compensent le padding du panneau (18 px) pour
+  // que le bandeau colle au vrai bord.
+  position: sticky;
+  top: -18px;
+  z-index: 1;
+  margin: -18px -18px 12px;
+  padding: 14px 18px 10px;
+  background: $blanc;
+  border-bottom: 1px solid #efe9dc;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
 
   h2 { font-family: $font-display; font-size: 20px; color: $ardoise; }
 }
@@ -110,8 +167,29 @@ html.a11y-reduce-motion {
   font-size: 18px;
   cursor: pointer;
   color: $gris;
-  min-width: 32px;
-  min-height: 32px;
+  // 44 px : taille de cible recommandée (WCAG 2.5.5) — 32 px était trop
+  // petit pour un doigt, ou une main qui tremble
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: $radius-sm;
+  &:hover { background: #f4efe4; color: $ardoise; }
+}
+
+// Second bouton « Fermer », en bas du panneau : là où se trouve le
+// regard après avoir réglé les dernières options
+.a11y-close-bottom {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: $radius-sm;
+  border: 2px solid #e3dcce;
+  background: $blanc;
+  color: $ardoise;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 44px;
+  &:hover { border-color: $nonette; }
 }
 
 .a11y-section {
@@ -181,6 +259,13 @@ html.a11y-reduce-motion {
   }
 
   span { font-weight: 700; color: $ardoise; min-width: 44px; text-align: center; }
+}
+
+.a11y-subtitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: $ardoise;
+  margin: 0 0 6px;
 }
 
 .a11y-toggle-row {

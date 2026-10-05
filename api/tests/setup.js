@@ -20,6 +20,7 @@
 
 import { vi, beforeEach } from 'vitest';
 import prisma from '../src/lib/prisma.js';
+import { clearEmailDomainCache } from '../src/lib/emailDomain.js';
 
 // ── 1. Mock de Nodemailer ───────────────────────────────
 //
@@ -39,6 +40,48 @@ vi.mock('nodemailer', () => ({
     createTransport: () => ({
       sendMail: sendMailMock,
     }),
+  },
+}));
+
+// ── 1 bis. Mock du DNS (S5R-02b) ────────────────────────
+//
+// La vérification du domaine des emails (lib/emailDomain.js) interroge
+// le DNS — donc Internet. Des tests qui dépendent du réseau échouent
+// hors ligne, en CI, ou quand un domaine change : on remplace le
+// résolveur par un faux, piloté par les tests.
+//
+// Par défaut, TOUT domaine « a un serveur de messagerie » : les tests
+// qui ne parlent pas de DNS ne voient aucune différence. Un test qui
+// veut simuler un domaine inexistant ou une panne réécrit le
+// comportement de dnsMock (voir email-domain.test.js) ; il est remis
+// à zéro avant chaque test.
+//
+// vi.hoisted : vi.mock() est REMONTÉ tout en haut du fichier, avant
+// même les imports ; un objet déclaré normalement n'existerait pas
+// encore au moment où le faux résolveur est construit (« Cannot access
+// 'dnsMock' before initialization »). vi.hoisted le crée assez tôt.
+const dnsMock = vi.hoisted(() => ({
+  resolveMx: vi.fn(),
+  resolve4: vi.fn(),
+  resolve6: vi.fn(),
+}));
+// Export séparé : Vitest interdit « export const » sur une variable hoistée
+export { dnsMock };
+
+function resetDnsMock() {
+  dnsMock.resolveMx.mockReset().mockResolvedValue([{ exchange: 'mx.exemple.fr', priority: 10 }]);
+  dnsMock.resolve4.mockReset().mockResolvedValue(['192.0.2.1']);
+  dnsMock.resolve6.mockReset().mockResolvedValue([]);
+}
+resetDnsMock();
+
+vi.mock('node:dns/promises', () => ({
+  // Une « classe » dont chaque instance partage les mêmes fonctions
+  // espionnes : peu importe combien de résolveurs le code crée
+  Resolver: class {
+    constructor() {
+      Object.assign(this, dnsMock);
+    }
   },
 }));
 
@@ -69,10 +112,16 @@ beforeEach(async () => {
   await prisma.question.deleteMany();
   await prisma.survey.deleteMany();
   await prisma.authToken.deleteMany();
+  // Journal d'administration (S5A-06) : avant User par propreté,
+  // même si la clé étrangère est en SetNull.
+  await prisma.adminAuditLog.deleteMany();
   await prisma.user.deleteMany();
 
   // On oublie aussi les appels enregistrés par le test précédent,
   // sinon "toHaveBeenCalledTimes(1)" compterait les emails de
   // TOUS les tests depuis le début du fichier.
   sendMailMock.mockClear();
+  resetDnsMock();
+  // Le cache des domaines (10 min) survivrait sinon d'un test à l'autre
+  clearEmailDomainCache();
 });

@@ -11,10 +11,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import useScrollReveal from '../hooks/useScrollReveal.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function EnqueteResultats() {
   const { slug } = useParams();
   const [results, setResults] = useState(null);
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(results ? `Résultats — ${results.survey.title}` : 'Résultats de l’enquête');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -24,11 +28,15 @@ export default function EnqueteResultats() {
 
     api.get(`/surveys/${slug}/results`)
       .then(setResults)
-      .catch((err) => setError(
-        err.status === 404
-          ? "Cette enquête n'existe pas ou plus."
-          : (err.message || 'Impossible de charger les résultats'),
-      ))
+      .catch((err) => {
+        if (err.status === 404) {
+          setError("Cette enquête n'existe pas ou plus.");
+        } else if (err.code === 'RESULTS_NOT_PUBLISHED') {
+          setError("Les résultats de cette enquête n'ont pas encore été publiés par l'administration — revenez un peu plus tard !");
+        } else {
+          setError(err.message || 'Impossible de charger les résultats');
+        }
+      })
       .finally(() => setLoading(false));
   }, [slug]);
 
@@ -61,23 +69,25 @@ export default function EnqueteResultats() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {results.questions.map((q) => (
           <div key={q.id} className="card-joyful" style={{ padding: 20 }}>
-            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 18, marginBottom: 14 }}>
+            <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 18, marginBottom: 4 }}>
               {q.label}
             </h2>
+            {/* Une question branchée n'a été vue que par une partie des
+                répondants — le préciser évite de laisser croire que
+                "peu de gens ont répondu" alors que peu de gens ont
+                simplement VU la question (honnêteté statistique). */}
+            {q.totalForQuestion !== results.totalResponses && (
+              <p style={{ color: '#6B6257', fontSize: 13, marginBottom: 10 }}>
+                Question posée à {q.totalForQuestion} répondant{q.totalForQuestion > 1 ? 's' : ''} concerné{q.totalForQuestion > 1 ? 's' : ''}
+              </p>
+            )}
+            {q.totalForQuestion === results.totalResponses && <div style={{ marginBottom: 14 }} />}
 
             {/* CHOIX_UNIQUE / CHOIX_MULTIPLE / OUI_NON → une barre par option */}
             {q.options && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {q.options.map((opt) => (
-                  <div key={opt.id}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-                      <span>{opt.label}</span>
-                      <span style={{ color: '#6B6257' }}>{opt.count} — {opt.percentage}%</span>
-                    </div>
-                    <div style={{ height: 10, borderRadius: 999, background: '#EFEBE2', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 999, background: '#1E5F7C', width: `${opt.percentage}%` }} />
-                    </div>
-                  </div>
+                  <ResultBar key={opt.id} option={opt} />
                 ))}
               </div>
             )}
@@ -102,6 +112,27 @@ export default function EnqueteResultats() {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Une barre de résultat, animée à l'entrée dans l'écran ────
+// Composant à part plutôt qu'un appel direct à useScrollReveal dans
+// le .map() ci-dessus : un Hook ne peut pas être appelé dans une
+// boucle — il faut un composant distinct, instancié une fois par
+// option, chacun avec son propre appel de Hook indépendant.
+function ResultBar({ option }) {
+  const ref = useScrollReveal('is-visible', { threshold: 0.3 });
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+        <span>{option.label}</span>
+        <span style={{ color: '#6B6257' }}>{option.count} — {option.percentage}%</span>
+      </div>
+      <div ref={ref} className="result-bar" style={{ '--w': `${option.percentage}%` }}>
+        <span />
       </div>
     </div>
   );

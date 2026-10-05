@@ -9,7 +9,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/surveyStatus.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -19,10 +21,12 @@ const FILTERS = [
 ];
 
 export default function AdminSurveys() {
+  usePageTitle('Administration — Enquêtes');
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { showToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,10 +51,24 @@ export default function AdminSurveys() {
     try {
       await api.delete(`/surveys/${survey.id}`);
       setItems((prev) => prev.filter((s) => s.id !== survey.id));
+      showToast(`« ${survey.title} » a été supprimée`);
     } catch (err) {
       // Ex. 409 SURVEY_HAS_RESPONSES si l'enquête a déjà des réponses —
       // le message renvoyé par l'API est déjà explicite, on l'affiche tel quel.
       setError(err.message || 'La suppression a échoué');
+    }
+  };
+
+  // Distinct du statut ouvert/clos : une enquête peut être clôturée
+  // sans que ses résultats soient déjà publics — l'admin choisit
+  // séparément le moment où les rendre visibles à tous.
+  const handleToggleResults = async (survey) => {
+    try {
+      const data = await api.patch(`/surveys/${survey.id}`, { resultsPublished: !survey.resultsPublished });
+      setItems((prev) => prev.map((s) => (s.id === survey.id ? { ...s, resultsPublished: data.survey.resultsPublished } : s)));
+      showToast(data.survey.resultsPublished ? 'Résultats publiés' : 'Résultats dépubliés');
+    } catch (err) {
+      setError(err.message || 'La mise à jour a échoué');
     }
   };
 
@@ -86,7 +104,7 @@ export default function AdminSurveys() {
       </div>
 
       {error && (
-        <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
           {error}
         </div>
       )}
@@ -114,7 +132,7 @@ export default function AdminSurveys() {
 
                 <span style={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{s.title}</span>
 
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <Link
                     to={`/admin/enquetes/${s.slug}/modifier`}
                     className="btn"
@@ -122,6 +140,24 @@ export default function AdminSurveys() {
                   >
                     Modifier
                   </Link>
+                  <Link
+                    to={`/admin/enquetes/${s.id}/stats`}
+                    className="btn"
+                    style={{ background: '#E3EEF3', color: '#1E5F7C', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                  >
+                    Résultats détaillés
+                  </Link>
+                  <button
+                    onClick={() => handleToggleResults(s)}
+                    className="btn"
+                    style={{
+                      background: s.resultsPublished ? '#E0F2E5' : '#EFEBE2',
+                      color: s.resultsPublished ? '#377349' : '#26333A',
+                      padding: '8px 16px', minHeight: 40, fontSize: 14,
+                    }}
+                  >
+                    {s.resultsPublished ? '✓ Résultats publiés' : 'Publier les résultats'}
+                  </button>
                   <button
                     onClick={() => handleDelete(s)}
                     className="btn"

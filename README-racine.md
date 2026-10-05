@@ -21,34 +21,41 @@
 
 ## 🧱 Stack
 
-**Front** React 19 · Vite 6 · React Router 7 · Sass · react-leaflet · mascotte SVG inline — **API** Node 22 · Express 5 · Prisma 7 · PostgreSQL · Zod · JWT + Argon2 — **Qualité** Vitest · Testing Library · Supertest · ESLint — **Infra** Docker · GitHub Actions · Railway
+**Front** React 19 · Vite 8 · React Router 7 · Sass · react-leaflet · mascotte SVG inline — **API** Node 22 · Express 5 · Prisma 7 · PostgreSQL · Zod · JWT + Argon2 — **Qualité** Vitest · Testing Library · Supertest · ESLint — **Infra** Docker (dev) · GitHub Actions · Dependabot · Clever Cloud (hébergement souverain, France)
 
-Architecture découplée : le front affiche, l'API décide, la base garantit. L'API (`/api/v1`, JSON, documentée Swagger) est consommable telle quelle par une future application mobile.
+Architecture découplée : le front affiche, l'API décide, la base garantit. L'API (`/api/v1`, JSON) est consommable telle quelle par une future application mobile — documentation OpenAPI/Swagger prévue, pas encore publiée.
 
 ## 🚀 Démarrage rapide
 
-**Prérequis** : Node ≥ 22, Docker + Docker Compose, Git.
+**Prérequis** : Node ≥ 22, Git, et PostgreSQL 16 — installé sur la machine **ou** via Docker.
 
 ```bash
 git clone https://github.com/Nathalie-Leduc/senlis-participatif.git
 cd senlis-participatif
 
-# 1. Variables d'environnement
-cp api/.env.example api/.env        # compléter (voir api/README.md)
+# 1. Dépendances — UNE seule installation, à la racine (npm workspaces :
+#    un seul package-lock.json pour api/ et client/)
+npm install
+
+# 2. Variables d'environnement
+cp api/.env.example api/.env        # compléter (voir api/README-api.md)
 cp client/.env.example client/.env
 
-# 2. Base de données + API (Docker)
-docker compose up -d                 # PostgreSQL + API sur :3000
+# 3. Base de données (si PostgreSQL n'est pas installé sur la machine)
+docker compose up -d postgres        # n'écoute que sur 127.0.0.1:5432
 
-# 3. Migrations + données de démo
-cd api && npm install
+# 4. Migrations + client Prisma + données de démo
+cd api
 npx prisma migrate dev
+npx prisma generate                  # obligatoire depuis Prisma 7
 npm run seed                         # admin + proposition + enquête de démo
+npm run dev                          # API sur http://localhost:3000
 
-# 4. Front
-cd ../client && npm install
-npm run dev                          # http://localhost:5173
+# 5. Front (autre terminal, depuis la racine)
+npm run dev -w client                # http://localhost:5173
 ```
+
+Variante tout-Docker : `docker compose up -d` lance la base **et** l'API (image `api/Dockerfile`, utilisateur non-root, lit `api/.env`).
 
 Comptes de démo (seed) : `admin@demo.local` / `citoyen1@demo.local` — mots de passe dans `api/prisma/seed.js` (dev uniquement).
 
@@ -56,11 +63,11 @@ Comptes de démo (seed) : `admin@demo.local` / `citoyen1@demo.local` — mots de
 
 ```
 senlis-participatif/
-├── api/        Express 5 + Prisma — voir api/README.md
-├── client/     React 19 + Vite — voir client/README.md
+├── api/        Express 5 + Prisma — voir api/README-api.md
+├── client/     React 19 + Vite — voir client/README-client.md
 │               (dont Mascot, MascotWidget, Confetti, joy layer)
-├── docker-compose.yml
-└── .github/workflows/ci.yml
+├── docker-compose.yml   (développement uniquement)
+└── .github/            ci.yml · dependabot.yml
 ```
 
 Documentation de conception (cahier des charges, Merise, diagrammes, charte graphique, maquettes) : dépôt [`senlis-participatif-docs`](https://github.com/Nathalie-Leduc/senlis-participatif-docs).
@@ -73,11 +80,11 @@ npm run test --workspace client    # tests composants
 npm run lint --workspaces
 ```
 
-CI sur chaque PR (lint + tests + build) ; merge sur `main` = déploiement Railway automatique. Workflow Git : `main` ← `develop` ← `feat/…`, commits conventionnels, une PR par fonctionnalité.
+CI sur chaque PR (lint + tests + build + `npm audit` des dépendances de production) ; Dependabot propose chaque semaine les mises à jour de sécurité. Merge sur `main` = déploiement Clever Cloud. Workflow Git : `main` ← `dev` ← `feat/…`, commits conventionnels, une PR par fonctionnalité (base : `dev`).
 
 ## 🔒 Sécurité & RGPD (résumé)
 
-HTTPS · Argon2 · JWT · validation Zod systématique · Helmet · rate limiting (auth incluse) · CORS restreint · emails vérifiés avant participation · réponses d'enquête **pseudonymisées** (la suppression de compte anonymise sans détruire les statistiques) · droit à l'effacement intégré.
+HTTPS · Argon2id · JWT révocables · 2FA admin · validation Zod systématique · Helmet · rate limiting (auth incluse, derrière proxy) · CORS restreint · emails vérifiés avant participation · réponses d'enquête **pseudonymisées** · export et effacement des données en libre-service · purge automatique (comptes inactifs, jetons) · journal des actions admin · polices auto-hébergées, aucun traceur · secret statistique (groupes < 5 masqués). Détail : audit `21` du dépôt docs.
 
 ## ♿ Accessibilité
 

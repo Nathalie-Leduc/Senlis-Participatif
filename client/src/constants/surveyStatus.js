@@ -6,7 +6,9 @@
 
 export const STATUS_META = {
   DRAFT: { label: 'Brouillon', color: '#6B6257', bg: '#EFEBE2' },
-  OPEN: { label: 'Ouverte', color: '#3A7A4D', bg: '#E0F2E5' },
+  // Audit accessibilité (S5-05) : même correctif que proposalStatus.js
+  // — #3A7A4D sur #E0F2E5 échouait de justesse le contraste AA.
+  OPEN: { label: 'Ouverte', color: '#377349', bg: '#E0F2E5' },
   CLOSED: { label: 'Clôturée', color: '#1E5F7C', bg: '#E3EEF3' },
 };
 
@@ -15,11 +17,8 @@ export const STATUS_OPTIONS = Object.entries(STATUS_META).map(([value, meta]) =>
   label: meta.label,
 }));
 
-export const AUDIENCE_OPTIONS = [
-  { value: 'TOUS', label: 'Tous les habitants' },
-  { value: 'RESIDENTS', label: 'Résidents' },
-  { value: 'COMMERCANTS', label: 'Commerçants' },
-];
+// (S5R-07 : AUDIENCE_OPTIONS supprimé — le public visé se choisit
+// désormais par critères de profil, voir components/AudiencePicker)
 
 // Libellés + info "a besoin d'options" pour le constructeur.
 export const QUESTION_TYPE_META = {

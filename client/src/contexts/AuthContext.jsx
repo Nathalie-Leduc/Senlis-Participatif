@@ -39,8 +39,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Inscription ────────────────────────────────────────
-  const register = useCallback(async ({ email, password, pseudo }) => {
-    const data = await api.post('/auth/register', { email, password, pseudo });
+  // On transmet tout ce que la page envoie (pas de filtrage explicite
+  // ici) — sinon chaque nouveau champ d'inscription (ex. situation)
+  // doit être ajouté à DEUX endroits : la page ET ce pont vers l'API,
+  // avec le risque de silencieusement en oublier un, comme ici.
+  const register = useCallback(async (payload) => {
+    const data = await api.post('/auth/register', payload);
     return data; // le message "vérifiez votre email"
   }, []);
 
@@ -48,8 +52,21 @@ export function AuthProvider({ children }) {
   // Si data.twoFactorRequired est vrai (compte admin), on ne stocke
   // NI token NI user — l'appelant (Connexion.jsx) doit d'abord
   // passer par verifyTwoFactor() avec le code reçu par email.
+  // ── Connexion ──────────────────────────────────────────
+  // Si data.twoFactorRequired est vrai (compte admin), on ne stocke
+  // NI token NI user — l'appelant (Connexion.jsx) doit d'abord
+  // passer par verifyTwoFactor() avec le code reçu par email.
+  //
+  // trustedDeviceToken (s'il existe encore en localStorage, posé par
+  // un précédent verifyTwoFactor sur CE navigateur) est envoyé à
+  // chaque tentative — c'est lui qui permet à l'API de sauter le
+  // défi email si ce navigateur l'a déjà passé il y a moins d'1h.
+  // Ne coûte rien à envoyer même pour un citoyen normal ou un admin
+  // jamais encore vérifié : l'API l'ignore simplement s'il ne
+  // correspond à rien.
   const login = useCallback(async ({ email, password }) => {
-    const data = await api.post('/auth/login', { email, password });
+    const trustedDeviceToken = localStorage.getItem('trustedDeviceToken') || undefined;
+    const data = await api.post('/auth/login', { email, password, trustedDeviceToken });
     if (!data.twoFactorRequired) {
       localStorage.setItem('token', data.token);
       setUser(data.user);
@@ -61,11 +78,25 @@ export function AuthProvider({ children }) {
   const verifyTwoFactor = useCallback(async ({ challengeToken, code }) => {
     const data = await api.post('/auth/2fa/verify', { challengeToken, code });
     localStorage.setItem('token', data.token);
+    // Posé pour la PROCHAINE connexion sur ce navigateur (voir
+    // login() ci-dessus) — jamais utilisé pour la session en cours,
+    // qui repose entièrement sur data.token comme d'habitude.
+    if (data.trustedDeviceToken) {
+      localStorage.setItem('trustedDeviceToken', data.trustedDeviceToken);
+    }
     setUser(data.user);
     return data;
   }, []);
 
   // ── Déconnexion ────────────────────────────────────────
+  // S5A-06 : après un changement de mot de passe, l'API révoque tous
+  // les anciens jetons et renvoie un NOUVEAU jeton pour la session en
+  // cours. Sans ce remplacement, la personne serait déconnectée à la
+  // requête suivante… sur l'appareil même où elle vient d'agir.
+  const replaceToken = useCallback((token) => {
+    localStorage.setItem('token', token);
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     setUser(null);
@@ -83,7 +114,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, isLogged, isAdmin, loading,
-      register, login, verifyTwoFactor, logout, refreshUser,
+      register, login, verifyTwoFactor, logout, refreshUser, replaceToken,
     }}>
       {children}
     </AuthContext.Provider>

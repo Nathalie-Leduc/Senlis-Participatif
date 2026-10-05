@@ -27,6 +27,18 @@ const CONTRAST_OPTIONS = [
 // curseur, donc le vrai risque n'est pas "quelle balise" mais "un
 // grand conteneur sans enfant plus précis à cet endroit précis",
 // qu'on écarte simplement s'il contient trop de texte d'un coup.
+// S5R-03 : 4 niveaux d'interligne au lieu d'un simple « augmenté ».
+// 1,5 est la valeur de référence du critère WCAG 1.4.12.
+const LINE_HEIGHT_OPTIONS = [
+  // « Standard » et non « Normal » : le bouton de contraste s'appelle
+  // déjà « Normal », et deux boutons au même nom dans un même panneau
+  // seraient ambigus pour un lecteur d'écran (liste des boutons).
+  { value: 'normal', label: 'Standard' },
+  { value: 1.5, label: '1,5' },
+  { value: 1.8, label: '1,8' },
+  { value: 2, label: '2' },
+];
+
 const MAX_HOVER_READ_LENGTH = 400;
 
 // Retire émojis/pictogrammes avant lecture : une synthèse vocale qui
@@ -46,12 +58,27 @@ export default function AccessibilityWidget() {
   const [open, setOpen] = useState(false);
   const [hoverRead, setHoverRead] = useState(false);
   const panelRef = useRef(null);
+  // S5R-03 : gestion du focus. À l'ouverture, le focus entre dans le
+  // panneau (sur ✕) ; à la fermeture, il revient sur le bouton ♿ — au
+  // clavier, on ne se retrouve jamais « perdu » en haut de la page.
+  const toggleRef = useRef(null);
+  const closeRef = useRef(null);
+  const wasOpenRef = useRef(false);
   const voicesRef = useRef([]);
   const hoverTimerRef = useRef(null);
 
   // Ferme le panneau à l'échap — un widget qui flotte par-dessus
   // tout le site doit pouvoir se fermer au clavier sans avoir à
   // chercher la souris jusqu'au bouton ✕.
+  useEffect(() => {
+    if (open) {
+      closeRef.current?.focus();
+    } else if (wasOpenRef.current) {
+      toggleRef.current?.focus();
+    }
+    wasOpenRef.current = open;
+  }, [open]);
+
   useEffect(() => {
     if (!open) return undefined;
     const handleKey = (e) => { if (e.key === 'Escape') setOpen(false); };
@@ -135,6 +162,7 @@ export default function AccessibilityWidget() {
     <>
       <button
         type="button"
+        ref={toggleRef}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls="a11y-panel"
@@ -155,7 +183,7 @@ export default function AccessibilityWidget() {
         >
           <div className="a11y-panel-header">
             <h2>Accessibilité</h2>
-            <button type="button" onClick={() => setOpen(false)} aria-label="Fermer le panneau" className="a11y-close">✕</button>
+            <button type="button" ref={closeRef} onClick={() => setOpen(false)} aria-label="Fermer le panneau" className="a11y-close">✕</button>
           </div>
 
           <section className="a11y-section">
@@ -226,12 +254,25 @@ export default function AccessibilityWidget() {
 
           <section className="a11y-section">
             <h3>Lecture et confort</h3>
+            <p className="a11y-subtitle" id="a11y-line-height-label">Interligne</p>
+            <div className="a11y-options" role="group" aria-labelledby="a11y-line-height-label" style={{ marginBottom: 12 }}>
+              {LINE_HEIGHT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  aria-pressed={settings.lineHeight === opt.value}
+                  onClick={() => update({ lineHeight: opt.value })}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
             <label className="a11y-toggle-row">
               <input
-                type="checkbox" checked={settings.lineSpacing}
-                onChange={(e) => update({ lineSpacing: e.target.checked })}
+                type="checkbox" checked={settings.textSpacing}
+                onChange={(e) => update({ textSpacing: e.target.checked })}
               />
-              Interligne augmenté
+              Espacer les lettres, les mots et les paragraphes
             </label>
             <label className="a11y-toggle-row">
               <input
@@ -273,6 +314,9 @@ export default function AccessibilityWidget() {
 
           <button type="button" className="a11y-reset" onClick={reset}>
             Réinitialiser tous les réglages
+          </button>
+          <button type="button" className="a11y-close-bottom" onClick={() => setOpen(false)}>
+            Fermer
           </button>
         </div>
       )}

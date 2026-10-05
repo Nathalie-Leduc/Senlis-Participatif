@@ -13,7 +13,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/proposalStatus.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -26,10 +28,12 @@ const FILTERS = [
 ];
 
 export default function AdminPropositions() {
+  usePageTitle('Administration — Propositions');
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { showToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +61,7 @@ export default function AdminPropositions() {
     try {
       await api.delete(`/proposals/${proposal.id}`);
       setItems((prev) => prev.filter((p) => p.id !== proposal.id));
+      showToast(`« ${proposal.title} » a été supprimée`);
     } catch (err) {
       setError(err.message || 'La suppression a échoué');
     }
@@ -94,7 +99,7 @@ export default function AdminPropositions() {
       </div>
 
       {error && (
-        <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
           {error}
         </div>
       )}
@@ -122,7 +127,18 @@ export default function AdminPropositions() {
 
                 <span style={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{p.title}</span>
 
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {/* Résultats détaillés (S5-21) : utile dès qu'il peut y
+                      avoir des votes, donc pas pour un brouillon. */}
+                  {p.status !== 'DRAFT' && (
+                    <Link
+                      to={`/admin/propositions/${p.id}/stats`}
+                      className="btn"
+                      style={{ background: '#E3F0F6', color: '#1E5F7C', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                    >
+                      Résultats
+                    </Link>
+                  )}
                   <Link
                     to={`/admin/propositions/${p.slug}/modifier`}
                     className="btn"

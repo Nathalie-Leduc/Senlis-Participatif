@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "Quartier" AS ENUM ('BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS');
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "quartier" "Quartier";

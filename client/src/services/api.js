@@ -12,6 +12,43 @@
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
+// ── Adresse des fichiers servis par l'API (S5A-08) ──────────
+//
+// L'API renvoie les images sous forme de chemin RELATIF :
+// « /uploads/proposals/abc.webp ». Un chemin relatif se lit par
+// rapport au site où l'on se trouve. En développement, ça marche par
+// chance : Vite relaie /uploads vers l'API (proxy). En production,
+// le site (senlis-participatif.fr) et l'API (api.senlis-participatif.fr)
+// sont deux serveurs différents — le navigateur irait chercher l'image
+// sur le site… où elle n'existe pas (404).
+//
+// Analogie : « 3e étage, porte gauche » ne suffit pas quand on change
+// d'immeuble — il faut ajouter l'adresse de l'immeuble.
+
+/**
+ * Transforme un chemin renvoyé par l'API en adresse utilisable.
+ * Fonction pure (apiUrl en paramètre) pour pouvoir la tester.
+ *
+ * @param {string|null|undefined} path - ex. '/uploads/proposals/abc.webp'
+ * @param {string} apiUrl - ex. 'https://api.senlis-participatif.fr/api/v1'
+ * @returns {string|null|undefined}
+ *
+ * @example
+ * toAssetUrl('/uploads/a.webp', 'https://api.exemple.fr/api/v1') // 'https://api.exemple.fr/uploads/a.webp'
+ * toAssetUrl('/uploads/a.webp', '/api/v1')                       // '/uploads/a.webp' (même serveur)
+ */
+export function toAssetUrl(path, apiUrl) {
+  // Rien à faire : absent, déjà absolu, ou aperçu local (blob:, data:)
+  if (!path || /^(https?:|blob:|data:)/.test(path)) return path;
+  // API sur le même serveur que le site (URL relative) : chemin inchangé
+  if (!/^https?:\/\//.test(apiUrl)) return path;
+  // new URL(…).origin = « https://api.exemple.fr » (sans /api/v1)
+  return `${new URL(apiUrl).origin}${path}`;
+}
+
+/** toAssetUrl, avec l'adresse de l'API configurée (VITE_API_URL). */
+export const assetUrl = (path) => toAssetUrl(path, API_URL);
+
 /**
  * Appel générique à l'API.
  * Ajoute automatiquement le JWT si disponible.
@@ -19,19 +56,36 @@ const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('token');
 
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
-    ...options,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...options.headers,
+      },
+      ...options,
+    });
+  } catch {
+    // VRAIE erreur réseau : le serveur n'a pas répondu du tout (API
+    // arrêtée, connexion coupée). C'est le seul cas où « réseau » est
+    // le bon mot.
+    throw { status: 0, code: 'NETWORK_ERROR', message: 'Impossible de joindre le serveur — vérifiez votre connexion, puis réessayez.' };
+  }
 
   // Les erreurs API arrivent en JSON normalisé
   if (!response.ok) {
+    // Si le corps n'est pas du JSON, le serveur A répondu : ce n'est donc
+    // pas une erreur réseau. Avant, une réponse 429 en texte brut
+    // s'affichait « Erreur réseau inattendue » — trompeur (cas réel du
+    // 02/10/2026 : la connexion admin semblait cassée, elle était
+    // simplement freinée par le limiteur anti-force brute).
     const error = await response.json().catch(() => ({
-      error: { message: 'Erreur réseau inattendue' },
+      error: {
+        message: response.status === 429
+          ? 'Trop de tentatives — patientez quelques minutes avant de réessayer.'
+          : `Erreur inattendue du serveur (code ${response.status}).`,
+      },
     }));
     throw { status: response.status, ...error.error };
   }
@@ -80,7 +134,11 @@ export const api = {
   post: (path, body) => apiFetch(path, { method: 'POST', body: JSON.stringify(body) }),
   patch: (path, body) => apiFetch(path, { method: 'PATCH', body: JSON.stringify(body) }),
   put: (path, body) => apiFetch(path, { method: 'PUT', body: JSON.stringify(body) }),
-  delete: (path) => apiFetch(path, { method: 'DELETE' }),
+  // body optionnel : DELETE /auth/me exige le mot de passe (S5A-06)
+  delete: (path, body) => apiFetch(path, {
+    method: 'DELETE',
+    ...(body !== undefined && { body: JSON.stringify(body) }),
+  }),
   // file : un objet File (ex. depuis <input type="file">)
   uploadProposalImage: (proposalId, file) => {
     const formData = new FormData();

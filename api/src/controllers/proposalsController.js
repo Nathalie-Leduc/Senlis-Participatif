@@ -16,8 +16,11 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
 import { saveProposalImage, deleteProposalImage } from '../lib/imageProcessing.js';
+import { MIN_GROUP_SIZE, isTooSmall } from '../lib/privacy.js';
+import { PROFILE_VALUES } from '../validators/auth.js';
 
 // Statuts visibles sans authentification — jamais DRAFT,
 // PENDING_REVIEW, REJECTED ou ARCHIVED côté public.
@@ -258,6 +261,14 @@ export async function create(req, res, next) {
       },
     });
 
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.PROPOSAL_CREATED,
+      targetType: 'Proposal',
+      targetId: proposal.id,
+      details: { title: proposal.title, status: proposal.status },
+    });
+
     res.status(201).json({ proposal });
   } catch (err) {
     next(err);
@@ -282,6 +293,23 @@ export async function update(req, res, next) {
     const proposal = await prisma.proposal.update({
       where: { id },
       data: { ...req.body, ...(publishedAt !== undefined && { publishedAt }) },
+    });
+
+    // Seulement les NOMS des champs modifiés (pas leur contenu) : le
+    // journal dit « le statut et le résumé ont changé », sans recopier
+    // tout l'argumentaire à chaque édition.
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.PROPOSAL_UPDATED,
+      targetType: 'Proposal',
+      targetId: id,
+      details: {
+        title: proposal.title,
+        fields: Object.keys(req.body),
+        ...(req.body.status && req.body.status !== existing.status && {
+          status: { from: existing.status, to: req.body.status },
+        }),
+      },
     });
 
     res.json({ proposal });
@@ -335,6 +363,14 @@ export async function uploadImageHandler(req, res, next) {
       data: { imagePath },
     });
 
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.PROPOSAL_IMAGE_UPLOADED,
+      targetType: 'Proposal',
+      targetId: id,
+      details: { title: proposal.title },
+    });
+
     res.json({ proposal });
   } catch (err) {
     next(err);
@@ -366,7 +402,98 @@ export async function remove(req, res, next) {
       await deleteProposalImage(existing.imagePath);
     }
 
+    // Le titre est recopié : une fois la proposition supprimée, l'id
+    // seul ne permettrait plus de savoir de laquelle il s'agissait.
+    await logAdminAction({
+      actorId: req.user.userId,
+      action: AUDIT_ACTIONS.PROPOSAL_DELETED,
+      targetType: 'Proposal',
+      targetId: id,
+      details: { title: existing.title },
+    });
+
     res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── GET /proposals/:id/stats — résultats détaillés (admin, S5-21) ──
+//
+// Pendant, côté propositions, de GET /surveys/:id/stats : les votes
+// POUR / CONTRE / NEUTRE, éventuellement découpés selon UN champ du
+// profil des votants (?segmentBy=situation | quartier |
+// travailleQuartier | travailType). But : pouvoir montrer à la
+// mairie que « les résidents du centre » et « ceux qui y travaillent »
+// ne votent pas forcément pareil.
+//
+// Analogie : le dépouillement d'un scrutin, bureau par bureau — sauf
+// qu'un « bureau » de moins de 5 votants n'est jamais dépouillé à
+// part (voir lib/privacy.js), sinon on saurait qui a voté quoi.
+export async function getStats(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { segmentBy } = req.validatedQuery;
+
+    const proposal = await prisma.proposal.findUnique({
+      where: { id },
+      select: { id: true, slug: true, title: true, status: true, publishedAt: true, closesAt: true },
+    });
+    if (!proposal) {
+      const error = new Error('Proposition introuvable');
+      error.status = 404;
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+
+    const votes = await getVoteAggregate(id);
+    const result = {
+      proposal,
+      votes,
+      totalVotes: votes.POUR + votes.CONTRE + votes.NEUTRE,
+    };
+
+    if (segmentBy) {
+      // Pourquoi un findMany + un comptage en JS, plutôt qu'un
+      // groupBy Prisma comme pour les totaux ? groupBy ne sait
+      // grouper que sur les colonnes de la table interrogée (Vote),
+      // pas sur une colonne d'une table liée (User.situation…). À
+      // l'échelle d'une ville (quelques centaines de votes par
+      // proposition), charger une ligne légère par vote reste
+      // négligeable — et on ne sélectionne QUE le champ utile.
+      const rows = await prisma.vote.findMany({
+        where: { proposalId: id },
+        select: { value: true, user: { select: { [segmentBy]: true } } },
+      });
+
+      // Une case par valeur possible du champ, + une case « null »
+      // (profil non renseigné, ou non concerné — ex. quartier vide
+      // pour un résident du centre) : ainsi les groupes vides
+      // apparaissent aussi, et la somme des segments = le total.
+      const buckets = new Map(
+        [...PROFILE_VALUES[segmentBy], null].map((value) => [value, { POUR: 0, CONTRE: 0, NEUTRE: 0 }]),
+      );
+      for (const row of rows) {
+        const key = row.user?.[segmentBy] ?? null;
+        buckets.get(key)[row.value] += 1;
+      }
+
+      result.segmentedBy = {
+        dimension: segmentBy,
+        minGroupSize: MIN_GROUP_SIZE,
+        segments: [...buckets.entries()].map(([value, counts]) => {
+          const total = counts.POUR + counts.CONTRE + counts.NEUTRE;
+          if (isTooSmall(total)) {
+            // Ni le nombre exact, ni la répartition : seulement
+            // « ce groupe existe et compte moins de 5 votants ».
+            return { value, masked: true, totalVotes: null, votes: null };
+          }
+          return { value, masked: false, totalVotes: total, votes: counts };
+        }),
+      };
+    }
+
+    res.json(result);
   } catch (err) {
     next(err);
   }

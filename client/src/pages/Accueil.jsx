@@ -14,15 +14,36 @@ import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import LazyMapView from '../components/MapView/LazyMapView.jsx';
 import { PARKINGS_REPORT_EXEMPLE } from '../data/parkingsReport.js';
+import useIsVisible from '../hooks/useIsVisible.js';
+import useCountUp from '../hooks/useCountUp.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
+
+// 0 et 1 = singulier, 2 et plus = pluriel (règle du français, pas du
+// pluriel anglais où seul 1 est singulier).
+function pluralize(count, singular, plural = `${singular}s`) {
+  return count <= 1 ? singular : plural;
+}
 
 export default function Accueil() {
+  usePageTitle('Accueil');
   const { isLogged } = useAuth();
   const [proposalsTotal, setProposalsTotal] = useState(0);
+  const [surveysTotal, setSurveysTotal] = useState(0);
+  const [participantsTotal, setParticipantsTotal] = useState(0);
   const [markers, setMarkers] = useState([]);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [iris, setIris] = useState(null);
   const [showIris, setShowIris] = useState(true);
   const [showParkings, setShowParkings] = useState(true);
+
+  // Les stat pills ne démarrent leur décompte que lorsqu'elles entrent
+  // réellement dans l'écran — sur un hero déjà visible au chargement
+  // (cas le plus fréquent), ça se déclenche donc quasi immédiatement ;
+  // ça évite surtout de lancer une animation invisible hors-écran.
+  const [statsRef, statsVisible] = useIsVisible({ threshold: 0.5 });
+  const animatedProposalsTotal = useCountUp(proposalsTotal, { start: statsVisible });
+  const animatedSurveysTotal = useCountUp(surveysTotal, { start: statsVisible });
+  const animatedParticipantsTotal = useCountUp(participantsTotal, { start: statsVisible });
 
   // On récupère un lot de propositions publiques pour la mini-carte
   // ET pour le compteur "propositions" du hero — une seule requête
@@ -37,13 +58,23 @@ export default function Accueil() {
             .map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, label: p.title, slug: p.slug }))
         );
       })
-      .catch(() => {
-        // Page d'accueil : on échoue silencieusement plutôt que
-        // d'afficher une bannière d'erreur — un hero qui plante
-        // fait mauvaise impression, et le reste de la page reste
-        // utile même sans les chiffres/la carte.
-      })
+      .catch((err) => console.error('Échec du chargement des propositions :', err))
       .finally(() => setMapLoaded(true));
+
+    // Compteur d'enquêtes : juste le total de la pagination, on n'a
+    // besoin d'aucune des enquêtes elles-mêmes ici — limit=1 suffit,
+    // pas la peine de faire redescendre 50 enquêtes pour un chiffre.
+    api.get('/surveys?limit=1')
+      .then((data) => setSurveysTotal(data.pagination.total))
+      .catch((err) => console.error('Échec du chargement du total enquêtes :', err));
+
+    // "Participants" = citoyens ayant réellement voté ou répondu à
+    // une enquête au moins une fois — voir statsController.js pour
+    // le détail du calcul. Remplace le 0 fixe précédent, faute jusque
+    // là d'une route dédiée pour ce chiffre.
+    api.get('/stats/participants')
+      .then((data) => setParticipantsTotal(data.total))
+      .catch((err) => console.error('Échec du chargement du total participants :', err));
 
     // Le fichier IRIS vit dans public/ — un simple fetch, jamais un
     // import JS : ce n'est pas du code, ça n'a aucune raison de
@@ -90,17 +121,17 @@ export default function Accueil() {
               Découvrez les propositions pour Senlis, votez en
               10 secondes et participez aux enquêtes qui comptent vraiment.
             </p>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-              {/* "participants" resterait à afficher un vrai chiffre le
-                  jour où une route dédiée existera (ex. total de citoyens
-                  vérifiés) — pas encore le cas, donc honnêteté d'abord :
-                  on ne fabrique pas un total qu'on ne peut pas vérifier. */}
-              <div className="stat-pill"><span className="num">0</span> participants</div>
-              <div className="stat-pill"><span className="num">{proposalsTotal}</span> propositions</div>
+            <div ref={statsRef} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+              <div className="stat-pill"><span className="num">{animatedParticipantsTotal}</span> {pluralize(participantsTotal, 'participant')}</div>
+              <div className="stat-pill"><span className="num">{animatedProposalsTotal}</span> {pluralize(proposalsTotal, 'proposition')}</div>
+              <div className="stat-pill"><span className="num">{animatedSurveysTotal}</span> {pluralize(surveysTotal, 'enquête')}</div>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               {isLogged ? (
-                <Link to="/propositions" className="btn btn-gold">Voir les propositions</Link>
+                <>
+                  <Link to="/propositions" className="btn btn-gold">Voir les propositions</Link>
+                  <Link to="/enquetes" className="btn btn-gold">Voir les enquêtes</Link>
+                </>
               ) : (
                 <Link to="/inscription" className="btn btn-gold">Je participe !</Link>
               )}

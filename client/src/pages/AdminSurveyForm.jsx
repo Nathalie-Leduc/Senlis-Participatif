@@ -18,8 +18,33 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import {
-  STATUS_OPTIONS, AUDIENCE_OPTIONS, QUESTION_TYPE_OPTIONS, QUESTION_TYPE_META,
+  STATUS_OPTIONS, QUESTION_TYPE_OPTIONS, QUESTION_TYPE_META,
 } from '../constants/surveyStatus.js';
+import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
+import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
+import { EMPTY_AUDIENCE } from '../utils/audience.js';
+
+// Menu "cette question met à jour...", et la liste de valeurs
+// possibles pour CHAQUE option une fois un champ choisi — mêmes
+// valeurs que côté validateur API (SYNC_VALID_VALUES), gardées ici en
+// clair pour l'affichage plutôt qu'un enum brut.
+const SYNC_FIELD_OPTIONS = [
+  { value: 'situation', label: 'Situation (résidence)' },
+  { value: 'quartier', label: 'Quartier de résidence' },
+  { value: 'travailleQuartier', label: 'Quartier de travail' },
+  { value: 'travailType', label: 'Type de travail' },
+];
+const SYNC_VALUE_OPTIONS = {
+  situation: [
+    { value: 'CENTRE_RESIDENT', label: 'Résident du centre' },
+    { value: 'AUTRE_QUARTIER', label: 'Autre quartier de Senlis' },
+    { value: 'HORS_SENLIS', label: 'Hors Senlis' },
+  ],
+  quartier: QUARTIER_OPTIONS,
+  travailleQuartier: TRAVAIL_QUARTIER_OPTIONS,
+  travailType: TRAVAIL_TYPE_OPTIONS,
+};
 
 // crypto.randomUUID() : une clé React STABLE pour chaque question/
 // option, y compris celles pas encore enregistrées côté API (donc
@@ -28,7 +53,23 @@ import {
 // dans les questions suivantes (React réutiliserait les inputs par
 // position d'index plutôt que par identité).
 function emptyOption() {
-  return { key: crypto.randomUUID(), label: '' };
+  // endsSurvey (S5R-05) : choisir cette option termine l'enquête
+  return { key: crypto.randomUUID(), label: '', syncValue: null, endsSurvey: false };
+}
+
+/**
+ * Les options « réelles » d'une question, telles qu'elles partiront vers
+ * l'API (S5R-05). Une Oui/Non garde TOUJOURS ses 2 options, libellés par
+ * défaut « Oui » / « Non » s'ils sont laissés vides : on peut ainsi s'y
+ * référer dans une condition, ou cocher « Termine l'enquête » sur « Non »,
+ * sans avoir à retaper les libellés. Les autres types ne gardent que les
+ * options remplies.
+ */
+function effectiveOptions(q) {
+  if (q.type === 'OUI_NON') {
+    return q.options.slice(0, 2).map((o, i) => ({ ...o, label: o.label.trim() || (i === 0 ? 'Oui' : 'Non') }));
+  }
+  return q.options.map((o) => ({ ...o, label: o.label.trim() })).filter((o) => o.label !== '');
 }
 
 function emptyQuestion() {
@@ -39,13 +80,37 @@ function emptyQuestion() {
     type: 'CHOIX_UNIQUE',
     required: true,
     options: [emptyOption(), emptyOption()],
+    // { optionKey } | null — optionKey seul suffit à retrouver la
+    // question ET l'option visées (clés UUID globalement uniques) ;
+    // référence par clé stable, jamais par position, pour survivre à
+    // l'ajout/suppression d'une autre question ailleurs dans le
+    // formulaire. Doit correspondre à une option d'une question
+    // ANTÉRIEURE au moment de l'envoi (voir buildPayload).
+    // S5R-05 : clés des options qui font apparaître cette question —
+    // il suffit que L'UNE soit choisie (OU). Tableau vide = toujours
+    // affichée. Chaque clé doit appartenir à une question ANTÉRIEURE.
+    conditions: [],
+    // S5R-05 : bornes d'une réponse NOMBRE (texte du champ, '' = aucune)
+    minValue: '',
+    maxValue: '',
+    // S5R-05 : CHOIX_MULTIPLE — clé de la question NOMBRE qui fixe le
+    // nombre maximum de cases (null = pas de limite)
+    maxChoicesFromKey: null,
+    // 'VILLE_FR' | null — n'a de sens que pour une question
+    // TEXTE_LIBRE (voir le rendu de QuestionEditor plus bas).
+    uiHint: null,
+    // 'situation' | 'quartier' | 'travailleQuartier' | 'travailType' | null
+    // — n'a de sens que pour une question CHOIX_UNIQUE (voir le rendu
+    // de QuestionEditor plus bas, et syncValue sur chaque option).
+    syncsToProfile: null,
   };
 }
 
 const EMPTY_FORM = {
   title: '',
   description: '',
-  audience: 'TOUS',
+  // S5R-07 : critères de profil (vides = tout le monde)
+  audience: EMPTY_AUDIENCE,
   status: 'DRAFT',
   opensAt: '',
   closesAt: '',
@@ -55,6 +120,8 @@ const EMPTY_FORM = {
 export default function AdminSurveyForm() {
   const { slug } = useParams(); // undefined en mode création
   const isEdit = !!slug;
+  // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
+  usePageTitle(isEdit ? 'Modifier une enquête' : 'Nouvelle enquête');
   const navigate = useNavigate();
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -74,7 +141,7 @@ export default function AdminSurveyForm() {
         setForm({
           title: s.title,
           description: s.description,
-          audience: s.audience,
+          audience: { ...EMPTY_AUDIENCE, ...s.audience },
           status: s.status,
           opensAt: s.opensAt ? s.opensAt.slice(0, 10) : '',
           closesAt: s.closesAt ? s.closesAt.slice(0, 10) : '',
@@ -87,8 +154,18 @@ export default function AdminSurveyForm() {
             type: q.type,
             required: q.required,
             options: q.options.length
-              ? q.options.map((o) => ({ key: o.id, label: o.label }))
+              ? q.options.map((o) => ({
+                key: o.id, label: o.label, syncValue: o.syncValue || null, endsSurvey: Boolean(o.endsSurvey),
+              }))
               : [emptyOption(), emptyOption()],
+            // Les id d'options en base servent de clés React (ci-dessus) :
+            // les conditions (id d'options) se reprennent donc telles quelles
+            conditions: q.conditionOptionIds || [],
+            minValue: q.minValue ?? '',
+            maxValue: q.maxValue ?? '',
+            maxChoicesFromKey: q.maxChoicesFromId || null,
+            uiHint: q.uiHint || null,
+            syncsToProfile: q.syncsToProfile || null,
           })),
         });
       })
@@ -110,16 +187,65 @@ export default function AdminSurveyForm() {
     }));
   };
 
+  // conditions : tableau de clés d'options (S5R-05, plusieurs = OU)
+  const setQuestionConditions = (questionKey, conditions) => {
+    updateQuestion(questionKey, { conditions });
+  };
+
+  /**
+   * Nettoyage commun (S5R-05) : retire des AUTRES questions toute
+   * référence devenue invalide — conditions vers des options disparues,
+   * limite de cases vers une question disparue ou qui n'est plus un nombre.
+   */
+  const withoutStaleReferences = (q, removedOptionKeys, lostNumberQuestionKey) => ({
+    ...q,
+    conditions: q.conditions.filter((key) => !removedOptionKeys.has(key)),
+    maxChoicesFromKey: q.maxChoicesFromKey === lostNumberQuestionKey ? null : q.maxChoicesFromKey,
+  });
+
   const handleQuestionTypeChange = (questionKey, newType) => {
     const meta = QUESTION_TYPE_META[newType];
-    updateQuestion(questionKey, {
-      type: newType,
-      // En passant à un type qui a besoin d'options mais qui n'en a
-      // pas encore assez (ex. venait de TEXTE_LIBRE), on repart d'un
-      // couple d'options vides plutôt que de forcer l'admin à en
-      // ajouter à la main — même logique que côté API (défauts
-      // "Oui"/"Non" pour OUI_NON).
-      options: (meta.needsOptions === true) ? [emptyOption(), emptyOption()] : [],
+    setForm((prev) => {
+      const target = prev.questions.find((q) => q.key === questionKey);
+      const oldOptionKeys = new Set((target?.options || []).map((o) => o.key));
+
+      return {
+        ...prev,
+        questions: prev.questions.map((q) => {
+          if (q.key === questionKey) {
+            return {
+              ...q,
+              type: newType,
+              // En passant à un type qui a besoin d'options mais qui
+              // n'en a pas encore assez (ex. venait de TEXTE_LIBRE),
+              // on repart d'un couple d'options vides plutôt que de
+              // forcer l'admin à en ajouter à la main — même logique
+              // que côté API (défauts "Oui"/"Non" pour OUI_NON).
+              // OUI_NON garde aussi 2 lignes d'options (libellés « Oui » /
+              // « Non » par défaut), pour pouvoir y poser « Termine
+              // l'enquête » ou s'y référer dans une condition (S5R-05)
+              options: (meta.needsOptions === true || newType === 'OUI_NON') ? [emptyOption(), emptyOption()] : [],
+              // Réglages propres à un type (S5R-05) : effacés au changement
+              minValue: newType === 'NOMBRE' ? q.minValue : '',
+              maxValue: newType === 'NOMBRE' ? q.maxValue : '',
+              maxChoicesFromKey: newType === 'CHOIX_MULTIPLE' ? q.maxChoicesFromKey : null,
+              // uiHint n'a de sens que pour TEXTE_LIBRE (voir le
+              // validateur API) — en changer de type doit l'effacer,
+              // sinon l'envoi serait rejeté.
+              uiHint: newType === 'TEXTE_LIBRE' ? q.uiHint : null,
+              // syncsToProfile n'a de sens que pour CHOIX_UNIQUE (voir
+              // le validateur API) — en changer de type doit l'effacer,
+              // sinon l'envoi serait rejeté.
+              syncsToProfile: newType === 'CHOIX_UNIQUE' && q.syncsToProfile !== 'travailleASenlis' ? q.syncsToProfile : null,
+            };
+          }
+          // Une AUTRE question pouvait dépendre d'une option qui
+          // vient d'être remplacée par le changement de type ci-dessus.
+          // Elle pouvait aussi limiter ses cases sur cette question, si
+          // celle-ci cesse d'être un nombre (S5R-05).
+          return withoutStaleReferences(q, oldOptionKeys, newType === 'NOMBRE' ? null : questionKey);
+        }),
+      };
     });
   };
 
@@ -128,19 +254,32 @@ export default function AdminSurveyForm() {
   };
 
   const removeQuestion = (questionKey) => {
-    setForm((prev) => ({
-      ...prev,
-      questions: prev.questions.filter((q) => q.key !== questionKey),
-    }));
+    setForm((prev) => {
+      const removed = prev.questions.find((q) => q.key === questionKey);
+      const removedOptionKeys = new Set((removed?.options || []).map((o) => o.key));
+
+      return {
+        ...prev,
+        questions: prev.questions
+          .filter((q) => q.key !== questionKey)
+          // Une AUTRE question pouvait dépendre d'une option de celle
+          // qu'on retire — sans ce nettoyage, elle garderait une
+          // référence à une option qui n'existe plus.
+          .map((q) => withoutStaleReferences(q, removedOptionKeys, questionKey)),
+      };
+    });
   };
 
   // ── Options (imbriquées dans une question) ───────────────
-  const updateOption = (questionKey, optionKey, label) => {
+  // patch plutôt qu'un simple label : cette fonction sert maintenant
+  // aussi à poser syncValue (voir le menu "Cette réponse correspond
+  // à..." dans QuestionEditor), pas seulement le texte de l'option.
+  const updateOption = (questionKey, optionKey, patch) => {
     setForm((prev) => ({
       ...prev,
       questions: prev.questions.map((q) => (q.key !== questionKey ? q : {
         ...q,
-        options: q.options.map((o) => (o.key === optionKey ? { ...o, label } : o)),
+        options: q.options.map((o) => (o.key === optionKey ? { ...o, ...patch } : o)),
       })),
     }));
   };
@@ -158,10 +297,14 @@ export default function AdminSurveyForm() {
   const removeOption = (questionKey, optionKey) => {
     setForm((prev) => ({
       ...prev,
-      questions: prev.questions.map((q) => (q.key !== questionKey ? q : {
-        ...q,
-        options: q.options.filter((o) => o.key !== optionKey),
-      })),
+      questions: prev.questions
+        .map((q) => (q.key !== questionKey ? q : {
+          ...q,
+          options: q.options.filter((o) => o.key !== optionKey),
+        }))
+        // Même nettoyage que removeQuestion, mais pour une option
+        // isolée plutôt que toute la question.
+        .map((q) => withoutStaleReferences(q, new Set([optionKey]), null)),
     }));
   };
 
@@ -171,6 +314,16 @@ export default function AdminSurveyForm() {
   // remplies) en payload strict attendu par createSurveySchema/
   // updateSurveySchema côté API.
   function buildPayload() {
+    // Position (questionOrder, optionOrder) de chaque option, calculée
+    // sur les options RÉELLEMENT envoyées (effectiveOptions) : l'API ne
+    // connaît pas les clés de l'interface, seulement les positions.
+    const positionOfOption = new Map();
+    form.questions.forEach((q, questionOrder) => {
+      effectiveOptions(q).forEach((o, optionOrder) => positionOfOption.set(o.key, { questionOrder, optionOrder }));
+    });
+    const orderOfQuestion = new Map(form.questions.map((q, i) => [q.key, i]));
+    const toNumber = (text) => (text === '' || text === null || text === undefined ? undefined : Number(text));
+
     return {
       title: form.title.trim(),
       description: form.description.trim(),
@@ -178,29 +331,51 @@ export default function AdminSurveyForm() {
       status: form.status,
       opensAt: form.opensAt || undefined,
       closesAt: form.closesAt || undefined,
-      questions: form.questions.map((q) => {
+      questions: form.questions.map((q, questionIndex) => {
         const meta = QUESTION_TYPE_META[q.type];
-        const filledOptions = q.options
-          .map((o) => ({ label: o.label.trim() }))
-          .filter((o) => o.label !== '');
+        const options = effectiveOptions(q);
+        const syncsToProfile = (q.type === 'CHOIX_UNIQUE' || q.type === 'OUI_NON') ? (q.syncsToProfile || undefined) : undefined;
 
         const base = {
           label: q.label.trim(),
           helpText: q.helpText.trim() || undefined,
           type: q.type,
           required: q.required,
+          uiHint: q.type === 'TEXTE_LIBRE' ? (q.uiHint || undefined) : undefined,
+          syncsToProfile,
         };
 
-        if (meta.needsOptions === true) {
-          return { ...base, options: filledOptions };
+        // Conditions (OU) : uniquement vers des questions ANTÉRIEURES
+        // (le nettoyage des références garantit déjà leur validité)
+        const showIfAny = q.conditions
+          .map((key) => positionOfOption.get(key))
+          .filter((pos) => pos && pos.questionOrder < questionIndex);
+        if (showIfAny.length) base.showIfAny = showIfAny;
+
+        if (q.type === 'NOMBRE') {
+          base.minValue = toNumber(q.minValue);
+          base.maxValue = toNumber(q.maxValue);
+        }
+        if (q.type === 'CHOIX_MULTIPLE' && q.maxChoicesFromKey) {
+          const questionOrder = orderOfQuestion.get(q.maxChoicesFromKey);
+          if (questionOrder !== undefined && questionOrder < questionIndex) base.maxChoicesFrom = { questionOrder };
         }
 
-        if (meta.needsOptions === 'optional') {
-          // OUI_NON : si l'admin a personnalisé les 2 libellés, on les
-          // envoie ; sinon on omet complètement le champ pour laisser
-          // l'API générer "Oui"/"Non" par défaut (voir toNestedQuestionsCreate
-          // côté contrôleur) plutôt que d'envoyer un tableau à moitié rempli.
-          return filledOptions.length === 2 ? { ...base, options: filledOptions } : base;
+        // Garde-fou : une Oui/Non sans ses 2 lignes d'options (cas qui ne
+        // devrait plus arriver) part sans options — l'API pose Oui/Non
+        if (q.type === 'OUI_NON' && options.length !== 2) return base;
+
+        if (meta.needsOptions === true || q.type === 'OUI_NON') {
+          return {
+            ...base,
+            options: options.map((o, i) => ({
+              label: o.label,
+              // « Travaille à Senlis » : Oui → 'true', Non → 'false', posés
+              // automatiquement (S5R-05) ; sinon la valeur choisie
+              syncValue: syncsToProfile === 'travailleASenlis' ? (i === 0 ? 'true' : 'false') : (o.syncValue || undefined),
+              endsSurvey: (q.type === 'CHOIX_UNIQUE' || q.type === 'OUI_NON') ? Boolean(o.endsSurvey) : undefined,
+            })),
+          };
         }
 
         return base; // NOMBRE, TEXTE_LIBRE : jamais d'options
@@ -249,7 +424,7 @@ export default function AdminSurveyForm() {
       </h1>
 
       {error && (
-        <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
           {error}
         </div>
       )}
@@ -269,14 +444,9 @@ export default function AdminSurveyForm() {
           />
         </Field>
 
+        <AudiencePicker value={form.audience} onChange={(audience) => setForm((f) => ({ ...f, audience }))} />
+
         <div style={{ display: 'flex', gap: 14 }}>
-          <Field label="Public visé">
-            <select name="audience" value={form.audience} onChange={handleChange} style={inputStyle}>
-              {AUDIENCE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </Field>
           <Field label="Statut">
             <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
               {STATUS_OPTIONS.map((opt) => (
@@ -314,10 +484,26 @@ export default function AdminSurveyForm() {
                 question={question}
                 index={index}
                 canRemove={form.questions.length > 1}
+                // Une question ne peut dépendre QUE d'une question qui
+                // la précède (le répondant n'aurait pas encore répondu
+                // à une question plus tardive) — aplati en une seule
+                // liste "Q{n} : {libellé}" plutôt qu'un double menu en
+                // cascade, plus simple à utiliser pour choisir parmi
+                // une poignée d'options en tout et pour tout.
+                priorOptions={form.questions.slice(0, index).flatMap((q, i) => effectiveOptions(q)
+                  .map((o) => ({ key: o.key, label: `Q${i + 1} : ${o.label}` })))}
+                // S5R-05 : questions « Nombre » antérieures, pour limiter
+                // le nombre de cases d'une question à choix multiple
+                priorNumberQuestions={form.questions.slice(0, index)
+                  .map((q, i) => ({ key: q.key, label: `Q${i + 1} : ${q.label.trim() || '(sans intitulé)'}`, type: q.type }))
+                  .filter((q) => q.type === 'NOMBRE')}
                 onChange={(patch) => updateQuestion(question.key, patch)}
                 onTypeChange={(newType) => handleQuestionTypeChange(question.key, newType)}
                 onRemove={() => removeQuestion(question.key)}
-                onOptionChange={(optionKey, label) => updateOption(question.key, optionKey, label)}
+                onConditionsChange={(conditions) => setQuestionConditions(question.key, conditions)}
+                onOptionChange={(optionKey, label) => updateOption(question.key, optionKey, { label })}
+                onOptionSyncValueChange={(optionKey, syncValue) => updateOption(question.key, optionKey, { syncValue: syncValue || null })}
+                onOptionEndsSurveyChange={(optionKey, endsSurvey) => updateOption(question.key, optionKey, { endsSurvey })}
                 onAddOption={() => addOption(question.key)}
                 onRemoveOption={(optionKey) => removeOption(question.key, optionKey)}
               />
@@ -347,9 +533,12 @@ export default function AdminSurveyForm() {
 // logique d'affichage conditionnel des options selon le type devient
 // vite illisible mélangée avec le reste du formulaire parent.
 function QuestionEditor({
-  question, index, canRemove, onChange, onTypeChange, onRemove,
-  onOptionChange, onAddOption, onRemoveOption,
+  question, index, canRemove, priorOptions, priorNumberQuestions, onChange, onTypeChange, onRemove,
+  onConditionsChange, onOptionChange, onOptionSyncValueChange, onOptionEndsSurveyChange, onAddOption, onRemoveOption,
 }) {
+  const canEndSurvey = question.type === 'CHOIX_UNIQUE' || question.type === 'OUI_NON';
+  const availableConditions = priorOptions.filter((opt) => !question.conditions.includes(opt.key));
+  const labelOfOption = (key) => priorOptions.find((o) => o.key === key)?.label ?? key;
   const meta = QUESTION_TYPE_META[question.type];
   const showOptions = meta.needsOptions === true || meta.needsOptions === 'optional';
 
@@ -407,6 +596,109 @@ function QuestionEditor({
         </label>
       </div>
 
+      {question.type === 'TEXTE_LIBRE' && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#26333A' }}>
+          <input
+            type="checkbox" checked={question.uiHint === 'VILLE_FR'}
+            onChange={(e) => onChange({ uiHint: e.target.checked ? 'VILLE_FR' : null })}
+            style={{ width: 20, height: 20 }}
+          />
+          Suggestions de ville (France) pendant la saisie
+        </label>
+      )}
+
+      {question.type === 'OUI_NON' && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#26333A' }}>
+          <input
+            type="checkbox" checked={question.syncsToProfile === 'travailleASenlis'}
+            onChange={(e) => onChange({ syncsToProfile: e.target.checked ? 'travailleASenlis' : null })}
+            style={{ width: 20, height: 20 }}
+          />
+          La réponse met à jour « travaille à Senlis » dans le profil (Oui / Non)
+        </label>
+      )}
+
+      {question.type === 'CHOIX_UNIQUE' && (
+        <Field label="Cette question met à jour...">
+          <select
+            value={question.syncsToProfile || ''}
+            onChange={(e) => onChange({ syncsToProfile: e.target.value || null })}
+            style={inputStyle}
+          >
+            <option value="">Rien (aucune synchronisation)</option>
+            {SYNC_FIELD_OPTIONS.map((f) => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </select>
+        </Field>
+      )}
+
+      {/* ── Conditions d'affichage (S5R-05 : plusieurs = OU) ── */}
+      {priorOptions.length > 0 && (
+        <fieldset style={{ border: '2px solid #EFEBE2', borderRadius: 12, padding: '10px 14px', margin: 0 }}>
+          <legend style={{ fontSize: 14, fontWeight: 600, color: '#26333A', padding: '0 6px' }}>
+            Afficher cette question seulement si… <span style={{ fontWeight: 400, color: '#6B6257' }}>(une seule condition remplie suffit)</span>
+          </legend>
+          {question.conditions.length === 0 && (
+            <p style={{ fontSize: 14, color: '#6B6257', margin: '4px 0 8px' }}>Toujours affichée.</p>
+          )}
+          {question.conditions.map((key) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0' }}>
+              <span style={{ flex: 1, fontSize: 14 }}>{labelOfOption(key)}</span>
+              <button
+                type="button"
+                onClick={() => onConditionsChange(question.conditions.filter((k) => k !== key))}
+                aria-label={`Retirer la condition ${labelOfOption(key)}`}
+                style={{ background: '#FCEAE6', color: '#A8442F', border: 'none', borderRadius: 10, padding: '6px 12px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Retirer
+              </button>
+            </div>
+          ))}
+          {availableConditions.length > 0 && (
+            <select
+              value=""
+              aria-label="Ajouter une condition"
+              onChange={(e) => e.target.value && onConditionsChange([...question.conditions, e.target.value])}
+              style={{ ...inputStyle, width: '100%', marginTop: 6 }}
+            >
+              <option value="">{question.conditions.length ? '+ Ajouter une autre condition (OU)…' : '+ Ajouter une condition…'}</option>
+              {availableConditions.map((opt) => (
+                <option key={opt.key} value={opt.key}>{opt.label}</option>
+              ))}
+            </select>
+          )}
+        </fieldset>
+      )}
+
+      {/* ── Bornes d'un nombre (S5R-05) ── */}
+      {question.type === 'NOMBRE' && (
+        <div style={{ display: 'flex', gap: 14 }}>
+          <Field label="Valeur minimum (optionnel)">
+            <input type="number" value={question.minValue} onChange={(e) => onChange({ minValue: e.target.value })} style={inputStyle} />
+          </Field>
+          <Field label="Valeur maximum (optionnel)">
+            <input type="number" value={question.maxValue} onChange={(e) => onChange({ maxValue: e.target.value })} style={inputStyle} />
+          </Field>
+        </div>
+      )}
+
+      {/* ── Nombre maximum de cases (S5R-05) ── */}
+      {question.type === 'CHOIX_MULTIPLE' && priorNumberQuestions.length > 0 && (
+        <Field label="Nombre maximum de cases cochées">
+          <select
+            value={question.maxChoicesFromKey || ''}
+            onChange={(e) => onChange({ maxChoicesFromKey: e.target.value || null })}
+            style={inputStyle}
+          >
+            <option value="">Pas de limite</option>
+            {priorNumberQuestions.map((q) => (
+              <option key={q.key} value={q.key}>La réponse à {q.label}</option>
+            ))}
+          </select>
+        </Field>
+      )}
+
       {showOptions && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#26333A' }}>
@@ -420,10 +712,36 @@ function QuestionEditor({
             <div key={option.key} style={{ display: 'flex', gap: 8 }}>
               <input
                 type="text" value={option.label}
-                placeholder={meta.needsOptions === 'optional' ? 'Oui' : ''}
+                placeholder={meta.needsOptions === 'optional' ? (question.options.indexOf(option) === 0 ? 'Oui' : 'Non') : ''}
                 onChange={(e) => onOptionChange(option.key, e.target.value)}
                 style={{ ...inputStyle, flex: 1, minHeight: 42, padding: '9px 12px' }}
               />
+              {/* Quelle valeur EXACTE écrire dans le profil quand
+                  cette option précise est choisie — ex. l'option
+                  "Je réside dans le centre historique" correspond à
+                  la valeur CENTRE_RESIDENT, pas au texte lui-même. */}
+              {question.syncsToProfile && question.type === 'CHOIX_UNIQUE' && (
+                <select
+                  value={option.syncValue || ''}
+                  onChange={(e) => onOptionSyncValueChange(option.key, e.target.value)}
+                  style={{ ...inputStyle, flex: 1, minHeight: 42, padding: '9px 12px' }}
+                >
+                  <option value="">Ne correspond à rien</option>
+                  {SYNC_VALUE_OPTIONS[question.syncsToProfile].map((v) => (
+                    <option key={v.value} value={v.value}>{v.label}</option>
+                  ))}
+                </select>
+              )}
+              {/* S5R-05 : « Termine l'enquête » — ex. « Aucun véhicule » */}
+              {canEndSurvey && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
+                  <input
+                    type="checkbox" checked={Boolean(option.endsSurvey)}
+                    onChange={(e) => onOptionEndsSurveyChange(option.key, e.target.checked)}
+                  />
+                  Termine l'enquête
+                </label>
+              )}
               {/* CHOIX_UNIQUE/CHOIX_MULTIPLE : jamais moins de 2 options
                   (contrainte de l'API) — bouton masqué en dessous de 3. */}
               {meta.needsOptions === true && question.options.length > 2 && (

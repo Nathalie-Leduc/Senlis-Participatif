@@ -5,7 +5,26 @@
 import { z } from 'zod';
 
 const surveyStatus = z.enum(['DRAFT', 'OPEN', 'CLOSED']);
-const audience = z.enum(['TOUS', 'RESIDENTS', 'COMMERCANTS']);
+// ── Public visé (S5R-07) ──────────────────────────────────
+// Critères de profil combinables ; toutes les listes vides (ou objet
+// absent) = tout le monde. Voir lib/audience.js pour leur logique.
+const SITUATIONS = ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'];
+const QUARTIERS_RESIDENCE = ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'];
+const QUARTIERS_TRAVAIL = ['CENTRE_HISTORIQUE', ...QUARTIERS_RESIDENCE];
+const uniqueList = (values) => z.array(z.enum(values)).max(values.length)
+  .refine((list) => new Set(list).size === list.length, 'Valeur en double');
+
+const audience = z.object({
+  situations: uniqueList(SITUATIONS).default([]),
+  // « Quels autres quartiers ? » — le centre historique est déjà une
+  // situation à part entière (CENTRE_RESIDENT), d'où son absence ici
+  quartiers: uniqueList(QUARTIERS_RESIDENCE).default([]),
+  workQuartiers: uniqueList(QUARTIERS_TRAVAIL).default([]),
+  workTypes: uniqueList(['COMMERCANT', 'SALARIE']).default([]),
+}).refine(
+  (a) => a.quartiers.length === 0 || a.situations.includes('AUTRE_QUARTIER'),
+  { message: 'Des quartiers de résidence ne peuvent être choisis qu\'avec « habitants des autres quartiers »', path: ['quartiers'] },
+);
 const questionType = z.enum([
   'CHOIX_UNIQUE',
   'CHOIX_MULTIPLE',
@@ -27,6 +46,38 @@ const OPTIONS_OPTIONAL_BINARY_TYPES = ['OUI_NON'];
 
 const questionOptionSchema = z.object({
   label: z.string().trim().min(1, "Le libellé de l'option est requis").max(200),
+  // Cohérence avec Question.syncsToProfile vérifiée plus bas
+  // (SYNC_VALID_VALUES) — accepté ici comme simple chaîne, la vraie
+  // validation dépend de la question PARENTE, impossible à exprimer
+  // au niveau d'une option isolée.
+  syncValue: z.string().trim().min(1).optional(),
+  // S5R-05 : choisir cette option termine l'enquête (CHOIX_UNIQUE et
+  // OUI_NON uniquement — vérifié dans questionSchema plus bas)
+  endsSurvey: z.boolean().optional(),
+});
+
+// Une seule liste de valeurs valides par champ profil ciblé — la
+// même que les enums Prisma correspondants (Situation, Quartier,
+// TravailType). Dupliquée ici plutôt qu'importée : les validateurs
+// Zod du projet restent volontairement indépendants du client Prisma
+// généré (voir les autres enums de ce fichier, ex. questionType).
+const SYNC_VALID_VALUES = {
+  situation: ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
+  quartier: ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  travailleQuartier: ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  travailType: ['COMMERCANT', 'SALARIE'],
+  // S5R-05 : oui / non, écrits en texte dans syncValue ('true' / 'false')
+  travailleASenlis: ['true', 'false'],
+};
+
+// Référence par POSITION (order), pas par id réel : au moment où
+// l'admin construit une nouvelle enquête, les questions/options n'ont
+// pas encore d'id en base — elles seront créées dans la même requête.
+// Le contrôleur résout ces positions vers les vrais id APRÈS coup,
+// dans un second passage (voir resolveBranching).
+const showIfSchema = z.object({
+  questionOrder: z.number().int().min(0),
+  optionOrder: z.number().int().min(0),
 });
 
 // superRefine plutôt que deux champs séparés : la règle "options
@@ -39,7 +90,84 @@ const questionSchema = z.object({
   type: questionType,
   required: z.boolean().optional(),
   options: z.array(questionOptionSchema).optional(),
+  // Absent = toujours affichée. Présent = affichée seulement si le
+  // répondant a choisi CETTE option à une question ANTÉRIEURE (voir
+  // EnqueteRepondre.jsx côté client pour la logique d'affichage, et
+  // submitResponse côté contrôleur pour ne pas exiger de réponse à
+  // une question jamais montrée).
+  showIf: showIfSchema.optional(),
+  // S5R-05 : plusieurs conditions, il suffit que L'UNE soit remplie (OU)
+  showIfAny: z.array(showIfSchema).min(1).max(20).optional(),
+  // S5R-05 : bornes d'une réponse NOMBRE
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  // S5R-05 : CHOIX_MULTIPLE — pas plus de cases que la réponse à cette
+  // question NOMBRE précédente (vérifié à la création, par position)
+  maxChoicesFrom: z.object({ questionOrder: z.number().int().min(0) }).optional(),
+  // Une seule valeur reconnue pour l'instant : 'VILLE_FR' (suggestions
+  // de commune via l'API officielle geo.api.gouv.fr côté client).
+  // z.literal plutôt que z.string() : toute AUTRE valeur est rejetée
+  // d'emblée, pas seulement ignorée silencieusement plus tard.
+  uiHint: z.literal('VILLE_FR').optional(),
+  // Si renseigné, une réponse à cette question met AUSSI à jour ce
+  // champ du profil du répondant — voir SYNC_VALID_VALUES plus haut
+  // pour les valeurs attendues sur chaque option, et submitResponse
+  // côté contrôleur pour l'application réelle.
+  syncsToProfile: z.enum(['situation', 'quartier', 'travailleQuartier', 'travailType', 'travailleASenlis']).optional(),
 }).superRefine((q, ctx) => {
+  // ── Règles S5R-05 : chaque réglage n'a de sens que pour un type ──
+  const issue = (path, message) => ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+  if ((q.minValue !== undefined || q.maxValue !== undefined) && q.type !== 'NOMBRE') {
+    issue(['minValue'], 'Les bornes minimum/maximum ne concernent que les questions « Nombre »');
+  }
+  if (q.minValue !== undefined && q.maxValue !== undefined && q.minValue > q.maxValue) {
+    issue(['maxValue'], 'Le maximum doit être supérieur ou égal au minimum');
+  }
+  if (q.maxChoicesFrom && q.type !== 'CHOIX_MULTIPLE') {
+    issue(['maxChoicesFrom'], 'La limite du nombre de cases ne concerne que les questions à choix multiple');
+  }
+  if ((q.options || []).some((o) => o.endsSurvey) && !['CHOIX_UNIQUE', 'OUI_NON'].includes(q.type)) {
+    issue(['options'], "« Termine l'enquête » ne concerne que les questions à choix unique ou Oui/Non");
+  }
+  if (q.syncsToProfile === 'travailleASenlis' && q.type !== 'OUI_NON') {
+    issue(['syncsToProfile'], '« Travaille à Senlis » se synchronise depuis une question Oui/Non');
+  }
+  if (q.uiHint && q.type !== 'TEXTE_LIBRE') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['uiHint'],
+      message: 'uiHint "VILLE_FR" n\'a de sens que pour une question TEXTE_LIBRE',
+    });
+  }
+
+  if (q.syncsToProfile) {
+    // CHOIX_UNIQUE : un champ profil ne peut recevoir qu'UNE valeur,
+    // choisie parmi les options via syncValue. OUI_NON est un cas à
+    // part : ses options n'ont jamais de syncValue (rien à écrire
+    // depuis "Oui"/"Non" eux-mêmes) — ça sert uniquement à PRÉ-
+    // REMPLIR côté client quand le champ est déjà connu (vrai
+    // uniquement dans le sens positif : "Non" est indiscernable de
+    // "jamais demandé", voir EnqueteRepondre.jsx).
+    if (!['CHOIX_UNIQUE', 'OUI_NON'].includes(q.type)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['syncsToProfile'],
+        message: 'syncsToProfile n\'a de sens que pour une question CHOIX_UNIQUE ou OUI_NON',
+      });
+    } else if (q.type === 'CHOIX_UNIQUE' || q.syncsToProfile === 'travailleASenlis') {
+      const validValues = SYNC_VALID_VALUES[q.syncsToProfile];
+      (q.options || []).forEach((opt, index) => {
+        if (opt.syncValue && !validValues.includes(opt.syncValue)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['options', index, 'syncValue'],
+            message: `syncValue doit être l'une de : ${validValues.join(', ')}`,
+          });
+        }
+      });
+    }
+  }
+
   if (OPTIONS_REQUIRED_TYPES.includes(q.type)) {
     if (!q.options || q.options.length < 2) {
       ctx.addIssue({
@@ -93,6 +221,7 @@ export const updateSurveySchema = z.object({
   description: z.string().trim().min(10).optional(),
   audience: audience.optional(),
   status: surveyStatus.optional(),
+  resultsPublished: z.boolean().optional(),
   opensAt: z.coerce.date().optional(),
   closesAt: z.coerce.date().optional(),
   questions: z.array(questionSchema).min(1).optional(),

@@ -46,17 +46,83 @@ const pseudo = z
   .min(2, 'Le pseudo doit contenir au moins 2 caractères')
   .max(30, 'Le pseudo ne peut pas dépasser 30 caractères');
 
+// Même 4 valeurs que l'enum Prisma Situation — déclaratif, sans preuve
+// demandée (même logique de confiance que le pseudonymat). Sert à
+// confronter l'audience ciblée d'une enquête à qui y répond vraiment,
+// et au branchement de questions selon la situation déclarée.
+const situation = z.enum(
+  ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
+  { errorMap: () => ({ message: 'Merci de préciser votre situation' }) },
+);
+
+// Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
+// historique (déjà couvert par Situation) — menu affiché en cascade
+// uniquement quand situation = AUTRE_QUARTIER, pour que ces citoyens
+// ne se sentent pas réduits à une case fourre-tout, et pour pouvoir
+// cibler de futures enquêtes/propositions par quartier précis.
+const quartier = z.enum(
+  ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  { errorMap: () => ({ message: 'Merci de préciser votre quartier' }) },
+);
+
+// Même enum Prisma que quartier ci-dessus, mais CENTRE_HISTORIQUE en
+// plus — a du sens comme lieu de TRAVAIL (contrairement à la
+// résidence, où Situation.CENTRE_RESIDENT couvre déjà ce cas).
+const travailleQuartier = z.enum(
+  ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  { errorMap: () => ({ message: 'Merci de préciser le quartier de travail' }) },
+);
+const travailType = z.enum(
+  ['COMMERCANT', 'SALARIE'],
+  { errorMap: () => ({ message: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)' }) },
+);
+
+// superRefine plutôt que deux champs indépendants : la règle
+// "quartier obligatoire SI situation = AUTRE_QUARTIER" dépend de DEUX
+// champs à la fois — impossible à exprimer avec un simple .optional().
+function requireQuartierIfAutreQuartier(data, ctx) {
+  if (data.situation === 'AUTRE_QUARTIER' && !data.quartier) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['quartier'],
+      message: 'Merci de préciser votre quartier',
+    });
+  }
+  // Même logique, sur l'axe travail : travailType n'a de sens QUE
+  // si un quartier de travail a été renseigné (indépendant de
+  // situation/quartier ci-dessus — résidence et travail sont deux
+  // questions distinctes).
+  if (data.travailleQuartier && !data.travailType) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['travailType'],
+      message: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)',
+    });
+  }
+}
+
 // ── Schémas par endpoint ────────────────────────────────
 
 export const registerSchema = z.object({
   email,
   password,
   pseudo,
-});
+  situation,
+  quartier: quartier.optional(),
+  travailleQuartier: travailleQuartier.optional(),
+  travailType: travailType.optional(),
+  // S5R-05 : la case « Je travaille à Senlis », dite explicitement
+  travailleASenlis: z.boolean().optional(),
+}).superRefine(requireQuartierIfAutreQuartier);
 
 export const loginSchema = z.object({
   email,
   password: z.string().min(1, 'Le mot de passe est requis'),
+  // Optionnel : présent seulement si ce navigateur a déjà passé le
+  // 2FA récemment (voir signTrustedDeviceToken) — n'importe quelle
+  // chaîne passe la validation ici, la vérification cryptographique
+  // réelle a lieu dans login() lui-même, pas ici.
+  trustedDeviceToken: z.string().optional(),
 });
 
 export const verifyTwoFactorSchema = z.object({
@@ -80,9 +146,39 @@ export const resetPasswordSchema = z.object({
 export const updateProfileSchema = z.object({
   pseudo: pseudo.optional(),
   email: email.optional(),
+  situation: situation.optional(),
+  quartier: quartier.optional(),
+  // .nullable() en plus de .optional() : ici, contrairement à
+  // l'inscription, il faut pouvoir distinguer "absent du tout" (ne
+  // touche pas au champ) de "explicitement null" (efface la valeur —
+  // ex. la personne décoche "je travaille à Senlis" après coup).
+  travailleQuartier: travailleQuartier.nullable().optional(),
+  travailType: travailType.nullable().optional(),
+  travailleASenlis: z.boolean().nullable().optional(),
+  // Exigé par le contrôleur SEULEMENT si l'email change (S5A-06)
+  currentPassword: z.string().optional(),
+}).superRefine(requireQuartierIfAutreQuartier);
+
+// DELETE /auth/me — mot de passe exigé (S5A-06)
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, 'Mot de passe requis pour supprimer le compte'),
 });
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Mot de passe actuel requis'),
   newPassword: password,
 });
+
+// ── Valeurs possibles du profil, réutilisées ailleurs ──────
+// La segmentation des votes (proposalsController.getStats, S5-21)
+// a besoin de la liste COMPLÈTE des valeurs de chaque champ du
+// profil, pour afficher aussi les groupes vides (« 0 votant ») —
+// plutôt que de recopier ces listes une deuxième fois (et risquer
+// qu'elles divergent le jour où l'on ajoute un quartier), on expose
+// celles des schémas Zod ci-dessus. `.options` est fourni par z.enum.
+export const PROFILE_VALUES = {
+  situation: situation.options,
+  quartier: quartier.options,
+  travailleQuartier: travailleQuartier.options,
+  travailType: travailType.options,
+};

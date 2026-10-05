@@ -16,15 +16,22 @@
 
 import multer from 'multer';
 
-const MAX_SIZE = 5 * 1024 * 1024; // 5 Mo — large pour une photo de smartphone, mais pas illimité
+// 5 Mo — large pour une photo de smartphone, mais pas illimité.
+// Dépassement → MulterError LIMIT_FILE_SIZE → 413 (errorHandler.js)
+const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 function fileFilter(req, file, cb) {
   if (!ALLOWED_TYPES.includes(file.mimetype)) {
     // On passe une erreur EXPLICITE à Multer plutôt que de laisser
-    // passer un fichier qu'on refuserait de traiter plus loin —
-    // errorHandler.js la transformera en réponse 400 lisible.
-    return cb(new Error('Format d\'image non supporté (JPEG, PNG ou WebP uniquement)'));
+    // passer un fichier qu'on refuserait de traiter plus loin. Elle
+    // porte son statut et son code : sans eux, errorHandler.js n'a
+    // aucun moyen de savoir que c'est la faute du fichier, et répond
+    // 500 (bug corrigé en S5A-02).
+    const error = new Error('Format d\'image non supporté (JPEG, PNG ou WebP uniquement)');
+    error.status = 400;
+    error.code = 'INVALID_FILE_TYPE';
+    return cb(error);
   }
   cb(null, true);
 }

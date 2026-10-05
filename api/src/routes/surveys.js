@@ -5,6 +5,8 @@
 // 👑 GET  /surveys/admin    liste ADMIN, tous statuts (brouillons inclus)
 // 🔓 GET  /surveys/:slug    détail public (questions + options)
 //                           (un admin peut aussi y voir un brouillon)
+// 🔓* GET /surveys/:slug/results  résultats agrégés (*🔓 si publiés, sinon 👑)
+// 👑 GET  /surveys/:id/stats      résultats détaillés (jamais soumis au garde-fou de publication)
 // 👑 POST /surveys          créer (questions/options imbriquées)
 // 👑 PATCH  /surveys/:id    éditer (questions = remplacement complet si fourni)
 // 👑 DELETE /surveys/:id    supprimer
@@ -33,6 +35,12 @@ router.get('/admin', auth, isAdmin, validateQuery(adminListSurveysQuerySchema), 
 
 router.get('/:slug', optionalAuth, ctrl.getBySlug);
 router.get('/:slug/results', optionalAuth, ctrl.getResults);
+
+// Vue admin détaillée (résultats complets, jamais soumise au garde-fou
+// resultsPublished) — déclarée ici plutôt qu'après les routes 👑
+// ci-dessous car elle est en lecture, comme ses voisines /:slug et
+// /:slug/results, même si elle exige un rôle admin.
+router.get('/:id/stats', auth, isAdmin, ctrl.getDetailedResults);
 
 // ── Routes admin (👑) ───────────────────────────────────
 router.post('/', auth, isAdmin, validate(createSurveySchema), ctrl.create);

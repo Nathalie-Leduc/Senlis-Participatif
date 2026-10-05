@@ -11,6 +11,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
+import { describeAudience, isEveryone } from '../utils/audience.js';
 
 const STATUS_FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -19,6 +21,7 @@ const STATUS_FILTERS = [
 ];
 
 export default function Enquetes() {
+  usePageTitle('Enquêtes');
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -86,7 +89,7 @@ export default function Enquetes() {
         </div>
 
         {error && (
-          <div style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
+          <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
             {error}
           </div>
         )}
@@ -110,7 +113,10 @@ export default function Enquetes() {
             >
               <span style={{
                 fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
-                color: survey.status === 'OPEN' ? '#3A7A4D' : '#1E5F7C',
+                // #377349 plutôt que #3A7A4D (tilleul standard) : audit
+                // accessibilité (S5-05), le tilleul standard échouait de
+                // justesse le contraste AA sur ce fond clair (4,42:1).
+                color: survey.status === 'OPEN' ? '#377349' : '#1E5F7C',
                 background: survey.status === 'OPEN' ? '#E0F2E5' : '#E3EEF3',
               }}>
                 {survey.status === 'OPEN' ? 'Ouverte' : 'Clôturée'}
@@ -119,6 +125,10 @@ export default function Enquetes() {
                 {survey.title}
               </h2>
               <p style={{ color: '#6B6257', fontSize: 15 }}>{survey.description}</p>
+              {/* S5R-07 : public visé (rien si tout le monde) */}
+              {!isEveryone(survey.audience) && (
+                <p style={{ fontSize: 14, color: '#1E5F7C', marginTop: 6 }}>Pour : {describeAudience(survey.audience)}</p>
+              )}
             </Link>
           ))}
         </div>

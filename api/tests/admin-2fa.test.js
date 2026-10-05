@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import prisma from '../src/lib/prisma.js';
 import { sendMailMock } from './setup.js';
@@ -131,5 +132,135 @@ describe('2FA admin — connexion', () => {
       .set('Authorization', `Bearer ${loginRes.body.challengeToken}`);
 
     expect(res.status).toBe(401);
+  });
+});
+
+describe('2FA admin — appareil de confiance (S5-20)', () => {
+  it('un code réussi renvoie aussi un jeton "appareil de confiance"', async () => {
+    const credentials = await createAdminAccount();
+    const loginRes = await request(app)
+      .post(`${API}/login`)
+      .send({ email: credentials.email, password: credentials.password });
+    const code = extractTwoFactorCodeFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+
+    const res = await request(app)
+      .post(`${API}/2fa/verify`)
+      .send({ challengeToken: loginRes.body.challengeToken, code });
+
+    expect(res.status).toBe(200);
+    expect(res.body.trustedDeviceToken).toBeTruthy();
+  });
+
+  it('un jeton valide dispense du code à la connexion suivante, sur ce même compte', async () => {
+    // makeAdminUser() va jusqu'au bout du parcours mais ne renvoie
+    // pas le trustedDeviceToken obtenu au passage — on reconstruit
+    // le parcours à la main ici pour garder la main sur le mot de
+    // passe en clair (nécessaire pour login() juste après).
+    const built = buildUser();
+    await request(app).post(`${API}/register`).send(built);
+    const verifyToken = extractTokenFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+    await request(app).post(`${API}/verify-email`).send({ token: verifyToken });
+    await prisma.user.update({ where: { email: built.email }, data: { role: 'ADMIN' } });
+
+    const firstLogin = await request(app)
+      .post(`${API}/login`)
+      .send({ email: built.email, password: built.password });
+    const code = extractTwoFactorCodeFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+    const verifyRes = await request(app)
+      .post(`${API}/2fa/verify`)
+      .send({ challengeToken: firstLogin.body.challengeToken, code });
+    const { trustedDeviceToken } = verifyRes.body;
+
+    // Deuxième connexion, "nouveau navigateur" simulé par le fait
+    // qu'on ne rejoue PAS 2fa/verify cette fois — seul login() est
+    // appelé, avec le jeton de confiance en plus.
+    const secondLogin = await request(app)
+      .post(`${API}/login`)
+      .send({ email: built.email, password: built.password, trustedDeviceToken });
+
+    expect(secondLogin.status).toBe(200);
+    expect(secondLogin.body.twoFactorRequired).toBeFalsy();
+    expect(secondLogin.body.token).toBeTruthy();
+    expect(secondLogin.body.user.role).toBe('ADMIN');
+  });
+
+  it('un jeton falsifié ou invalide ne dispense pas du code (retombe sur le 2FA normal)', async () => {
+    const credentials = await createAdminAccount();
+
+    const res = await request(app)
+      .post(`${API}/login`)
+      .send({ email: credentials.email, password: credentials.password, trustedDeviceToken: 'ceci-nest-pas-un-jeton-valide' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.twoFactorRequired).toBe(true);
+    expect(res.body.token).toBeUndefined();
+  });
+
+  it("le jeton de confiance d'UN compte ne dispense pas du 2FA sur un AUTRE compte", async () => {
+    const { trustedDeviceToken } = await (async () => {
+      const built = buildUser();
+      await request(app).post(`${API}/register`).send(built);
+      const verifyToken = extractTokenFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+      await request(app).post(`${API}/verify-email`).send({ token: verifyToken });
+      await prisma.user.update({ where: { email: built.email }, data: { role: 'ADMIN' } });
+      const loginRes = await request(app)
+        .post(`${API}/login`)
+        .send({ email: built.email, password: built.password });
+      const code = extractTwoFactorCodeFromEmail(sendMailMock.mock.calls.at(-1)[0]);
+      const verifyRes = await request(app)
+        .post(`${API}/2fa/verify`)
+        .send({ challengeToken: loginRes.body.challengeToken, code });
+      return verifyRes.body;
+    })();
+
+    // Un SECOND admin, complètement différent, tente d'utiliser le
+    // jeton de confiance du PREMIER — ne doit surtout pas marcher,
+    // sinon n'importe quel admin pourrait dispenser du 2FA de
+    // n'importe quel autre compte avec son propre jeton.
+    const otherCredentials = await createAdminAccount();
+    const res = await request(app)
+      .post(`${API}/login`)
+      .send({ email: otherCredentials.email, password: otherCredentials.password, trustedDeviceToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.twoFactorRequired).toBe(true);
+  });
+
+  it('un jeton de confiance expiré ne dispense pas du code', async () => {
+    const credentials = await createAdminAccount();
+    const user = await prisma.user.findUnique({ where: { email: credentials.email } });
+
+    // Fabriqué directement (plutôt que d'attendre une vraie heure
+    // d'expiration) : même secret et même "purpose" que la vraie
+    // fonction signTrustedDeviceToken, juste avec une durée de vie
+    // déjà passée.
+    const expiredToken = jwt.sign(
+      { userId: user.id, purpose: 'TRUSTED_DEVICE' },
+      process.env.JWT_SECRET,
+      { expiresIn: '-10s' },
+    );
+
+    const res = await request(app)
+      .post(`${API}/login`)
+      .send({ email: credentials.email, password: credentials.password, trustedDeviceToken: expiredToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.twoFactorRequired).toBe(true);
+  });
+
+  it("un vrai jeton de SESSION (sans purpose) n'est pas accepté comme jeton de confiance", async () => {
+    // Même idée que le test "CHALLENGE_EXPIRED" plus haut : un jeton
+    // qui n'a jamais eu vocation à servir ici (purpose absent) doit
+    // être rejeté, pas accepté par accident parce qu'il est bien
+    // signé avec le bon secret.
+    const { token: citizenSessionToken } = await makeCitizen();
+    const credentials = await createAdminAccount();
+
+    const res = await request(app)
+      .post(`${API}/login`)
+      .send({ email: credentials.email, password: credentials.password, trustedDeviceToken: citizenSessionToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.twoFactorRequired).toBe(true);
   });
 });

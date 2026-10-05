@@ -86,12 +86,42 @@ enum SurveyStatus {
   CLOSED
 }
 
-// Cible de l'enquête : ton questionnaire stationnement aura
-// deux variantes (résidents / commerçants n'ont pas les mêmes craintes)
-enum Audience {
-  TOUS
-  RESIDENTS
-  COMMERCANTS
+// Situation déclarée du citoyen (auto-déclaratif, comme le pseudonymat —
+// aucune pièce justificative demandée, cohérent avec le reste du projet).
+// Sert à deux choses : confronter le public visé d'une enquête (S5R-07) à qui répond vraiment,
+// et permettre le branchement de questions selon la situation déclarée
+// (ex. l'enquête stationnement, dont la 1re question oriente vers des
+// questions différentes pour un résident du centre vs. d'un autre quartier).
+enum Situation {
+  CENTRE_RESIDENT   // habite le centre historique
+  AUTRE_QUARTIER    // habite un autre quartier de Senlis
+  HORS_SENLIS       // ne réside pas à Senlis
+}
+
+// Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
+// historique — celui-ci est déjà couvert par Situation.CENTRE_RESIDENT,
+// pas la peine de le répéter ici. Uniquement pertinent quand
+// Situation = AUTRE_QUARTIER (menu en cascade côté formulaire) : les
+// citoyens du centre ou hors Senlis n'ont pas à préciser lequel de
+// ces 6 quartiers.
+enum Quartier {
+  CENTRE_HISTORIQUE // uniquement pour le lieu de TRAVAIL (voir User.travailleQuartier) —
+                    // pour la résidence, Situation.CENTRE_RESIDENT couvre déjà ce cas,
+                    // pas la peine de la répéter ici pour cet usage-là.
+  BRICHEBAY
+  BON_SECOURS
+  VAL_AUNETTE_GATELIERE
+  ZONE_INDUSTRIELLE
+  VILLEVERT
+  JARDINIERS
+}
+
+// COMMERCANT = dirige/gère l'activité, SALARIE = y travaille sans la
+// diriger — seulement significatif quand User.travailleQuartier est
+// renseigné (sinon la personne ne travaille pas à Senlis).
+enum TravailType {
+  COMMERCANT
+  SALARIE
 }
 
 enum QuestionType {
@@ -117,6 +147,36 @@ model User {
   pseudo       String   @unique
   role         Role     @default(CITIZEN)
 
+  // Nullable : les comptes créés AVANT ce champ (admin de seed, comptes
+  // de test déjà existants) n'ont pas à être cassés par une migration —
+  // mais le formulaire d'inscription, lui, l'exigera pour tout NOUVEAU
+  // compte (validé côté Zod, pas au niveau du schéma).
+  situation Situation?
+  // Renseigné UNIQUEMENT quand situation = AUTRE_QUARTIER (menu en
+  // cascade côté formulaire) — null pour tous les autres cas, y
+  // compris les comptes créés avant ce champ.
+  quartier  Quartier?
+
+  // Axe INDÉPENDANT de situation/quartier ci-dessus : où l'on RÉSIDE
+  // n'a rien à voir avec où l'on TRAVAILLE — une personne peut
+  // résider dans un quartier et travailler dans un autre, ou ne pas
+  // travailler à Senlis du tout. travailleQuartier reste null tant
+  // que la question n'a jamais été posée (comptes existants) OU que
+  // la personne a répondu ne pas travailler à Senlis — les deux cas
+  // sont indiscernables au niveau du champ, ce qui est acceptable ici
+  // (aucune action ne dépend de la distinction entre "jamais demandé"
+  // et "a répondu non").
+  travailleQuartier Quartier?
+  // Seulement significatif quand travailleQuartier est renseigné —
+  // sinon toujours null (pas de sens à préciser un type de travail
+  // pour quelqu'un qui ne travaille pas à Senlis).
+  travailType       TravailType?
+  // S5R-05 : « travaille à Senlis » dit EXPLICITEMENT (oui / non /
+  // null = jamais demandé). Avant, un travailleQuartier vide voulait
+  // dire « non » OU « on ne sait pas » : impossible de préremplir
+  // « Non » dans une enquête, ni de l'enregistrer.
+  travailleASenlis  Boolean?
+
   // Barrière anti-comptes jetables : l'email doit être vérifié (jeton envoyé
   // à l'inscription) avant de voter ou répondre. Des comptes bidons qui
   // gonflent les votes = crédibilité du site ruinée face à la mairie.
@@ -130,11 +190,32 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // ── Durée de conservation (S5A-05, RGPD art. 5.1.e) ──────────
+  // Un compte sans connexion depuis 3 ans est supprimé, après un
+  // email d'avertissement 30 jours avant (voir services/retention.js).
+  //
+  // lastLoginAt : mis à jour à chaque connexion RÉUSSIE. Null pour les
+  // comptes antérieurs à ce champ → l'inactivité se compte alors
+  // depuis createdAt (pas besoin de remplir les anciennes lignes).
+  lastLoginAt        DateTime?
+  // Date de l'email d'avertissement. Remis à null à la connexion
+  // suivante : se reconnecter, c'est répondre « je suis toujours là ».
+  inactivityWarnedAt DateTime?
+
+  // ── Révocation des sessions (S5A-06) ─────────────────────────
+  // Recopié dans chaque JWT à la connexion (champ `tv`). Changer ou
+  // réinitialiser son mot de passe l'incrémente : tous les jetons
+  // émis AVANT portent l'ancien numéro, et le middleware auth les
+  // refuse. Analogie : changer la serrure — toutes les anciennes
+  // clés cessent d'ouvrir d'un coup, sans avoir à les récupérer.
+  tokenVersion Int @default(0)
+
   proposals Proposal[]
   votes     Vote[]
   responses SurveyResponse[]
   comments  Comment[]   // Lot 2
   tokens    AuthToken[]
+  adminActions AdminAuditLog[] // actions d'administration effectuées (S5A-06)
 }
 
 model Proposal {
@@ -238,8 +319,27 @@ model Survey {
   slug        String       @unique
   title       String       // ex : "Stationnement et déplacements dans le centre historique"
   description String       // contexte affiché en tête du questionnaire
-  audience    Audience     @default(TOUS)
+  // ── Public visé (S5R-07) ─────────────────────────────────
+  // Remplace l'ancien choix unique TOUS / RESIDENTS / COMMERCANTS par
+  // des critères de profil combinables. Toutes les listes vides =
+  // « tout le monde ». Deux familles de critères, reliées par un OU :
+  //  - RÉSIDENCE : situations visées (centre, autre quartier, hors
+  //    Senlis) et, pour « autre quartier », lesquels (vide = tous) ;
+  //  - TRAVAIL : quartiers de travail visés et/ou rôles (dirigeant·e,
+  //    salarié·e) — vide = n'importe lequel.
+  // Ex. « habitants du centre OU commerçants du centre » :
+  //   audienceSituations = [CENTRE_RESIDENT],
+  //   audienceWorkQuartiers = [CENTRE_HISTORIQUE], audienceWorkTypes = [COMMERCANT].
+  // Le calcul « telle personne est-elle visée ? » vit dans lib/audience.js.
+  audienceSituations    Situation[]   @default([])
+  audienceQuartiers     Quartier[]    @default([])
+  audienceWorkQuartiers Quartier[]    @default([])
+  audienceWorkTypes     TravailType[] @default([])
   status      SurveyStatus @default(DRAFT)
+  // Distinct du statut OPEN/CLOSED : une enquête peut être clôturée sans
+  // que ses résultats soient déjà publics — l'admin décide du moment où
+  // les rendre visibles à tous (avant, seul l'admin les voit).
+  resultsPublished Boolean @default(false)
   opensAt     DateTime?
   closesAt    DateTime?
 
@@ -257,10 +357,50 @@ model Question {
   required Boolean      @default(true)
   order    Int          // position dans le questionnaire
 
+  // Indicateur de rendu léger, uniquement pour TEXTE_LIBRE — évite de
+  // créer un type de question à part entière (VILLE_FR) juste pour un
+  // widget de saisie différent. Le stockage/la validation/l'agrégation
+  // restent identiques à n'importe quel TEXTE_LIBRE ; seul le CLIENT
+  // change de rendu (suggestions de ville via l'API officielle
+  // geo.api.gouv.fr au lieu d'un simple champ texte).
+  uiHint String?
+
+  // Si renseigné, une réponse à cette question met AUSSI à jour le
+  // champ correspondant du profil du répondant (voir syncValue sur
+  // QuestionOption ci-dessous, et l'application réelle dans
+  // submitResponse). Réutilisable par n'importe quelle future
+  // enquête, pas seulement celle-ci — une seule valeur parmi les 4
+  // champs qui existent aujourd'hui sur User pour ça.
+  // Uniquement significatif sur une question CHOIX_UNIQUE : le
+  // validateur Zod l'interdit ailleurs (une réponse à choix multiple
+  // ou libre ne peut pas s'écrire proprement dans un champ à valeur
+  // unique).
+  syncsToProfile String? // 'situation' | 'quartier' | 'travailleQuartier' | 'travailType'
+
+  // ── Moteur d'enquête v2 (S5R-05) ─────────────────────────
+  // Conditions d'affichage : la question n'apparaît que si AU MOINS UNE
+  // de ces options (de questions précédentes) a été choisie — un « OU ».
+  // Aucune condition = question toujours affichée. Remplace l'ancien
+  // champ unique showIfOptionId (une seule condition possible).
+  conditions QuestionCondition[] @relation("QuestionConditions")
+
+  // NOMBRE uniquement : bornes de la réponse (ex. « nombre de véhicules
+  // professionnels » ≥ 1 quand on vient de répondre « Oui, j'en ai »).
+  minValue Float?
+  maxValue Float?
+
+  // CHOIX_MULTIPLE uniquement : pas plus de cases cochées que la réponse
+  // donnée à une question NOMBRE précédente (ex. « où sont garés vos
+  // véhicules » ≤ nombre de véhicules). SetNull : si la question de
+  // référence disparaît, la limite disparaît avec elle.
+  maxChoicesFromId String?
+  maxChoicesFrom   Question?  @relation("MaxChoicesFrom", fields: [maxChoicesFromId], references: [id], onDelete: SetNull)
+  limitedQuestions Question[] @relation("MaxChoicesFrom")
+
   surveyId String
   survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 
-  options QuestionOption[]
+  options QuestionOption[] @relation("QuestionOwnOptions")
   answers Answer[]
 
   // Pas deux questions au même rang dans une même enquête
@@ -272,10 +412,27 @@ model QuestionOption {
   label String // ex : "Box ou garage privé", "Voirie payante", "Parking gratuit externe"
   order Int
 
+  // Valeur exacte à écrire dans le champ profil visé par
+  // Question.syncsToProfile QUAND cette option précise est choisie —
+  // ex. "CENTRE_RESIDENT" si le libellé de l'option est "Je réside
+  // dans le centre historique". Un libellé d'enquête en français
+  // n'a aucune raison de correspondre mot pour mot à une valeur
+  // d'enum ; ce champ fait le pont entre les deux explicitement,
+  // plutôt que de deviner par correspondance de texte (fragile,
+  // casserait au moindre admin qui reformule un libellé).
+  syncValue String?
+
   questionId String
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question   Question @relation("QuestionOwnOptions", fields: [questionId], references: [id], onDelete: Cascade)
 
   answers Answer[]
+  // Questions dont l'affichage dépend du choix de cette option (S5R-05)
+  conditionsTriggered QuestionCondition[] @relation("ConditionOption")
+
+  // Choisir cette option TERMINE l'enquête (S5R-05) : les questions
+  // suivantes ne sont plus posées — ex. « 0 véhicule » dans l'enquête
+  // stationnement. CHOIX_UNIQUE et OUI_NON uniquement.
+  endsSurvey Boolean @default(false)
 
   @@unique([questionId, order])
 }
@@ -343,9 +500,77 @@ model AuthToken {
   type      TokenType
   expiresAt DateTime  // typiquement 1 h — un jeton qui traîne est une porte ouverte
   usedAt    DateTime? // usage unique : consommé = définitivement inutilisable
+  // Essais ratés sur un code 2FA (S5A-06) : au 5e, le code est
+  // invalidé — il faut se reconnecter pour en recevoir un nouveau.
+  attempts  Int       @default(0)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+}
+
+// ══════════════════════════════════════════════════════════
+// Journal des actions d'administration (S5A-06 — ANSSI, CNIL)
+//
+// Qui a fait quoi, sur quoi, et quand : imputabilité des actions
+// sensibles (changer un rôle, publier ou supprimer une proposition,
+// modifier une enquête…). En cas de litige ou d'incident, on peut
+// répondre à « qui a supprimé cette proposition ? ».
+//
+// Analogie : le registre d'une mairie où chaque acte est signé et
+// daté — on ne réécrit pas le registre, on y ajoute des lignes.
+//
+// Conservé 6 mois (purge : services/retention.js), puis effacé.
+// Ne contient JAMAIS de mot de passe, de jeton, ni de contenu
+// citoyen (vote, réponse) : seulement des actions d'administrateurs.
+// ══════════════════════════════════════════════════════════
+model AdminAuditLog {
+  id String @id @default(uuid())
+
+  // Code de l'action, ex. "USER_ROLE_CHANGED", "PROPOSAL_DELETED"
+  action String
+
+  // SetNull : si le compte admin est supprimé, la ligne du journal
+  // reste (l'historique ne doit pas disparaître avec son auteur)…
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  // …et le pseudo, recopié au moment de l'action, dit encore qui c'était.
+  actorPseudo String
+
+  // Sur quoi portait l'action (ex. "Proposal" + son id)
+  targetType String?
+  targetId   String?
+  // Détails utiles, sans donnée superflue (ex. { from: "ADMIN", to: "CITIZEN" })
+  details    Json?
+
+  createdAt DateTime @default(now())
+
+  // Les consultations et la purge filtrent toujours par date
+  @@index([createdAt])
+}
+
+// ══════════════════════════════════════════════════════════
+// Condition d'affichage d'une question (S5R-05)
+//
+// Une ligne = « la question Q s'affiche si l'option O a été choisie ».
+// Plusieurs lignes pour la même question = plusieurs façons de la
+// faire apparaître (OU) : ex. « questions sur le stationnement du
+// centre » si « je réside dans le centre » OU « je viens en voiture
+// dans le centre ».
+//
+// Analogie : une porte avec plusieurs badges autorisés — n'importe
+// lequel ouvre la porte.
+//
+// Clé primaire composée (questionId, optionId) : la même condition ne
+// peut pas être enregistrée deux fois. Cascade des deux côtés : si la
+// question OU l'option disparaît, la condition n'a plus de sens.
+// ══════════════════════════════════════════════════════════
+model QuestionCondition {
+  questionId String
+  question   Question       @relation("QuestionConditions", fields: [questionId], references: [id], onDelete: Cascade)
+  optionId   String
+  option     QuestionOption @relation("ConditionOption", fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, optionId])
 }
