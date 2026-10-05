@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { describeSurveyLength } from '../utils/surveyLength.js';
 
 export default function EnqueteDetail() {
   const { slug } = useParams();
@@ -97,7 +98,9 @@ export default function EnqueteDetail() {
       </p>
 
       <p style={{ color: '#6B6257', fontSize: 14, marginBottom: 28 }}>
-        {survey.questions.length} question{survey.questions.length > 1 ? 's' : ''}
+        {/* S5R-06 : plus de « 34 questions » trompeur pour un questionnaire
+            dont chacun ne voit qu'une partie (voir utils/surveyLength.js) */}
+        {describeSurveyLength(survey.questions)}
         {survey.closesAt && (
           ` — clôture le ${new Date(survey.closesAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
         )}
