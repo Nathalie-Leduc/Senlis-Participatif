@@ -273,3 +273,27 @@ const answerSchema = z.object({
 export const submitResponseSchema = z.object({
   answers: z.array(answerSchema).min(1, 'Au moins une réponse est requise'),
 });
+
+// ══════════════════════════════════════════════════════════
+// GET /surveys/:id/stats — filtres de la vue admin (S5R-08)
+//
+// « Public analysé » : quels répondants compter ?
+//  - scope=all    : tout le monde (défaut, comportement d'avant)
+//  - scope=target : le public visé de l'enquête elle-même (S5R-07)
+//  - scope=custom : des critères choisis à la volée, même forme que le
+//    public visé, passés en listes séparées par des virgules :
+//    ?scope=custom&situations=CENTRE_RESIDENT&workTypes=COMMERCANT
+// ══════════════════════════════════════════════════════════
+const csvList = (values) => z.preprocess(
+  (raw) => (typeof raw === 'string' && raw.length ? raw.split(',') : []),
+  z.array(z.enum(values)),
+);
+
+export const statsQuerySchema = z.object({
+  segmentBy: z.string().optional(),
+  scope: z.enum(['all', 'target', 'custom']).default('all'),
+  situations: csvList(SITUATIONS),
+  quartiers: csvList(QUARTIERS_RESIDENCE),
+  workQuartiers: csvList(QUARTIERS_TRAVAIL),
+  workTypes: csvList(['COMMERCANT', 'SALARIE']),
+});

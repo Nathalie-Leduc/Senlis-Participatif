@@ -14,12 +14,14 @@
 // ══════════════════════════════════════════════════════════
 
 /**
- * @param {unknown} data - l'objet à enregistrer
- * @param {string} filename - ex. 'mes-donnees.json'
+ * Fait télécharger un TEXTE sous forme de fichier (S5R-08 : utilisé
+ * pour le JSON et le CSV des résultats d'enquête).
+ * @param {string} content
+ * @param {string} filename
+ * @param {string} type - type MIME, ex. 'text/csv;charset=utf-8'
  */
-export function downloadJson(data, filename) {
-  // JSON indenté : le fichier doit aussi être lisible par un humain
-  const blob = new window.Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+export function downloadText(content, filename, type) {
+  const blob = new window.Blob([content], { type });
   // Une URL temporaire qui pointe vers le fichier en mémoire
   const url = URL.createObjectURL(blob);
 
@@ -35,7 +37,15 @@ export function downloadJson(data, filename) {
   URL.revokeObjectURL(url);
 }
 
-/** Nom de fichier daté : senlis-participatif-mes-donnees-AAAA-MM-JJ.json */
+/**
+ * @param {unknown} data - l'objet à enregistrer
+ * @param {string} filename - ex. 'mes-donnees.json'
+ */
+export function downloadJson(data, filename) {
+  // JSON indenté : le fichier doit aussi être lisible par un humain
+  downloadText(JSON.stringify(data, null, 2), filename, 'application/json');
+}
+
 export function exportFilename(date = new Date()) {
   return `senlis-participatif-mes-donnees-${date.toISOString().slice(0, 10)}.json`;
 }

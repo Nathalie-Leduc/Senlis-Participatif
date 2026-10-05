@@ -22,6 +22,7 @@ import {
   listSurveysQuerySchema,
   adminListSurveysQuerySchema,
   submitResponseSchema,
+  statsQuerySchema,
 } from '../validators/surveys.js';
 
 const router = Router();
@@ -40,7 +41,7 @@ router.get('/:slug/results', optionalAuth, ctrl.getResults);
 // resultsPublished) — déclarée ici plutôt qu'après les routes 👑
 // ci-dessous car elle est en lecture, comme ses voisines /:slug et
 // /:slug/results, même si elle exige un rôle admin.
-router.get('/:id/stats', auth, isAdmin, ctrl.getDetailedResults);
+router.get('/:id/stats', auth, isAdmin, validateQuery(statsQuerySchema), ctrl.getDetailedResults);
 
 // ── Routes admin (👑) ───────────────────────────────────
 router.post('/', auth, isAdmin, validate(createSurveySchema), ctrl.create);
