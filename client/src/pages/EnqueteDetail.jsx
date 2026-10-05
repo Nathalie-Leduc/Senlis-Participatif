@@ -16,6 +16,7 @@ import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeSurveyLength } from '../utils/surveyLength.js';
+import { describeAudience, isEveryone } from '../utils/audience.js';
 
 export default function EnqueteDetail() {
   const { slug } = useParams();
@@ -26,6 +27,8 @@ export default function EnqueteDetail() {
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(survey?.title ?? 'Enquête');
   const [hasResponded, setHasResponded] = useState(null);
+  // S5R-07 : true / false / null (on ne sait pas — visiteur anonyme ou profil incomplet)
+  const [inAudience, setInAudience] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -37,6 +40,7 @@ export default function EnqueteDetail() {
       .then((data) => {
         setSurvey(data.survey);
         setHasResponded(data.hasResponded);
+        setInAudience(data.inAudience ?? null);
       })
       .catch((err) => setError(
         err.status === 404
@@ -96,6 +100,17 @@ export default function EnqueteDetail() {
       <p style={{ fontSize: 17, lineHeight: 1.7, color: '#26333A', marginBottom: 20 }}>
         {survey.description}
       </p>
+
+      {/* S5R-07 : le public visé, annoncé — indicatif, jamais bloquant */}
+      {!isEveryone(survey.audience) && (
+        <p style={{ fontSize: 15, marginBottom: 8 }}>
+          <strong>S'adresse en priorité aux</strong> {describeAudience(survey.audience)}.
+          {inAudience === true && <span style={{ color: '#377349' }}> Vous en faites partie.</span>}
+          {inAudience === false && (
+            <span style={{ color: '#6B6257' }}> D'après votre profil, vous n'en faites pas partie — votre avis reste le bienvenu.</span>
+          )}
+        </p>
+      )}
 
       <p style={{ color: '#6B6257', fontSize: 14, marginBottom: 28 }}>
         {/* S5R-06 : plus de « 34 questions » trompeur pour un questionnaire

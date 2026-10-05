@@ -18,10 +18,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import {
-  STATUS_OPTIONS, AUDIENCE_OPTIONS, QUESTION_TYPE_OPTIONS, QUESTION_TYPE_META,
+  STATUS_OPTIONS, QUESTION_TYPE_OPTIONS, QUESTION_TYPE_META,
 } from '../constants/surveyStatus.js';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
+import { EMPTY_AUDIENCE } from '../utils/audience.js';
 
 // Menu "cette question met à jour...", et la liste de valeurs
 // possibles pour CHAQUE option une fois un champ choisi — mêmes
@@ -107,7 +109,8 @@ function emptyQuestion() {
 const EMPTY_FORM = {
   title: '',
   description: '',
-  audience: 'TOUS',
+  // S5R-07 : critères de profil (vides = tout le monde)
+  audience: EMPTY_AUDIENCE,
   status: 'DRAFT',
   opensAt: '',
   closesAt: '',
@@ -138,7 +141,7 @@ export default function AdminSurveyForm() {
         setForm({
           title: s.title,
           description: s.description,
-          audience: s.audience,
+          audience: { ...EMPTY_AUDIENCE, ...s.audience },
           status: s.status,
           opensAt: s.opensAt ? s.opensAt.slice(0, 10) : '',
           closesAt: s.closesAt ? s.closesAt.slice(0, 10) : '',
@@ -441,14 +444,9 @@ export default function AdminSurveyForm() {
           />
         </Field>
 
+        <AudiencePicker value={form.audience} onChange={(audience) => setForm((f) => ({ ...f, audience }))} />
+
         <div style={{ display: 'flex', gap: 14 }}>
-          <Field label="Public visé">
-            <select name="audience" value={form.audience} onChange={handleChange} style={inputStyle}>
-              {AUDIENCE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </Field>
           <Field label="Statut">
             <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
               {STATUS_OPTIONS.map((opt) => (

@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { describeAudience, isEveryone } from '../utils/audience.js';
 
 const STATUS_FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -124,6 +125,10 @@ export default function Enquetes() {
                 {survey.title}
               </h2>
               <p style={{ color: '#6B6257', fontSize: 15 }}>{survey.description}</p>
+              {/* S5R-07 : public visé (rien si tout le monde) */}
+              {!isEveryone(survey.audience) && (
+                <p style={{ fontSize: 14, color: '#1E5F7C', marginTop: 6 }}>Pour : {describeAudience(survey.audience)}</p>
+              )}
             </Link>
           ))}
         </div>

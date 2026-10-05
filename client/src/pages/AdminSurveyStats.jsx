@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import { SITUATION_SHORT_LABELS } from '../constants/situation.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { describeAudience } from '../utils/audience.js';
 
 export default function AdminSurveyStats() {
   const { id } = useParams();
@@ -95,7 +96,7 @@ export default function AdminSurveyStats() {
       </h1>
       <p style={{ color: '#6B6257', fontSize: 15, marginBottom: 20 }}>
         {results.totalResponses} réponse{results.totalResponses > 1 ? 's' : ''} au total
-        {' · '}audience ciblée : {results.audience === 'TOUS' ? 'tous les habitants' : results.audience.toLowerCase()}
+        {' · '}public visé : {describeAudience(results.audience)}
       </p>
 
       {results.situationBreakdown && (
@@ -111,8 +112,16 @@ export default function AdminSurveyStats() {
               </div>
             ))}
           </div>
+          {/* S5R-07 : part des répondants dans / hors du public visé */}
+          {results.audienceBreakdown && !results.audienceIsEveryone && (
+            <p style={{ fontSize: 14, marginTop: 10 }}>
+              Dans le public visé : <strong>{results.audienceBreakdown.inAudience}</strong>
+              {' · '}hors du public visé : <strong>{results.audienceBreakdown.outOfAudience}</strong>
+              {' · '}profil incomplet : <strong>{results.audienceBreakdown.unknown}</strong>
+            </p>
+          )}
           <p style={{ fontSize: 12, color: '#6B6257', marginTop: 10 }}>
-            Situation auto-déclarée par chaque citoyen (jamais vérifiée) — à recouper avec l'audience ciblée ci-dessus.
+            Profil auto-déclaré par chaque citoyen (jamais vérifié), tel qu'il est aujourd'hui — à recouper avec le public visé ci-dessus.
           </p>
         </div>
       )}
