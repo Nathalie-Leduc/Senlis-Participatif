@@ -17,11 +17,8 @@ export const STATUS_OPTIONS = Object.entries(STATUS_META).map(([value, meta]) =>
   label: meta.label,
 }));
 
-export const AUDIENCE_OPTIONS = [
-  { value: 'TOUS', label: 'Tous les habitants' },
-  { value: 'RESIDENTS', label: 'Résidents' },
-  { value: 'COMMERCANTS', label: 'Commerçants' },
-];
+// (S5R-07 : AUDIENCE_OPTIONS supprimé — le public visé se choisit
+// désormais par critères de profil, voir components/AudiencePicker)
 
 // Libellés + info "a besoin d'options" pour le constructeur.
 export const QUESTION_TYPE_META = {

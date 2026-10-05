@@ -86,17 +86,9 @@ enum SurveyStatus {
   CLOSED
 }
 
-// Cible de l'enquête : ton questionnaire stationnement aura
-// deux variantes (résidents / commerçants n'ont pas les mêmes craintes)
-enum Audience {
-  TOUS
-  RESIDENTS
-  COMMERCANTS
-}
-
 // Situation déclarée du citoyen (auto-déclaratif, comme le pseudonymat —
 // aucune pièce justificative demandée, cohérent avec le reste du projet).
-// Sert à deux choses : confronter Survey.audience à qui répond vraiment,
+// Sert à deux choses : confronter le public visé d'une enquête (S5R-07) à qui répond vraiment,
 // et permettre le branchement de questions selon la situation déclarée
 // (ex. l'enquête stationnement, dont la 1re question oriente vers des
 // questions différentes pour un résident du centre vs. d'un autre quartier).
@@ -327,7 +319,22 @@ model Survey {
   slug        String       @unique
   title       String       // ex : "Stationnement et déplacements dans le centre historique"
   description String       // contexte affiché en tête du questionnaire
-  audience    Audience     @default(TOUS)
+  // ── Public visé (S5R-07) ─────────────────────────────────
+  // Remplace l'ancien choix unique TOUS / RESIDENTS / COMMERCANTS par
+  // des critères de profil combinables. Toutes les listes vides =
+  // « tout le monde ». Deux familles de critères, reliées par un OU :
+  //  - RÉSIDENCE : situations visées (centre, autre quartier, hors
+  //    Senlis) et, pour « autre quartier », lesquels (vide = tous) ;
+  //  - TRAVAIL : quartiers de travail visés et/ou rôles (dirigeant·e,
+  //    salarié·e) — vide = n'importe lequel.
+  // Ex. « habitants du centre OU commerçants du centre » :
+  //   audienceSituations = [CENTRE_RESIDENT],
+  //   audienceWorkQuartiers = [CENTRE_HISTORIQUE], audienceWorkTypes = [COMMERCANT].
+  // Le calcul « telle personne est-elle visée ? » vit dans lib/audience.js.
+  audienceSituations    Situation[]   @default([])
+  audienceQuartiers     Quartier[]    @default([])
+  audienceWorkQuartiers Quartier[]    @default([])
+  audienceWorkTypes     TravailType[] @default([])
   status      SurveyStatus @default(DRAFT)
   // Distinct du statut OPEN/CLOSED : une enquête peut être clôturée sans
   // que ses résultats soient déjà publics — l'admin décide du moment où

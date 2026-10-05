@@ -5,7 +5,26 @@
 import { z } from 'zod';
 
 const surveyStatus = z.enum(['DRAFT', 'OPEN', 'CLOSED']);
-const audience = z.enum(['TOUS', 'RESIDENTS', 'COMMERCANTS']);
+// ── Public visé (S5R-07) ──────────────────────────────────
+// Critères de profil combinables ; toutes les listes vides (ou objet
+// absent) = tout le monde. Voir lib/audience.js pour leur logique.
+const SITUATIONS = ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'];
+const QUARTIERS_RESIDENCE = ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'];
+const QUARTIERS_TRAVAIL = ['CENTRE_HISTORIQUE', ...QUARTIERS_RESIDENCE];
+const uniqueList = (values) => z.array(z.enum(values)).max(values.length)
+  .refine((list) => new Set(list).size === list.length, 'Valeur en double');
+
+const audience = z.object({
+  situations: uniqueList(SITUATIONS).default([]),
+  // « Quels autres quartiers ? » — le centre historique est déjà une
+  // situation à part entière (CENTRE_RESIDENT), d'où son absence ici
+  quartiers: uniqueList(QUARTIERS_RESIDENCE).default([]),
+  workQuartiers: uniqueList(QUARTIERS_TRAVAIL).default([]),
+  workTypes: uniqueList(['COMMERCANT', 'SALARIE']).default([]),
+}).refine(
+  (a) => a.quartiers.length === 0 || a.situations.includes('AUTRE_QUARTIER'),
+  { message: 'Des quartiers de résidence ne peuvent être choisis qu\'avec « habitants des autres quartiers »', path: ['quartiers'] },
+);
 const questionType = z.enum([
   'CHOIX_UNIQUE',
   'CHOIX_MULTIPLE',

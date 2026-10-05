@@ -18,6 +18,7 @@ import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
 import { MIN_GROUP_SIZE, isTooSmall, maskSmallQuestions } from '../lib/privacy.js';
 import { visibleQuestionIds, withConditionIds } from '../lib/surveyFlow.js';
+import { audienceOf, matchesAudience, isEveryone, AUDIENCE_PROFILE_SELECT } from '../lib/audience.js';
 import { toNestedQuestionsCreate, resolveReferences, questionsUnchanged } from '../services/surveyBuilder.js';
 
 const VISIBLE_STATUSES = ['OPEN', 'CLOSED'];
@@ -27,7 +28,12 @@ const LIST_SELECT = {
   slug: true,
   title: true,
   description: true,
-  audience: true,
+  // Public visé (S5R-07) : les 4 listes de critères, regroupées en un
+  // objet `audience` par serializeAudience avant l'envoi au client
+  audienceSituations: true,
+  audienceQuartiers: true,
+  audienceWorkQuartiers: true,
+  audienceWorkTypes: true,
   status: true,
   resultsPublished: true,
   opensAt: true,
@@ -55,7 +61,31 @@ const QUESTIONS_INCLUDE = {
  * d'objets { optionId }). Voir lib/surveyFlow.js.
  */
 function serializeSurvey(survey) {
-  return survey && { ...survey, questions: survey.questions?.map(withConditionIds) };
+  return survey && { ...serializeAudience(survey), questions: survey.questions?.map(withConditionIds) };
+}
+
+/**
+ * S5R-07 : les 4 colonnes de critères deviennent un seul objet
+ * `audience` ({ situations, quartiers, workQuartiers, workTypes }),
+ * plus simple à lire et à renvoyer tel quel depuis le formulaire.
+ */
+function serializeAudience(survey) {
+  const {
+    audienceSituations, audienceQuartiers, audienceWorkQuartiers, audienceWorkTypes, ...rest
+  } = survey;
+  return { ...rest, audience: audienceOf({ audienceSituations, audienceQuartiers, audienceWorkQuartiers, audienceWorkTypes }) };
+}
+
+/** Objet `audience` reçu (Zod) → colonnes Prisma. */
+function audienceToFields(audience) {
+  if (!audience) return {};
+  return {
+    audienceSituations: audience.situations ?? [],
+    // Les quartiers de résidence n'ont de sens qu'avec « autre quartier »
+    audienceQuartiers: (audience.situations ?? []).includes('AUTRE_QUARTIER') ? (audience.quartiers ?? []) : [],
+    audienceWorkQuartiers: audience.workQuartiers ?? [],
+    audienceWorkTypes: audience.workTypes ?? [],
+  };
 }
 
 // Transformation des questions reçues et résolution des références
@@ -80,7 +110,7 @@ export async function listAdmin(req, res, next) {
     ]);
 
     res.json({
-      items,
+      items: items.map(serializeAudience),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) {
@@ -106,7 +136,7 @@ export async function list(req, res, next) {
     ]);
 
     res.json({
-      items,
+      items: items.map(serializeAudience),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) {
@@ -147,7 +177,16 @@ export async function getBySlug(req, res, next) {
       hasResponded = !!existing;
     }
 
-    res.json({ survey: serializeSurvey(survey), hasResponded });
+    // S5R-07 : la personne connectée fait-elle partie du public visé ?
+    // true / false / null (profil trop incomplet pour le dire, ou visiteur
+    // anonyme) — affiché à titre INDICATIF : tout le monde peut répondre.
+    let inAudience = null;
+    if (req.user) {
+      const profile = await prisma.user.findUnique({ where: { id: req.user.userId }, select: AUDIENCE_PROFILE_SELECT });
+      inAudience = matchesAudience(audienceOf(survey), profile);
+    }
+
+    res.json({ survey: serializeSurvey(survey), hasResponded, inAudience });
   } catch (err) {
     next(err);
   }
@@ -169,7 +208,7 @@ export async function create(req, res, next) {
           slug,
           title,
           description,
-          audience: audience || 'TOUS',
+          ...audienceToFields(audience), // S5R-07 : rien = tout le monde
           status: status || 'DRAFT',
           opensAt,
           closesAt,
@@ -222,7 +261,8 @@ export async function update(req, res, next) {
       throw error;
     }
 
-    const { questions, ...surveyFields } = req.body;
+    // audience (S5R-07) est converti à part en colonnes Prisma
+    const { questions, audience: audienceInput, ...surveyFields } = req.body;
 
     // Le formulaire admin envoie TOUJOURS le questionnaire complet,
     // même quand seul le statut a changé — donc `questions` étant
@@ -262,6 +302,7 @@ export async function update(req, res, next) {
         where: { id },
         data: {
           ...surveyFields,
+          ...audienceToFields(audienceInput),
           ...(questionsActuallyChanged && { questions: { create: toNestedQuestionsCreate(questions) } }),
         },
       });
@@ -424,15 +465,15 @@ async function computeResults(survey, { detailed = false, responseIds = null } =
         select: { questionId: true, valueText: true },
       })
       : [],
-    // Situation déclarée des répondants — pour confronter à
-    // Survey.audience (revue du cahier des charges, point 3).
+    // Profil déclaré des répondants — pour confronter au public visé
+    // (S5R-07 : situation ET volet travail, voir lib/audience.js).
     // Uniquement pour la vue admin détaillée : la répartition des
     // situations des AUTRES citoyens n'a rien à faire dans une vue
     // publique.
     detailed
       ? prisma.surveyResponse.findMany({
         where: responseIds ? { id: { in: responseIds } } : { surveyId: survey.id },
-        select: { user: { select: { situation: true } } },
+        select: { user: { select: AUDIENCE_PROFILE_SELECT } },
       })
       : [],
     // S5R-05 : les options choisies par chaque répondant, pour rejouer
@@ -552,7 +593,20 @@ async function computeResults(survey, { detailed = false, responseIds = null } =
       const key = user?.situation || 'NON_RENSEIGNEE';
       situationBreakdown[key] = (situationBreakdown[key] || 0) + 1;
     }
-    result.audience = survey.audience;
+    // S5R-07 : combien de répondants font partie du public visé ?
+    // (profil ACTUEL des comptes ; « inconnu » = profil incomplet ou
+    // compte supprimé depuis la réponse)
+    const audience = audienceOf(survey);
+    const audienceBreakdown = { inAudience: 0, outOfAudience: 0, unknown: 0 };
+    for (const { user } of situationCounts) {
+      const match = matchesAudience(audience, user);
+      if (match === true) audienceBreakdown.inAudience += 1;
+      else if (match === false) audienceBreakdown.outOfAudience += 1;
+      else audienceBreakdown.unknown += 1;
+    }
+    result.audience = audience;
+    result.audienceIsEveryone = isEveryone(audience);
+    result.audienceBreakdown = audienceBreakdown;
     result.situationBreakdown = situationBreakdown;
   }
 
