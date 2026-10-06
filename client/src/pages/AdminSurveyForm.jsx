@@ -14,7 +14,7 @@
 // jamais mélanger les autres.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId, isValidElement, cloneElement } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import {
@@ -23,6 +23,7 @@ import {
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
+import { SURVEY_TEMPLATES, PROFILE_QUESTIONS, instantiateQuestions } from '../constants/surveyTemplates.js';
 import { EMPTY_AUDIENCE } from '../utils/audience.js';
 
 // Menu "cette question met à jour...", et la liste de valeurs
@@ -270,6 +271,55 @@ export default function AdminSurveyForm() {
     });
   };
 
+  // ── S5R-09 : dupliquer une question ──────────────────────
+  // La copie est insérée JUSTE APRÈS l'original, avec de nouvelles clés
+  // (question et options) : les conditions des AUTRES questions, qui
+  // visent les options de l'original, ne sont pas détournées vers la
+  // copie. La copie garde ses propres conditions et sa limite de cases
+  // (elles visent des questions antérieures, toujours antérieures).
+  // Analogie : photocopier une fiche — la copie est neuve, l'original
+  // reste celui que les autres fiches citent.
+  const duplicateQuestion = (questionKey) => {
+    setForm((prev) => {
+      const index = prev.questions.findIndex((q) => q.key === questionKey);
+      const original = prev.questions[index];
+      const copy = {
+        ...original,
+        key: crypto.randomUUID(),
+        label: `${original.label} (copie)`,
+        options: original.options.map((o) => ({ ...o, key: crypto.randomUUID() })),
+      };
+      const questions = [...prev.questions];
+      questions.splice(index + 1, 0, copy);
+      return { ...prev, questions };
+    });
+  };
+
+  // ── S5R-09 : partir d'un modèle ──────────────────────────
+  const applyTemplate = (template) => {
+    const hasContent = form.questions.some((q) => q.label.trim());
+    if (hasContent && !window.confirm('Remplacer les questions actuelles par celles du modèle ?')) return;
+    setForm((prev) => ({
+      ...prev,
+      // Le titre et la description du modèle ne remplacent qu'un champ VIDE
+      title: prev.title.trim() ? prev.title : (template.title ?? ''),
+      description: prev.description.trim() ? prev.description : (template.description ?? ''),
+      questions: template.questions.length ? instantiateQuestions(template.questions, emptyQuestion) : [emptyQuestion()],
+    }));
+  };
+
+  // ── S5R-09 : questions de profil, insérées EN TÊTE ───────
+  // En tête, parce que les questions suivantes pourront ainsi dépendre
+  // d'elles (une condition ne vise qu'une question antérieure).
+  const hasProfileQuestions = form.questions.some((q) => q.syncsToProfile === 'situation');
+  const insertProfileQuestions = () => {
+    setForm((prev) => {
+      // Une question vide laissée par défaut est remplacée, pas conservée
+      const rest = prev.questions.filter((q) => q.label.trim() || prev.questions.length > 1);
+      return { ...prev, questions: [...instantiateQuestions(PROFILE_QUESTIONS, emptyQuestion), ...rest] };
+    });
+  };
+
   // ── Options (imbriquées dans une question) ───────────────
   // patch plutôt qu'un simple label : cette fonction sert maintenant
   // aussi à poser syncValue (voir le menu "Cette réponse correspond
@@ -430,14 +480,14 @@ export default function AdminSurveyForm() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <Field label="Titre">
+        <Field label="Titre" hint="Court et concret. Ex. : « Stationnement dans le centre historique ».">
           <input
             type="text" name="title" value={form.title} onChange={handleChange} required
             minLength={5} maxLength={200} style={inputStyle}
           />
         </Field>
 
-        <Field label="Description">
+        <Field label="Description" hint="Pourquoi cette enquête, ce qu'on fera des réponses, et le temps qu'il faut pour répondre.">
           <textarea
             name="description" value={form.description} onChange={handleChange} required
             minLength={10} rows={4} style={{ ...inputStyle, resize: 'vertical' }}
@@ -447,7 +497,7 @@ export default function AdminSurveyForm() {
         <AudiencePicker value={form.audience} onChange={(audience) => setForm((f) => ({ ...f, audience }))} />
 
         <div style={{ display: 'flex', gap: 14 }}>
-          <Field label="Statut">
+          <Field label="Statut" hint="Brouillon : invisible des citoyens · Ouverte : on peut répondre · Clôturée : plus de nouvelles réponses.">
             <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -477,6 +527,38 @@ export default function AdminSurveyForm() {
             Questions
           </h2>
 
+          {/* S5R-09 : partir d'un modèle (création uniquement) */}
+          {!isEdit && (
+            <section aria-labelledby="templates-title" style={{ marginBottom: 16 }}>
+              <h3 id="templates-title" style={{ fontSize: 15, marginBottom: 8 }}>Partir d'un modèle</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+                {SURVEY_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id} type="button" onClick={() => applyTemplate(template)}
+                    style={{ textAlign: 'left', background: '#fff', border: '2px solid #e3dcce', borderRadius: 14, padding: '12px 14px', cursor: 'pointer' }}
+                  >
+                    <strong style={{ display: 'block', fontSize: 15, color: '#26333A' }}>{template.name}</strong>
+                    <span style={{ fontSize: 13, color: '#6B6257' }}>{template.summary}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <button
+              type="button" onClick={insertProfileQuestions} disabled={hasProfileQuestions} className="btn"
+              style={{ background: '#E3EEF3', color: '#1E5F7C', padding: '8px 16px', minHeight: 44 }}
+            >
+              + Insérer les questions de profil
+            </button>
+            <span style={{ fontSize: 13, color: '#6B6257' }}>
+              {hasProfileQuestions
+                ? 'Déjà présentes.'
+                : 'Résidence, quartier et travail, en tête de l’enquête : préremplies depuis le profil, elles permettent d’analyser les résultats par public.'}
+            </span>
+          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {form.questions.map((question, index) => (
               <QuestionEditor
@@ -500,6 +582,7 @@ export default function AdminSurveyForm() {
                 onChange={(patch) => updateQuestion(question.key, patch)}
                 onTypeChange={(newType) => handleQuestionTypeChange(question.key, newType)}
                 onRemove={() => removeQuestion(question.key)}
+                onDuplicate={() => duplicateQuestion(question.key)}
                 onConditionsChange={(conditions) => setQuestionConditions(question.key, conditions)}
                 onOptionChange={(optionKey, label) => updateOption(question.key, optionKey, { label })}
                 onOptionSyncValueChange={(optionKey, syncValue) => updateOption(question.key, optionKey, { syncValue: syncValue || null })}
@@ -533,7 +616,7 @@ export default function AdminSurveyForm() {
 // logique d'affichage conditionnel des options selon le type devient
 // vite illisible mélangée avec le reste du formulaire parent.
 function QuestionEditor({
-  question, index, canRemove, priorOptions, priorNumberQuestions, onChange, onTypeChange, onRemove,
+  question, index, canRemove, priorOptions, priorNumberQuestions, onChange, onTypeChange, onRemove, onDuplicate,
   onConditionsChange, onOptionChange, onOptionSyncValueChange, onOptionEndsSurveyChange, onAddOption, onRemoveOption,
 }) {
   const canEndSurvey = question.type === 'CHOIX_UNIQUE' || question.type === 'OUI_NON';
@@ -546,18 +629,28 @@ function QuestionEditor({
     <div className="card-joyful" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontWeight: 700, color: '#6B6257', fontSize: 13 }}>Question {index + 1}</span>
-        {canRemove && (
+        <div style={{ display: 'flex', gap: 14 }}>
+          {/* S5R-09 : ex. « véhicules du foyer » → « véhicules professionnels » */}
           <button
-            type="button"
-            onClick={onRemove}
-            style={{ background: 'none', border: 'none', color: '#A8442F', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+            type="button" onClick={onDuplicate}
+            aria-label={`Dupliquer la question ${index + 1}`}
+            style={{ background: 'none', border: 'none', color: '#1E5F7C', cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 44 }}
           >
-            Retirer cette question
+            Dupliquer
           </button>
-        )}
+          {canRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              style={{ background: 'none', border: 'none', color: '#A8442F', cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 44 }}
+            >
+              Retirer cette question
+            </button>
+          )}
+        </div>
       </div>
 
-      <Field label="Intitulé">
+      <Field label="Intitulé" hint="Une question claire, une seule idée. Ex. : « Combien de véhicules compte votre foyer ? »">
         <input
           type="text" value={question.label} required minLength={5} maxLength={300}
           onChange={(e) => onChange({ label: e.target.value })}
@@ -565,7 +658,7 @@ function QuestionEditor({
         />
       </Field>
 
-      <Field label="Aide (optionnel)">
+      <Field label="Aide (optionnel)" hint="Affichée en petit sous la question. Ex. : « Cochez tout ce qui s'applique. »">
         <input
           type="text" value={question.helpText} maxLength={300}
           onChange={(e) => onChange({ helpText: e.target.value })}
@@ -574,7 +667,7 @@ function QuestionEditor({
       </Field>
 
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end' }}>
-        <Field label="Type de réponse">
+        <Field label="Type de réponse" hint={TYPE_HELP[question.type]}>
           <select
             value={question.type}
             onChange={(e) => onTypeChange(e.target.value)}
@@ -776,14 +869,31 @@ function QuestionEditor({
 // partagé pour l'instant (2 formulaires seulement) ; si un 3ᵉ
 // formulaire admin apparaît, ce sera le bon moment pour l'extraire
 // dans components/.
-function Field({ label, children }) {
+// S5R-09 : `hint` = une aide sous le champ, reliée à lui par
+// aria-describedby (un lecteur d'écran la lit avec le libellé). Placée
+// HORS du <label> : sinon elle s'ajouterait au NOM du champ.
+function Field({ label, hint, children }) {
+  const hintId = useId();
+  const field = hint && isValidElement(children) ? cloneElement(children, { 'aria-describedby': hintId }) : children;
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, fontWeight: 600, fontSize: 14, color: '#26333A' }}>
-      {label}
-      {children}
-    </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 600, fontSize: 14, color: '#26333A' }}>
+        {label}
+        {field}
+      </label>
+      {hint && <span id={hintId} style={{ fontSize: 13, color: '#6B6257' }}>{hint}</span>}
+    </div>
   );
 }
+
+// S5R-09 : ce que chaque type de réponse permet, en une phrase
+const TYPE_HELP = {
+  CHOIX_UNIQUE: 'Une seule réponse parmi une liste. Peut terminer l’enquête, ou faire apparaître d’autres questions.',
+  CHOIX_MULTIPLE: 'Plusieurs réponses possibles. Le nombre de cases peut être limité par une question « Nombre » précédente.',
+  OUI_NON: 'Deux réponses, libellés modifiables. « Non » (ou « Oui ») peut terminer l’enquête.',
+  NOMBRE: 'Un nombre, avec un minimum et un maximum si besoin. Résultats : moyenne, minimum, maximum.',
+  TEXTE_LIBRE: 'Une réponse rédigée. Lue par l’administration, jamais publiée ni exportée.',
+};
 
 const inputStyle = {
   padding: '12px 14px',
