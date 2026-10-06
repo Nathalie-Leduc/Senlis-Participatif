@@ -649,6 +649,43 @@ export async function getResults(req, res, next) {
   }
 }
 
+// ── Résultats d'un sous-groupe de répondants (S5R-08) ─────────
+//
+// Mêmes protections que la segmentation (S5-21), parce qu'un filtre
+// « commerçant·es de Villevert » peut ne concerner que 2 personnes :
+//  - groupe de 1 à 4 répondants → on dit qu'il existe, jamais ce qu'il
+//    a répondu (secret statistique, lib/privacy.js) ;
+//  - dans un groupe assez grand, une question vue par moins de 5 de
+//    ses membres est masquée à son tour ;
+//  - PAS de texte libre brut (detailed: false) : « une phrase + tel
+//    profil » suffit souvent à reconnaître son auteur.
+// Analogie : un bureau de vote ne publie pas le résultat d'une urne qui
+// ne contiendrait que 3 bulletins.
+async function computeFilteredResults(survey, scope, filterAudience) {
+  const responses = await prisma.surveyResponse.findMany({
+    where: { surveyId: survey.id },
+    select: { id: true, user: { select: AUDIENCE_PROFILE_SELECT } },
+  });
+  const responseIds = responses
+    .filter((r) => matchesAudience(filterAudience, r.user) === true)
+    .map((r) => r.id);
+
+  const header = {
+    survey: { id: survey.id, slug: survey.slug, title: survey.title, status: survey.status },
+    audience: audienceOf(survey),
+    audienceIsEveryone: isEveryone(audienceOf(survey)),
+    filter: { scope, audience: filterAudience },
+    minGroupSize: MIN_GROUP_SIZE,
+  };
+
+  if (isTooSmall(responseIds.length)) {
+    return { ...header, masked: true, totalResponses: null, questions: [] };
+  }
+
+  const result = await computeResults(survey, { detailed: false, responseIds });
+  return { ...header, masked: false, totalResponses: result.totalResponses, questions: maskSmallQuestions(result.questions) };
+}
+
 // ── GET /surveys/:id/stats — résultats détaillés (admin) ──
 //
 // Distincte de getResults : jamais soumise au garde-fou
@@ -663,7 +700,7 @@ export async function getResults(req, res, next) {
 export async function getDetailedResults(req, res, next) {
   try {
     const { id } = req.params;
-    const { segmentBy } = req.query;
+    const { segmentBy, scope, ...criteria } = req.validatedQuery;
 
     const survey = await prisma.survey.findUnique({
       where: { id },
@@ -677,7 +714,18 @@ export async function getDetailedResults(req, res, next) {
       throw error;
     }
 
+    // ── Filtre « public analysé » (S5R-08) ──
+    // On ne compte que les répondants dont le profil correspond aux
+    // critères (même logique que le public visé, lib/audience.js) ; un
+    // profil incomplet n'est JAMAIS rangé dans un groupe par défaut.
+    const filterAudience = scope === 'target' ? audienceOf(survey) : criteria;
+    if (scope !== 'all' && !isEveryone(filterAudience)) {
+      return res.json(await computeFilteredResults(survey, scope, filterAudience));
+    }
+
     const result = await computeResults(survey, { detailed: true });
+    result.filter = { scope: 'all' };
+    result.minGroupSize = MIN_GROUP_SIZE;
 
     if (segmentBy) {
       const segmentQuestion = survey.questions.find((q) => q.id === segmentBy);
