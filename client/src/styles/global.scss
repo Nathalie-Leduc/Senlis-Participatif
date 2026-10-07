@@ -24,3 +24,18 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus { outline: none; }
 .skip-link { position: absolute; left: -999px; top: 8px; background: $ardoise; color: $blanc; padding: 10px 16px; border-radius: $radius-sm; z-index: 100; font: 600 15px $font-body; text-decoration: none; &:focus { left: 8px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+// ── Carte « Explorer » (S5R-11) ─────────────────────────────
+// Une colonne sur mobile ; au-delà de 900 px, la carte (2/3) et la
+// liste par quartier (1/3) côte à côte. minmax(0, …) : sans ce 0, une
+// carte Leaflet peut élargir sa colonne au-delà de l'écran.
+.explore-map {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 1fr;
+  text-align: left;
+
+  @media (min-width: 900px) {
+    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  }
+}

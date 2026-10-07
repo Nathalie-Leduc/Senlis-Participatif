@@ -40,6 +40,8 @@ export default function Header() {
           <NavBtn to="/" active={isActive('/')}>Accueil</NavBtn>
           <NavBtn to="/propositions" active={isActive('/propositions')}>Propositions</NavBtn>
           <NavBtn to="/enquetes" active={isActive('/enquetes')}>Enquêtes</NavBtn>
+          {/* S5R-11 : comme dans la maquette */}
+          <NavBtn to="/carte" active={isActive('/carte')}>Carte</NavBtn>
           {isAdmin && (
             <>
               <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>

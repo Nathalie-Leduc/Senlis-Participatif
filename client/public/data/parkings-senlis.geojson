@@ -1,0 +1,5447 @@
+{
+  "type": "FeatureCollection",
+  "source": "© contributeurs OpenStreetMap — licence ODbL",
+  "extractedAt": "2026-10-07T09:38:49.497Z",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5675627,
+          49.1902931
+        ]
+      },
+      "properties": {
+        "osmId": "node/1678061999",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5934961,
+          49.2097602
+        ]
+      },
+      "properties": {
+        "osmId": "node/7544480396",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "underground"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5809157,
+          49.2022367
+        ]
+      },
+      "properties": {
+        "osmId": "node/7726834383",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.583136,
+          49.197392
+        ]
+      },
+      "properties": {
+        "osmId": "node/8989605153",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "underground"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5685862,
+          49.2215978
+        ]
+      },
+      "properties": {
+        "osmId": "node/10293226480",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5803502,
+          49.2089962
+        ]
+      },
+      "properties": {
+        "osmId": "way/131753545",
+        "name": "Parking du tribunal",
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5797907,
+          49.2059225
+        ]
+      },
+      "properties": {
+        "osmId": "way/131753557",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5898364,
+          49.2200515
+        ]
+      },
+      "properties": {
+        "osmId": "way/177307163",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5722848,
+          49.1912912
+        ]
+      },
+      "properties": {
+        "osmId": "way/198048841",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6056475,
+          49.2086879
+        ]
+      },
+      "properties": {
+        "osmId": "way/305826798",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6064223,
+          49.2084509
+        ]
+      },
+      "properties": {
+        "osmId": "way/305826802",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5853985,
+          49.2069946
+        ]
+      },
+      "properties": {
+        "osmId": "way/319379680",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5884732,
+          49.2070758
+        ]
+      },
+      "properties": {
+        "osmId": "way/319379684",
+        "name": "Parking du Cerf / Parking tourisme / Parking ancienne gendarmerie",
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5821255,
+          49.2048274
+        ]
+      },
+      "properties": {
+        "osmId": "way/319379756",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6004414,
+          49.2089701
+        ]
+      },
+      "properties": {
+        "osmId": "way/319453268",
+        "name": "Place du Valois",
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6074682,
+          49.2075672
+        ]
+      },
+      "properties": {
+        "osmId": "way/336063961",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5698157,
+          49.1969299
+        ]
+      },
+      "properties": {
+        "osmId": "way/338525939",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6013771,
+          49.2083125
+        ]
+      },
+      "properties": {
+        "osmId": "way/460948652",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6055983,
+          49.2073847
+        ]
+      },
+      "properties": {
+        "osmId": "way/460948653",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.570855,
+          49.2074342
+        ]
+      },
+      "properties": {
+        "osmId": "way/493315295",
+        "name": null,
+        "capacity": 20,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.570861,
+          49.2072373
+        ]
+      },
+      "properties": {
+        "osmId": "way/493315298",
+        "name": null,
+        "capacity": 20,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5712471,
+          49.2066899
+        ]
+      },
+      "properties": {
+        "osmId": "way/493315301",
+        "name": null,
+        "capacity": 16,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5711208,
+          49.2060864
+        ]
+      },
+      "properties": {
+        "osmId": "way/493315302",
+        "name": null,
+        "capacity": 20,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.570803,
+          49.2064265
+        ]
+      },
+      "properties": {
+        "osmId": "way/493338190",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5703861,
+          49.2074514
+        ]
+      },
+      "properties": {
+        "osmId": "way/493338191",
+        "name": null,
+        "capacity": 5,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5703038,
+          49.2068937
+        ]
+      },
+      "properties": {
+        "osmId": "way/493338192",
+        "name": null,
+        "capacity": 40,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5749974,
+          49.2064901
+        ]
+      },
+      "properties": {
+        "osmId": "way/493338195",
+        "name": null,
+        "capacity": 7,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5710547,
+          49.2063841
+        ]
+      },
+      "properties": {
+        "osmId": "way/493338208",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5708752,
+          49.2067287
+        ]
+      },
+      "properties": {
+        "osmId": "way/493338214",
+        "name": "Réservé PMR",
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5704231,
+          49.2052551
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752323",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5695735,
+          49.2070383
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752327",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5696703,
+          49.2070153
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752331",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5691132,
+          49.2067118
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752335",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5694852,
+          49.2068393
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752339",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5695458,
+          49.2067579
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752342",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5690773,
+          49.2066089
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752348",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5690352,
+          49.2064944
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752352",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5685804,
+          49.2058803
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752355",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5690585,
+          49.2056413
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752359",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5668011,
+          49.2066581
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752362",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5699205,
+          49.2066626
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752366",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5676267,
+          49.2063193
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752370",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5687279,
+          49.2057389
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752374",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5691814,
+          49.2052688
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752378",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5676292,
+          49.205822
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752380",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5667967,
+          49.2057332
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752382",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5669647,
+          49.2057108
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752385",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5690327,
+          49.205277
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752387",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5679491,
+          49.2049458
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752389",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.567506,
+          49.2044734
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752391",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5679836,
+          49.2044027
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752393",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5661983,
+          49.2062745
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752396",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.565713,
+          49.2064989
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752398",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.565652,
+          49.206052
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752400",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5662956,
+          49.2059602
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752402",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5651786,
+          49.205946
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752404",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5655637,
+          49.2061573
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752406",
+        "name": null,
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5655906,
+          49.2063722
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752408",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5652162,
+          49.2058044
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752411",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5653132,
+          49.2056908
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752413",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5641248,
+          49.205559
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752415",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5656484,
+          49.2047083
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752420",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.565828,
+          49.2046737
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752422",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5660166,
+          49.2047271
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752425",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5660944,
+          49.2046224
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752426",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5664838,
+          49.2044952
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752429",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5657724,
+          49.2039824
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752431",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5659347,
+          49.203934
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752434",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.565614,
+          49.2041373
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752437",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5688786,
+          49.205544
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752445",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5692279,
+          49.2055838
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752449",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5703148,
+          49.2055117
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752453",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5696923,
+          49.2062101
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752466",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5699043,
+          49.2069778
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752469",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5700296,
+          49.2072411
+        ]
+      },
+      "properties": {
+        "osmId": "way/493752473",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5814501,
+          49.2084559
+        ]
+      },
+      "properties": {
+        "osmId": "way/493754542",
+        "name": "Parking du Tribunal",
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5919308,
+          49.2060324
+        ]
+      },
+      "properties": {
+        "osmId": "way/493754551",
+        "name": "Parking de la Gare",
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5911016,
+          49.2062804
+        ]
+      },
+      "properties": {
+        "osmId": "way/493754552",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5909087,
+          49.2061963
+        ]
+      },
+      "properties": {
+        "osmId": "way/493754553",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5910183,
+          49.2220768
+        ]
+      },
+      "properties": {
+        "osmId": "way/493765698",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6030872,
+          49.2084805
+        ]
+      },
+      "properties": {
+        "osmId": "way/493767028",
+        "name": null,
+        "capacity": 18,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6030532,
+          49.2086061
+        ]
+      },
+      "properties": {
+        "osmId": "way/493767029",
+        "name": null,
+        "capacity": 11,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6030396,
+          49.2083375
+        ]
+      },
+      "properties": {
+        "osmId": "way/493767030",
+        "name": null,
+        "capacity": 12,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5758559,
+          49.2073052
+        ]
+      },
+      "properties": {
+        "osmId": "way/493769327",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5767702,
+          49.2070251
+        ]
+      },
+      "properties": {
+        "osmId": "way/493769328",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5755337,
+          49.206306
+        ]
+      },
+      "properties": {
+        "osmId": "way/493773925",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6035044,
+          49.2086633
+        ]
+      },
+      "properties": {
+        "osmId": "way/493773927",
+        "name": null,
+        "capacity": 5,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6035644,
+          49.2085982
+        ]
+      },
+      "properties": {
+        "osmId": "way/493773928",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.566242,
+          49.2063293
+        ]
+      },
+      "properties": {
+        "osmId": "way/493890246",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5670572,
+          49.2060374
+        ]
+      },
+      "properties": {
+        "osmId": "way/493890249",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5679209,
+          49.2058424
+        ]
+      },
+      "properties": {
+        "osmId": "way/493890250",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5645632,
+          49.2050631
+        ]
+      },
+      "properties": {
+        "osmId": "way/493890266",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5676672,
+          49.2042855
+        ]
+      },
+      "properties": {
+        "osmId": "way/493890286",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5670285,
+          49.2047289
+        ]
+      },
+      "properties": {
+        "osmId": "way/493890289",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5657625,
+          49.2038489
+        ]
+      },
+      "properties": {
+        "osmId": "way/493890794",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5775099,
+          49.2067964
+        ]
+      },
+      "properties": {
+        "osmId": "way/493892517",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5900882,
+          49.2070972
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897228",
+        "name": null,
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.590158,
+          49.2071962
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897229",
+        "name": null,
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5902324,
+          49.2073009
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897230",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5904261,
+          49.2075798
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897232",
+        "name": null,
+        "capacity": 7,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5903168,
+          49.2076607
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897233",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5903621,
+          49.2077324
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897234",
+        "name": "PMR uniquement x1",
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5901726,
+          49.2074611
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897235",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5900117,
+          49.2072404
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897236",
+        "name": null,
+        "capacity": 5,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5789647,
+          49.208753
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897245",
+        "name": "PMR uniquement x1",
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5789796,
+          49.2085983
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897246",
+        "name": "PMR uniquement x1",
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5805157,
+          49.2091283
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897247",
+        "name": "Parking du tribunal",
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5738186,
+          49.1959619
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897281",
+        "name": "Parking de l'hôpital",
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5762599,
+          49.1953811
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897282",
+        "name": "Parking de la Gendarmerie",
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5698494,
+          49.1917901
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897283",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5704806,
+          49.1917898
+        ]
+      },
+      "properties": {
+        "osmId": "way/496897284",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5770018,
+          49.2071866
+        ]
+      },
+      "properties": {
+        "osmId": "way/499041900",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5774108,
+          49.2069973
+        ]
+      },
+      "properties": {
+        "osmId": "way/499041901",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5787433,
+          49.2095667
+        ]
+      },
+      "properties": {
+        "osmId": "way/499050619",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "street_side"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5773819,
+          49.2095674
+        ]
+      },
+      "properties": {
+        "osmId": "way/499050623",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "street_side"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5775287,
+          49.2099306
+        ]
+      },
+      "properties": {
+        "osmId": "way/499050624",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "street_side"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5772542,
+          49.2095605
+        ]
+      },
+      "properties": {
+        "osmId": "way/499050625",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "street_side"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5885403,
+          49.2063818
+        ]
+      },
+      "properties": {
+        "osmId": "way/499054066",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5783581,
+          49.2056448
+        ]
+      },
+      "properties": {
+        "osmId": "way/499471790",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5776097,
+          49.2061114
+        ]
+      },
+      "properties": {
+        "osmId": "way/499471791",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6096277,
+          49.2076403
+        ]
+      },
+      "properties": {
+        "osmId": "way/499472746",
+        "name": "Parking visiteurs SANEF",
+        "capacity": 13,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6094641,
+          49.207619
+        ]
+      },
+      "properties": {
+        "osmId": "way/499472747",
+        "name": "Parking covoiturage SANEF Senlis-Bonsecours",
+        "capacity": 21,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.569656,
+          49.2068243
+        ]
+      },
+      "properties": {
+        "osmId": "way/499477250",
+        "name": "Réserver PMR",
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5774135,
+          49.2070525
+        ]
+      },
+      "properties": {
+        "osmId": "way/502151919",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.589556,
+          49.2222031
+        ]
+      },
+      "properties": {
+        "osmId": "way/503088552",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5894366,
+          49.2222742
+        ]
+      },
+      "properties": {
+        "osmId": "way/503088553",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5897135,
+          49.2222605
+        ]
+      },
+      "properties": {
+        "osmId": "way/503088554",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5899677,
+          49.2222308
+        ]
+      },
+      "properties": {
+        "osmId": "way/503088555",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5899805,
+          49.2223392
+        ]
+      },
+      "properties": {
+        "osmId": "way/503088556",
+        "name": null,
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5899326,
+          49.2219271
+        ]
+      },
+      "properties": {
+        "osmId": "way/503088557",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5899034,
+          49.2216839
+        ]
+      },
+      "properties": {
+        "osmId": "way/503088558",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5898977,
+          49.2215072
+        ]
+      },
+      "properties": {
+        "osmId": "way/503088559",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5917188,
+          49.2218598
+        ]
+      },
+      "properties": {
+        "osmId": "way/503089049",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5976976,
+          49.2084873
+        ]
+      },
+      "properties": {
+        "osmId": "way/503097524",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5975648,
+          49.2084704
+        ]
+      },
+      "properties": {
+        "osmId": "way/503097525",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5976557,
+          49.2084087
+        ]
+      },
+      "properties": {
+        "osmId": "way/503097526",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5977482,
+          49.2083425
+        ]
+      },
+      "properties": {
+        "osmId": "way/503097528",
+        "name": "PMR uniquement",
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5978134,
+          49.2082968
+        ]
+      },
+      "properties": {
+        "osmId": "way/503097529",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5979528,
+          49.2083052
+        ]
+      },
+      "properties": {
+        "osmId": "way/503097530",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5873605,
+          49.2064214
+        ]
+      },
+      "properties": {
+        "osmId": "way/504383179",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5830592,
+          49.2045222
+        ]
+      },
+      "properties": {
+        "osmId": "way/504384385",
+        "name": null,
+        "capacity": null,
+        "fee": true,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5880726,
+          49.2049744
+        ]
+      },
+      "properties": {
+        "osmId": "way/504384939",
+        "name": "Parking Bordeau/Odent",
+        "capacity": null,
+        "fee": true,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5861459,
+          49.2037318
+        ]
+      },
+      "properties": {
+        "osmId": "way/504385744",
+        "name": "Parking de La Poste",
+        "capacity": 20,
+        "fee": true,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5895273,
+          49.2070344
+        ]
+      },
+      "properties": {
+        "osmId": "way/513926357",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5829689,
+          49.2055203
+        ]
+      },
+      "properties": {
+        "osmId": "way/513933326",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5828981,
+          49.2054471
+        ]
+      },
+      "properties": {
+        "osmId": "way/513933327",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5840587,
+          49.2056798
+        ]
+      },
+      "properties": {
+        "osmId": "way/513933328",
+        "name": null,
+        "capacity": 4,
+        "fee": true,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5881323,
+          49.2060123
+        ]
+      },
+      "properties": {
+        "osmId": "way/513933329",
+        "name": null,
+        "capacity": null,
+        "fee": true,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5884585,
+          49.2063378
+        ]
+      },
+      "properties": {
+        "osmId": "way/513933331",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5867726,
+          49.2087666
+        ]
+      },
+      "properties": {
+        "osmId": "way/516830719",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5744854,
+          49.1961579
+        ]
+      },
+      "properties": {
+        "osmId": "way/516830721",
+        "name": "Parking des urgences",
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5819204,
+          49.2064284
+        ]
+      },
+      "properties": {
+        "osmId": "way/523639098",
+        "name": null,
+        "capacity": 8,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5770427,
+          49.2065416
+        ]
+      },
+      "properties": {
+        "osmId": "way/532080348",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5897176,
+          49.2220066
+        ]
+      },
+      "properties": {
+        "osmId": "way/562331884",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6047278,
+          49.2078872
+        ]
+      },
+      "properties": {
+        "osmId": "way/596194224",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6042642,
+          49.2085304
+        ]
+      },
+      "properties": {
+        "osmId": "way/596194225",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.608232,
+          49.2032854
+        ]
+      },
+      "properties": {
+        "osmId": "way/596216497",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5705491,
+          49.197382
+        ]
+      },
+      "properties": {
+        "osmId": "way/616567563",
+        "name": null,
+        "capacity": 4,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5706597,
+          49.1972985
+        ]
+      },
+      "properties": {
+        "osmId": "way/616567564",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5704907,
+          49.1971771
+        ]
+      },
+      "properties": {
+        "osmId": "way/616567565",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.570272,
+          49.1970546
+        ]
+      },
+      "properties": {
+        "osmId": "way/616567566",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5975944,
+          49.2068155
+        ]
+      },
+      "properties": {
+        "osmId": "way/654445867",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.598114,
+          49.2070468
+        ]
+      },
+      "properties": {
+        "osmId": "way/654445868",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5985136,
+          49.2070364
+        ]
+      },
+      "properties": {
+        "osmId": "way/654445869",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5981878,
+          49.2069713
+        ]
+      },
+      "properties": {
+        "osmId": "way/654445870",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5699792,
+          49.1916985
+        ]
+      },
+      "properties": {
+        "osmId": "way/660752976",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5703208,
+          49.191707
+        ]
+      },
+      "properties": {
+        "osmId": "way/660752977",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5823657,
+          49.2029717
+        ]
+      },
+      "properties": {
+        "osmId": "way/697997320",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5789899,
+          49.2052429
+        ]
+      },
+      "properties": {
+        "osmId": "way/701874246",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5841573,
+          49.2068418
+        ]
+      },
+      "properties": {
+        "osmId": "way/740840727",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5990333,
+          49.2115679
+        ]
+      },
+      "properties": {
+        "osmId": "way/741061102",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5819618,
+          49.2055385
+        ]
+      },
+      "properties": {
+        "osmId": "way/741661729",
+        "name": null,
+        "capacity": 4,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5830094,
+          49.2049779
+        ]
+      },
+      "properties": {
+        "osmId": "way/741661737",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5788639,
+          49.2076875
+        ]
+      },
+      "properties": {
+        "osmId": "way/741750446",
+        "name": null,
+        "capacity": 4,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5807061,
+          49.2102792
+        ]
+      },
+      "properties": {
+        "osmId": "way/741757789",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5827129,
+          49.2007245
+        ]
+      },
+      "properties": {
+        "osmId": "way/741997415",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5814818,
+          49.1968471
+        ]
+      },
+      "properties": {
+        "osmId": "way/742036276",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5820469,
+          49.1964415
+        ]
+      },
+      "properties": {
+        "osmId": "way/742036277",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5840261,
+          49.196348
+        ]
+      },
+      "properties": {
+        "osmId": "way/742339705",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5820594,
+          49.1972855
+        ]
+      },
+      "properties": {
+        "osmId": "way/742341851",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5679092,
+          49.1981354
+        ]
+      },
+      "properties": {
+        "osmId": "way/742702743",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5679849,
+          49.1978537
+        ]
+      },
+      "properties": {
+        "osmId": "way/742705638",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5706473,
+          49.1981448
+        ]
+      },
+      "properties": {
+        "osmId": "way/742705640",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5713594,
+          49.1981903
+        ]
+      },
+      "properties": {
+        "osmId": "way/742705642",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5714623,
+          49.1980542
+        ]
+      },
+      "properties": {
+        "osmId": "way/742705643",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5716125,
+          49.1982735
+        ]
+      },
+      "properties": {
+        "osmId": "way/742705644",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5713099,
+          49.1987219
+        ]
+      },
+      "properties": {
+        "osmId": "way/742711592",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5714812,
+          49.1985009
+        ]
+      },
+      "properties": {
+        "osmId": "way/742711593",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5722544,
+          49.1991987
+        ]
+      },
+      "properties": {
+        "osmId": "way/742714413",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "lane"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.592319,
+          49.214061
+        ]
+      },
+      "properties": {
+        "osmId": "way/761444319",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5761366,
+          49.2072215
+        ]
+      },
+      "properties": {
+        "osmId": "way/763095048",
+        "name": "Place PMR uniquement",
+        "capacity": 1,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5744334,
+          49.1959545
+        ]
+      },
+      "properties": {
+        "osmId": "way/783875089",
+        "name": null,
+        "capacity": 1,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5898209,
+          49.2075281
+        ]
+      },
+      "properties": {
+        "osmId": "way/789690272",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5703673,
+          49.1976427
+        ]
+      },
+      "properties": {
+        "osmId": "way/791341504",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5701346,
+          49.1975715
+        ]
+      },
+      "properties": {
+        "osmId": "way/791341505",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5864851,
+          49.2097177
+        ]
+      },
+      "properties": {
+        "osmId": "way/795223615",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5858628,
+          49.2061037
+        ]
+      },
+      "properties": {
+        "osmId": "way/795595943",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5855811,
+          49.2065632
+        ]
+      },
+      "properties": {
+        "osmId": "way/795595944",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.605373,
+          49.2082555
+        ]
+      },
+      "properties": {
+        "osmId": "way/795600049",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6056808,
+          49.2079085
+        ]
+      },
+      "properties": {
+        "osmId": "way/795600054",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6051668,
+          49.2078554
+        ]
+      },
+      "properties": {
+        "osmId": "way/795600055",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5759108,
+          49.2058303
+        ]
+      },
+      "properties": {
+        "osmId": "way/798026896",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6227653,
+          49.2103908
+        ]
+      },
+      "properties": {
+        "osmId": "way/798793772",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6217398,
+          49.2102148
+        ]
+      },
+      "properties": {
+        "osmId": "way/798793775",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6219995,
+          49.2098822
+        ]
+      },
+      "properties": {
+        "osmId": "way/798793776",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.621778,
+          49.2104399
+        ]
+      },
+      "properties": {
+        "osmId": "way/798810912",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5973054,
+          49.2066706
+        ]
+      },
+      "properties": {
+        "osmId": "way/798941500",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5766421,
+          49.2106885
+        ]
+      },
+      "properties": {
+        "osmId": "way/799113953",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "street_side"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5779698,
+          49.2108136
+        ]
+      },
+      "properties": {
+        "osmId": "way/799113954",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "street_side"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6004036,
+          49.204259
+        ]
+      },
+      "properties": {
+        "osmId": "way/799162514",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6064907,
+          49.2078657
+        ]
+      },
+      "properties": {
+        "osmId": "way/800115353",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5811957,
+          49.2089217
+        ]
+      },
+      "properties": {
+        "osmId": "way/802138969",
+        "name": "PMR uniquement x2",
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5933492,
+          49.210883
+        ]
+      },
+      "properties": {
+        "osmId": "way/802419184",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5928889,
+          49.2109653
+        ]
+      },
+      "properties": {
+        "osmId": "way/802419191",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5937418,
+          49.209496
+        ]
+      },
+      "properties": {
+        "osmId": "way/806783983",
+        "name": null,
+        "capacity": 12,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.59624,
+          49.2107033
+        ]
+      },
+      "properties": {
+        "osmId": "way/808028098",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5969236,
+          49.2101959
+        ]
+      },
+      "properties": {
+        "osmId": "way/808745911",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5978696,
+          49.2096869
+        ]
+      },
+      "properties": {
+        "osmId": "way/808745914",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5981298,
+          49.2093639
+        ]
+      },
+      "properties": {
+        "osmId": "way/808746461",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5974759,
+          49.2108897
+        ]
+      },
+      "properties": {
+        "osmId": "way/809484711",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5995212,
+          49.2100649
+        ]
+      },
+      "properties": {
+        "osmId": "way/809562507",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.598705,
+          49.2105409
+        ]
+      },
+      "properties": {
+        "osmId": "way/809568687",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5983449,
+          49.2111198
+        ]
+      },
+      "properties": {
+        "osmId": "way/809572094",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5983127,
+          49.2110579
+        ]
+      },
+      "properties": {
+        "osmId": "way/809572095",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5814047,
+          49.2005278
+        ]
+      },
+      "properties": {
+        "osmId": "way/813660785",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5818164,
+          49.2004185
+        ]
+      },
+      "properties": {
+        "osmId": "way/813660786",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5816771,
+          49.2002773
+        ]
+      },
+      "properties": {
+        "osmId": "way/813660787",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5901331,
+          49.2213334
+        ]
+      },
+      "properties": {
+        "osmId": "way/813888880",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5691387,
+          49.2059005
+        ]
+      },
+      "properties": {
+        "osmId": "way/819898694",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5656875,
+          49.2063189
+        ]
+      },
+      "properties": {
+        "osmId": "way/823142887",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5660035,
+          49.2058141
+        ]
+      },
+      "properties": {
+        "osmId": "way/823142894",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5647026,
+          49.2049985
+        ]
+      },
+      "properties": {
+        "osmId": "way/823143992",
+        "name": null,
+        "capacity": 5,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5897017,
+          49.2154891
+        ]
+      },
+      "properties": {
+        "osmId": "way/823795715",
+        "name": null,
+        "capacity": 6,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.588881,
+          49.2150779
+        ]
+      },
+      "properties": {
+        "osmId": "way/823817002",
+        "name": null,
+        "capacity": 10,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5877481,
+          49.2141006
+        ]
+      },
+      "properties": {
+        "osmId": "way/823827753",
+        "name": null,
+        "capacity": 15,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5909694,
+          49.2145529
+        ]
+      },
+      "properties": {
+        "osmId": "way/825812997",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5866442,
+          49.2128771
+        ]
+      },
+      "properties": {
+        "osmId": "way/827350750",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5869099,
+          49.2129335
+        ]
+      },
+      "properties": {
+        "osmId": "way/827350751",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5871654,
+          49.2127872
+        ]
+      },
+      "properties": {
+        "osmId": "way/827350752",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5866893,
+          49.2126595
+        ]
+      },
+      "properties": {
+        "osmId": "way/827350753",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5927378,
+          49.2202292
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840137",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5927181,
+          49.2201602
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840138",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5932831,
+          49.2198179
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840139",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5931004,
+          49.2199467
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840140",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.593266,
+          49.2196402
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840141",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5932256,
+          49.2197138
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840142",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5933567,
+          49.2194766
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840143",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5929852,
+          49.2191922
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840146",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5929578,
+          49.2190392
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840147",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5929376,
+          49.2189001
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840148",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5929543,
+          49.2184994
+        ]
+      },
+      "properties": {
+        "osmId": "way/827840156",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5933215,
+          49.2162105
+        ]
+      },
+      "properties": {
+        "osmId": "way/829329516",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5946323,
+          49.2172729
+        ]
+      },
+      "properties": {
+        "osmId": "way/829429251",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5956528,
+          49.2161834
+        ]
+      },
+      "properties": {
+        "osmId": "way/829978800",
+        "name": null,
+        "capacity": 6,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5958642,
+          49.2157205
+        ]
+      },
+      "properties": {
+        "osmId": "way/829978810",
+        "name": null,
+        "capacity": 4,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5797655,
+          49.2131364
+        ]
+      },
+      "properties": {
+        "osmId": "way/831702393",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5801435,
+          49.2128536
+        ]
+      },
+      "properties": {
+        "osmId": "way/832891686",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5814559,
+          49.2127265
+        ]
+      },
+      "properties": {
+        "osmId": "way/832927421",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5856525,
+          49.2123212
+        ]
+      },
+      "properties": {
+        "osmId": "way/833511339",
+        "name": null,
+        "capacity": 8,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5917465,
+          49.2039353
+        ]
+      },
+      "properties": {
+        "osmId": "way/840587638",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5860494,
+          49.2094589
+        ]
+      },
+      "properties": {
+        "osmId": "way/841682131",
+        "name": null,
+        "capacity": 4,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5791913,
+          49.2090866
+        ]
+      },
+      "properties": {
+        "osmId": "way/846065635",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6031604,
+          49.2112143
+        ]
+      },
+      "properties": {
+        "osmId": "way/846394512",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6040935,
+          49.2109586
+        ]
+      },
+      "properties": {
+        "osmId": "way/846394526",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6012398,
+          49.2120526
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682511",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6012575,
+          49.2119632
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682512",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6012736,
+          49.2119015
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682513",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6012959,
+          49.2118098
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682514",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6022942,
+          49.2121619
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682515",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6023097,
+          49.2120677
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682516",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6024839,
+          49.2116947
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682517",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6005458,
+          49.2116985
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682518",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.600575,
+          49.2116052
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682519",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6009136,
+          49.2111936
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682520",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6009351,
+          49.2110984
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682521",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6009465,
+          49.2110433
+        ]
+      },
+      "properties": {
+        "osmId": "way/846682522",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6021224,
+          49.2112824
+        ]
+      },
+      "properties": {
+        "osmId": "way/846684090",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6021528,
+          49.2111355
+        ]
+      },
+      "properties": {
+        "osmId": "way/846684091",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6021508,
+          49.2110098
+        ]
+      },
+      "properties": {
+        "osmId": "way/846684092",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6009396,
+          49.2107415
+        ]
+      },
+      "properties": {
+        "osmId": "way/846684093",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6027458,
+          49.210926
+        ]
+      },
+      "properties": {
+        "osmId": "way/846684094",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6003414,
+          49.211065
+        ]
+      },
+      "properties": {
+        "osmId": "way/846684095",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6001756,
+          49.2111757
+        ]
+      },
+      "properties": {
+        "osmId": "way/846684096",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6013788,
+          49.2117188
+        ]
+      },
+      "properties": {
+        "osmId": "way/846754825",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6046192,
+          49.2050369
+        ]
+      },
+      "properties": {
+        "osmId": "way/847970437",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6029406,
+          49.2104266
+        ]
+      },
+      "properties": {
+        "osmId": "way/849156582",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6026273,
+          49.2099956
+        ]
+      },
+      "properties": {
+        "osmId": "way/849156594",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6028119,
+          49.2099502
+        ]
+      },
+      "properties": {
+        "osmId": "way/851442493",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5980829,
+          49.2092528
+        ]
+      },
+      "properties": {
+        "osmId": "way/852341847",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5982806,
+          49.209273
+        ]
+      },
+      "properties": {
+        "osmId": "way/852341848",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5984962,
+          49.2092978
+        ]
+      },
+      "properties": {
+        "osmId": "way/852341849",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5990879,
+          49.2089584
+        ]
+      },
+      "properties": {
+        "osmId": "way/852345681",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5991585,
+          49.2089657
+        ]
+      },
+      "properties": {
+        "osmId": "way/852345684",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6007356,
+          49.2095204
+        ]
+      },
+      "properties": {
+        "osmId": "way/852723214",
+        "name": null,
+        "capacity": 32,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6012055,
+          49.2093711
+        ]
+      },
+      "properties": {
+        "osmId": "way/852733050",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.601396,
+          49.2092081
+        ]
+      },
+      "properties": {
+        "osmId": "way/852733051",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6015423,
+          49.2091813
+        ]
+      },
+      "properties": {
+        "osmId": "way/852733052",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5949604,
+          49.2093812
+        ]
+      },
+      "properties": {
+        "osmId": "way/855876011",
+        "name": null,
+        "capacity": 12,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5941581,
+          49.2095815
+        ]
+      },
+      "properties": {
+        "osmId": "way/855876023",
+        "name": null,
+        "capacity": 14,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6002522,
+          49.2082389
+        ]
+      },
+      "properties": {
+        "osmId": "way/868758753",
+        "name": null,
+        "capacity": 5,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6003977,
+          49.2083281
+        ]
+      },
+      "properties": {
+        "osmId": "way/868758754",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5942212,
+          49.2056564
+        ]
+      },
+      "properties": {
+        "osmId": "way/880532460",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5988755,
+          49.2058376
+        ]
+      },
+      "properties": {
+        "osmId": "way/880557486",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5959344,
+          49.2069236
+        ]
+      },
+      "properties": {
+        "osmId": "way/890949231",
+        "name": null,
+        "capacity": 8,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5977496,
+          49.2016981
+        ]
+      },
+      "properties": {
+        "osmId": "way/904717786",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5979116,
+          49.2016907
+        ]
+      },
+      "properties": {
+        "osmId": "way/904717787",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.609426,
+          49.2063326
+        ]
+      },
+      "properties": {
+        "osmId": "way/909649582",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5698407,
+          49.206064
+        ]
+      },
+      "properties": {
+        "osmId": "way/920882056",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5928983,
+          49.2037494
+        ]
+      },
+      "properties": {
+        "osmId": "way/931145570",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5948655,
+          49.1987255
+        ]
+      },
+      "properties": {
+        "osmId": "way/934634585",
+        "name": null,
+        "capacity": 4,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5953823,
+          49.1983503
+        ]
+      },
+      "properties": {
+        "osmId": "way/934634586",
+        "name": null,
+        "capacity": 4,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5938203,
+          49.2002978
+        ]
+      },
+      "properties": {
+        "osmId": "way/935539100",
+        "name": null,
+        "capacity": 6,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5921283,
+          49.2004259
+        ]
+      },
+      "properties": {
+        "osmId": "way/935731813",
+        "name": null,
+        "capacity": 3,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5922927,
+          49.2004403
+        ]
+      },
+      "properties": {
+        "osmId": "way/935731814",
+        "name": null,
+        "capacity": 7,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5881717,
+          49.2001408
+        ]
+      },
+      "properties": {
+        "osmId": "way/938781580",
+        "name": null,
+        "capacity": 2,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5864196,
+          49.2044445
+        ]
+      },
+      "properties": {
+        "osmId": "way/1002345376",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5860599,
+          49.2037733
+        ]
+      },
+      "properties": {
+        "osmId": "way/1002555155",
+        "name": null,
+        "capacity": null,
+        "fee": true,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5926159,
+          49.2056883
+        ]
+      },
+      "properties": {
+        "osmId": "way/1044445936",
+        "name": null,
+        "capacity": 10,
+        "fee": null,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5789962,
+          49.2082845
+        ]
+      },
+      "properties": {
+        "osmId": "way/1339614139",
+        "name": null,
+        "capacity": null,
+        "fee": false,
+        "kind": "surface"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.6018596,
+          49.2031367
+        ]
+      },
+      "properties": {
+        "osmId": "way/1429682221",
+        "name": null,
+        "capacity": null,
+        "fee": null,
+        "kind": null
+      }
+    }
+  ]
+}

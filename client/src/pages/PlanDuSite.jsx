@@ -21,6 +21,7 @@ const PUBLIC_SECTIONS = [
       { to: '/', label: 'Accueil' },
       { to: '/propositions', label: 'Propositions et votes' },
       { to: '/enquetes', label: 'Enquêtes' },
+      { to: '/carte', label: 'Carte des quartiers' },
     ],
   },
   {

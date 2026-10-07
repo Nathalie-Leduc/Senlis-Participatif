@@ -58,7 +58,11 @@ const PERIMETER_STYLE = {
 // "Centre Ville" mis en évidence en doré : c'est précisément ce que
 // demande le cahier des charges ("permettant d'isoler le centre
 // historique"), pas juste afficher les 7 quartiers au même niveau.
-function irisStyle(feature) {
+function irisStyle(feature, selectedIris) {
+  // S5R-11 : le quartier choisi sur la carte « Explorer » ressort en bleu
+  if (selectedIris && feature.properties?.code_iris === selectedIris) {
+    return { color: '#1E5F7C', weight: 3, fillColor: '#1E5F7C', fillOpacity: 0.2 };
+  }
   const isCentreVille = feature.properties?.nom_iris === 'Centre Ville';
   return isCentreVille
     ? { color: '#D4A84A', weight: 2, fillColor: '#D4A84A', fillOpacity: 0.25 }
@@ -112,6 +116,9 @@ export default function MapView({
   perimeters = [],
   iris = null,
   parkings = [],
+  // S5R-11 : clic sur un quartier (code IRIS) et quartier mis en valeur
+  onIrisClick = null,
+  selectedIris = null,
   height = 320,
 }) {
   // On accepte un objet GeoJSON unique OU un tableau — plus simple
@@ -148,12 +155,19 @@ export default function MapView({
           quartier grisé en fond, pas par-dessus une proposition. */}
       {iris && (
         <GeoJSON
+          // Même raison que pour les périmètres (contentKey) : la couche
+          // n'est dessinée qu'une fois — on la recrée quand le quartier
+          // sélectionné change, pour que sa couleur suive
+          key={`iris-${selectedIris ?? 'aucun'}`}
           data={iris}
-          style={irisStyle}
-          // Chaque quartier affiche son nom au clic — sans ça, un
-          // visiteur ne saurait pas ce que représentent ces zones.
+          style={(feature) => irisStyle(feature, selectedIris)}
           onEachFeature={(feature, layer) => {
-            if (feature.properties?.nom_iris) {
+            if (onIrisClick) {
+              // Carte « Explorer » : le clic choisit le quartier (la liste
+              // à côté de la carte affiche ce qui le concerne)
+              layer.on('click', () => onIrisClick(feature.properties?.code_iris));
+            } else if (feature.properties?.nom_iris) {
+              // Ailleurs : chaque quartier affiche son nom au clic
               layer.bindPopup(`<strong>${feature.properties.nom_iris}</strong>`);
             }
           }}

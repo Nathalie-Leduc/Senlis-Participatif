@@ -12,8 +12,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
-import LazyMapView from '../components/MapView/LazyMapView.jsx';
-import { PARKINGS_REPORT_EXEMPLE } from '../data/parkingsReport.js';
+import ExploreMap from '../components/ExploreMap/ExploreMap.jsx';
 import useIsVisible from '../hooks/useIsVisible.js';
 import useCountUp from '../hooks/useCountUp.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
@@ -30,11 +29,6 @@ export default function Accueil() {
   const [proposalsTotal, setProposalsTotal] = useState(0);
   const [surveysTotal, setSurveysTotal] = useState(0);
   const [participantsTotal, setParticipantsTotal] = useState(0);
-  const [markers, setMarkers] = useState([]);
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [iris, setIris] = useState(null);
-  const [showIris, setShowIris] = useState(true);
-  const [showParkings, setShowParkings] = useState(true);
 
   // Les stat pills ne démarrent leur décompte que lorsqu'elles entrent
   // réellement dans l'écran — sur un hero déjà visible au chargement
@@ -49,21 +43,12 @@ export default function Accueil() {
   // ET pour le compteur "propositions" du hero — une seule requête
   // sert les deux affichages, pas besoin d'en faire deux séparées.
   useEffect(() => {
-    api.get('/proposals?limit=50')
-      .then((data) => {
-        setProposalsTotal(data.pagination.total);
-        setMarkers(
-          data.items
-            .filter((p) => p.lat && p.lng) // toutes n'ont pas (encore) de localisation
-            .map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, label: p.title, slug: p.slug }))
-        );
-      })
-      .catch((err) => console.error('Échec du chargement des propositions :', err))
-      .finally(() => setMapLoaded(true));
+    // S5R-11 : la carte (propositions, enquêtes, parkings) charge
+    // elle-même ses données — ici, seulement le compteur du hero
+    api.get('/proposals?limit=1')
+      .then((data) => setProposalsTotal(data.pagination.total))
+      .catch((err) => console.error('Échec du chargement du total propositions :', err));
 
-    // Compteur d'enquêtes : juste le total de la pagination, on n'a
-    // besoin d'aucune des enquêtes elles-mêmes ici — limit=1 suffit,
-    // pas la peine de faire redescendre 50 enquêtes pour un chiffre.
     api.get('/surveys?limit=1')
       .then((data) => setSurveysTotal(data.pagination.total))
       .catch((err) => console.error('Échec du chargement du total enquêtes :', err));
@@ -82,10 +67,6 @@ export default function Accueil() {
     // lui-même sur ce choix). S'il manque (pas encore déposé), on
     // affiche simplement la carte sans cette couche — l'échec est
     // silencieux, comme pour les propositions.
-    fetch('/data/iris-senlis.geojson')
-      .then((res) => (res.ok ? res.json() : null))
-      .then(setIris)
-      .catch(() => {});
   }, []);
 
   return (
@@ -194,46 +175,16 @@ export default function Accueil() {
             🗺️ La carte interactive
           </h2>
           <p style={{ color: '#6B6257', marginBottom: 20, fontSize: 18 }}>
-            Visualisez les propositions et les quartiers de Senlis
+            Propositions, enquêtes en cours et parkings, quartier par quartier
           </p>
 
-          {/* Légende à bascule — chaque case active/désactive une
-              couche. On ne montre le bouton d'une couche que si elle
-              a effectivement des données à afficher (inutile de
-              proposer de "cacher les parkings" s'il n'y en a aucun). */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
-            {iris && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: '#26333A', cursor: 'pointer' }}>
-                <input type="checkbox" checked={showIris} onChange={(e) => setShowIris(e.target.checked)} />
-                🟡 Centre historique (IRIS INSEE)
-              </label>
-            )}
-            {PARKINGS_REPORT_EXEMPLE.length > 0 && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: '#26333A', cursor: 'pointer' }}>
-                <input type="checkbox" checked={showParkings} onChange={(e) => setShowParkings(e.target.checked)} />
-                🅿️ Parkings de report (exemple)
-              </label>
-            )}
-          </div>
-
-          {mapLoaded ? (
-            <LazyMapView
-              center={[49.2058, 2.5847]}
-              zoom={14}
-              markers={markers}
-              iris={showIris ? iris : null}
-              parkings={showParkings ? PARKINGS_REPORT_EXEMPLE : []}
-              height={380}
-            />
-          ) : (
-            <p style={{ color: '#6B6257' }}>Chargement de la carte…</p>
-          )}
-
-          {markers.length === 0 && mapLoaded && (
-            <p style={{ color: '#6B6257', marginTop: 12, fontSize: 14 }}>
-              Aucune proposition localisée pour le moment.
-            </p>
-          )}
+          {/* S5R-11 : carte « Explorer » — propositions ET enquêtes par
+              quartier, vrais parkings (OpenStreetMap). Remplace la carte
+              qui ne montrait que les propositions localisées. */}
+          <ExploreMap height={380} />
+          <p style={{ marginTop: 14 }}>
+            <Link to="/carte">Ouvrir la carte en grand</Link>
+          </p>
         </div>
       </section>
 
