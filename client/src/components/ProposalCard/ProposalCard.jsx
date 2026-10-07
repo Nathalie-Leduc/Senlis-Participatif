@@ -21,6 +21,7 @@
 import { Link } from 'react-router-dom';
 import useScrollReveal from '../../hooks/useScrollReveal.js';
 import { assetUrl } from '../../services/api.js';
+import { describeZone } from '../../constants/zones.js';
 
 const STATUS_LABELS = {
   PUBLISHED: 'En concertation',
@@ -90,6 +91,13 @@ export default function ProposalCard({ proposal }) {
       <p style={{ color: '#6B6257', fontSize: 16, marginBottom: 18, lineHeight: 1.5 }}>
         {proposal.summary}
       </p>
+
+      {/* S5R-10 : zone concernée, si déclarée */}
+      {describeZone(proposal) && (
+        <p style={{ fontSize: 14, color: '#1E5F7C', margin: '-10px 0 16px' }}>
+          <span aria-hidden="true">📍 </span>{describeZone(proposal)}
+        </p>
+      )}
 
       {/* ── Jauge de vote ────────────────────────────────── */}
       <div className="vote-bar" ref={barRef}>
