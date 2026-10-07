@@ -59,8 +59,9 @@ export default function Accessibilite() {
           <li>
             <strong>La carte interactive</strong> est difficile à utiliser au clavier et avec un
             lecteur d'écran. Toutes les informations qu'elle présente sont aussi disponibles sous
-            forme de texte, dans la <Link to="/propositions">liste des propositions</Link> et sur
-            chaque page de proposition.
+            forme de texte : la liste « Par quartier » placée à côté de la{' '}
+            <Link to="/carte">carte</Link> (choix du quartier au clavier), la{' '}
+            <Link to="/propositions">liste des propositions</Link> et chaque page de proposition.
           </li>
           <li>
             <strong>Les formulaires d'administration</strong> (réservés aux administrateurs)

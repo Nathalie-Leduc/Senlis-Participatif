@@ -56,6 +56,7 @@ const MentionsLegales = lazy(() => import('./pages/MentionsLegales.jsx'));
 const PolitiqueConfidentialite = lazy(() => import('./pages/PolitiqueConfidentialite.jsx'));
 const Accessibilite = lazy(() => import('./pages/Accessibilite.jsx'));
 const PlanDuSite = lazy(() => import('./pages/PlanDuSite.jsx'));
+const Carte = lazy(() => import('./pages/Carte.jsx')); // S5R-11
 
 // Affiché le temps de télécharger le code de la page ciblée — sur
 // une bonne connexion, cette étape dure quelques dizaines de
@@ -126,6 +127,7 @@ export default function App() {
             <Route path="/confidentialite" element={<PolitiqueConfidentialite />} />
             <Route path="/accessibilite" element={<Accessibilite />} />
             <Route path="/plan-du-site" element={<PlanDuSite />} />
+            <Route path="/carte" element={<Carte />} />
 
             {/* Routes protégées */}
             <Route path="/mon-compte" element={
