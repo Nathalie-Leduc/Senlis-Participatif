@@ -27,6 +27,8 @@ import Confetti from '../components/Confetti/Confetti.jsx';
 import LazyMapView from '../components/MapView/LazyMapView.jsx';
 import useScrollReveal from '../hooks/useScrollReveal.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { describeZone, zoneFeatures } from '../constants/zones.js';
+import { loadIris } from '../utils/irisData.js';
 
 const PENDING_VOTE_KEY = 'senlis:pendingVote';
 
@@ -127,6 +129,16 @@ export default function PropositionDetail() {
     submitVote(isRetrait ? null : value, { showConfetti: !isRetrait });
   };
 
+  // S5R-10 : contours des quartiers concernés (chargés une fois par visite)
+  const [iris, setIris] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadIris().then((data) => { if (!cancelled) setIris(data); });
+    return () => { cancelled = true; };
+  }, []);
+  const zoneLabel = describeZone(proposal);
+  const zoneShape = zoneFeatures(iris, proposal);
+
   // ── États de chargement / erreur ─────────────────────────
   if (loading) {
     return (
@@ -200,12 +212,20 @@ export default function PropositionDetail() {
           exemple) reste vide tant que S3-04 (saisie admin) n'existe
           pas — mais la capacité de l'afficher est prête dès qu'un
           admin en saisira un. */}
-      {proposal.lat && proposal.lng && (
+      {/* S5R-10 : la zone concernée, en mots puis sur la carte (contours
+          des quartiers IRIS, plus le point précis et le tracé éventuels) */}
+      {zoneLabel && (
+        <p style={{ fontSize: 15, marginBottom: 10 }}>
+          <span aria-hidden="true">📍 </span><strong>Concerne :</strong> {zoneLabel}
+        </p>
+      )}
+      {(zoneShape || (proposal.lat && proposal.lng) || proposal.geoJson) && (
         <div style={{ marginBottom: 24 }}>
           <LazyMapView
-            center={[proposal.lat, proposal.lng]}
-            markers={[{ id: proposal.id, lat: proposal.lat, lng: proposal.lng, label: proposal.title }]}
-            perimeters={proposal.geoJson}
+            center={proposal.lat && proposal.lng ? [proposal.lat, proposal.lng] : undefined}
+            zoom={proposal.zoneWholeCity ? 13 : 15}
+            markers={proposal.lat && proposal.lng ? [{ id: proposal.id, lat: proposal.lat, lng: proposal.lng, label: proposal.title }] : []}
+            perimeters={[zoneShape, proposal.geoJson].filter(Boolean)}
           />
         </div>
       )}

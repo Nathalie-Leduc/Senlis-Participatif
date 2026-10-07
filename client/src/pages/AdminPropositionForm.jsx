@@ -12,11 +12,15 @@
 // change ce qu'il fait du formulaire une fois complété.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId, isValidElement, cloneElement } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, assetUrl } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import ZonePicker from '../components/ZonePicker/ZonePicker.jsx';
+import LazyMapView from '../components/MapView/LazyMapView.jsx';
+import { zoneFeatures } from '../constants/zones.js';
+import { loadIris } from '../utils/irisData.js';
 
 const EMPTY_FORM = {
   title: '', summary: '', content: '', status: 'DRAFT',
@@ -26,6 +30,9 @@ const EMPTY_FORM = {
   // afficher/éditer que du texte — on convertit texte <-> objet aux deux
   // portes d'entrée/sortie (chargement et soumission), jamais entre les deux.
   geoJson: '',
+  // S5R-10 : zone concernée — 'none' | 'city' | 'quartiers'
+  zoneMode: 'none',
+  zoneQuartiers: [],
 };
 
 export default function AdminPropositionForm() {
@@ -74,6 +81,8 @@ export default function AdminPropositionForm() {
           // la colonne Json automatiquement). On le re-transforme en texte
           // indenté pour que l'admin puisse le relire/modifier dans le textarea.
           geoJson: p.geoJson ? JSON.stringify(p.geoJson, null, 2) : '',
+          zoneMode: p.zoneWholeCity ? 'city' : (p.zoneQuartiers?.length ? 'quartiers' : 'none'),
+          zoneQuartiers: p.zoneQuartiers ?? [],
         });
         // p.imagePath est déjà un chemin exploitable tel quel par un
         // <img src="..."> (voir le proxy Vite /uploads) — pas de
@@ -163,20 +172,28 @@ export default function AdminPropositionForm() {
       }
     }
 
+    if (form.zoneMode === 'quartiers' && form.zoneQuartiers.length === 0) {
+      setError('Cochez au moins un quartier, ou choisissez « toute la ville ».');
+      return;
+    }
+
     setSaving(true);
 
-    // On ne transmet que ce qui a une vraie valeur — un champ vide
-    // ("") est envoyé comme "absent" (undefined), jamais comme une
-    // chaîne vide, pour laisser l'API distinguer "pas encore rempli"
-    // de "explicitement effacé".
+    // Un champ vide ("") n'est jamais envoyé comme chaîne vide. À la
+    // CRÉATION il est absent (undefined) ; en MODIFICATION (S5R-10), un
+    // champ avancé vidé vaut null = « effacer » — sans quoi un point ou
+    // un tracé déjà saisi ne pouvait plus jamais être retiré.
+    const empty = isEdit ? null : undefined;
     const payload = {
       title: form.title.trim(),
       summary: form.summary.trim(),
       content: form.content.trim(),
       status: form.status,
-      lat: form.lat === '' ? undefined : Number(form.lat),
-      lng: form.lng === '' ? undefined : Number(form.lng),
-      geoJson: geoJsonValue,
+      lat: form.lat === '' ? empty : Number(form.lat),
+      lng: form.lng === '' ? empty : Number(form.lng),
+      geoJson: geoJsonValue ?? empty,
+      zoneWholeCity: form.zoneMode === 'city',
+      zoneQuartiers: form.zoneMode === 'quartiers' ? form.zoneQuartiers : [],
       closesAt: form.closesAt === '' ? undefined : form.closesAt,
     };
 
@@ -214,6 +231,24 @@ export default function AdminPropositionForm() {
     }
   };
 
+  // ── Aperçu de la zone (S5R-10) ──
+  const [iris, setIris] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadIris().then((data) => { if (!cancelled) setIris(data); });
+    return () => { cancelled = true; };
+  }, []);
+  const zoneShape = zoneFeatures(iris, {
+    zoneWholeCity: form.zoneMode === 'city',
+    zoneQuartiers: form.zoneMode === 'quartiers' ? form.zoneQuartiers : [],
+  });
+  let customShape = null;
+  try { customShape = form.geoJson.trim() ? JSON.parse(form.geoJson) : null; } catch { customShape = null; }
+  const point = form.lat !== '' && form.lng !== '' && !Number.isNaN(Number(form.lat)) && !Number.isNaN(Number(form.lng))
+    ? { id: 'point', lat: Number(form.lat), lng: Number(form.lng), label: form.title || 'Point précis' }
+    : null;
+  const hasPreview = Boolean(zoneShape || customShape || point);
+
   if (loading) {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
   }
@@ -233,21 +268,21 @@ export default function AdminPropositionForm() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <Field label="Titre">
+        <Field label="Titre" hint="Une action concrète, en quelques mots. Ex. : « Piétonniser le centre historique le samedi ».">
           <input
             name="title" value={form.title} onChange={handleChange} required
             style={inputStyle}
           />
         </Field>
 
-        <Field label="Accroche (résumé court, affiché sur les cartes)">
+        <Field label="Accroche (résumé court, affiché sur les cartes)" hint="Une phrase : quoi, où, quand. Ex. : « Fermer le centre-ville aux voitures chaque samedi, de 10 h à 18 h. »">
           <textarea
             name="summary" value={form.summary} onChange={handleChange} required
             rows={2} style={{ ...inputStyle, resize: 'vertical' }}
           />
         </Field>
 
-        <Field label="Argumentaire complet">
+        <Field label="Argumentaire complet" hint="Le contexte, ce qui changerait, pour qui, et les questions encore ouvertes. Un saut de ligne crée un nouveau paragraphe.">
           <textarea
             name="content" value={form.content} onChange={handleChange} required
             rows={8} style={{ ...inputStyle, resize: 'vertical' }}
@@ -259,7 +294,7 @@ export default function AdminPropositionForm() {
             choix (voir authController pour la même logique de defaults
             appliquée ailleurs dans le projet). On le laisse quand même
             modifiable ici : rien n'empêche de publier dès la création. */}
-        <Field label="Statut">
+        <Field label="Statut" hint="Brouillon : invisible des citoyens · Publiée : visible, on peut voter · Clôturée : visible, votes fermés.">
           <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -267,20 +302,79 @@ export default function AdminPropositionForm() {
           </select>
         </Field>
 
-        <div style={{ display: 'flex', gap: 14 }}>
-          <Field label="Latitude (optionnel)">
-            <input
-              type="number" step="any" name="lat" value={form.lat} onChange={handleChange}
-              placeholder="49.2058" style={inputStyle}
+        {/* ── Zone concernée (S5R-10) ── */}
+        <ZonePicker
+          mode={form.zoneMode}
+          quartiers={form.zoneQuartiers}
+          onChange={({ mode, quartiers }) => setForm((f) => ({ ...f, zoneMode: mode, zoneQuartiers: quartiers }))}
+        />
+
+        {hasPreview && (
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Aperçu sur la carte</p>
+            <LazyMapView
+              center={point ? [point.lat, point.lng] : undefined}
+              zoom={form.zoneMode === 'city' ? 13 : 14}
+              markers={point ? [point] : []}
+              perimeters={[zoneShape, customShape].filter(Boolean)}
+              height={260}
             />
-          </Field>
-          <Field label="Longitude (optionnel)">
-            <input
-              type="number" step="any" name="lng" value={form.lng} onChange={handleChange}
-              placeholder="2.5847" style={inputStyle}
+          </div>
+        )}
+
+        {/* ── Réglages avancés (S5R-10) ── Recette du 30/09 : latitude,
+            longitude et GeoJSON effrayaient en tête du formulaire. Ils
+            restent possibles — pour ce qu'un quartier ne décrit pas (une
+            rue, une place) — mais repliés. Ouverts d'office s'ils
+            contiennent déjà quelque chose. */}
+        <details open={Boolean(form.lat || form.lng || form.geoJson.trim())} style={{ border: '2px solid #EFEBE2', borderRadius: 12, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+            Avancé : un point précis ou un tracé sur la carte
+          </summary>
+          <p style={{ fontSize: 13, color: '#6B6257', margin: '8px 0 12px', lineHeight: 1.5 }}>
+            <strong>Point précis</strong> (l'adresse d'un chantier, une place) : sur{' '}
+            <a href="https://www.openstreetmap.org/#map=15/49.2058/2.5847" target="_blank" rel="noopener noreferrer">
+              openstreetmap.org<span className="sr-only"> (s'ouvre dans un nouvel onglet)</span>
+            </a>
+            , clic droit sur le lieu → « Afficher l'adresse » : les deux nombres affichés sont la latitude
+            (≈ 49,2) et la longitude (≈ 2,58). Videz les deux champs pour retirer le point.
+          </p>
+          <div style={{ display: 'flex', gap: 14 }}>
+            <Field label="Latitude (optionnel)">
+              <input
+                type="number" step="any" name="lat" value={form.lat} onChange={handleChange}
+                placeholder="49.2058" style={inputStyle}
+              />
+            </Field>
+            <Field label="Longitude (optionnel)">
+              <input
+                type="number" step="any" name="lng" value={form.lng} onChange={handleChange}
+                placeholder="2.5847" style={inputStyle}
+              />
+            </Field>
+          </div>
+
+          <Field label="Périmètre GeoJSON (optionnel)">
+            <textarea
+              name="geoJson" value={form.geoJson} onChange={handleChange}
+              rows={6} placeholder='{"type": "Polygon", "coordinates": [...]}'
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: 13 }}
             />
+            {/* Champ file "brut" : pas de style personnalisé, on garde le
+                rendu natif du navigateur pour ce type d'input — le personnaliser
+                demande de le masquer et de simuler un bouton, complexité pas
+                justifiée ici pour un usage admin ponctuel. */}
+            <input
+              type="file" accept=".json,.geojson,application/geo+json,application/json"
+              onChange={handleGeoJsonFile}
+              style={{ marginTop: 8, fontSize: 13 }}
+            />
+            <p style={{ fontSize: 12, color: '#6B6257', margin: '4px 0 0' }}>
+              Colle un objet GeoJSON (Feature, FeatureCollection ou géométrie brute)
+              ou importe un fichier .geojson/.json — même format que la couche IRIS.
+            </p>
           </Field>
-        </div>
+        </details>
 
         <Field label="Image (optionnel)">
           {imagePreview && (
@@ -304,27 +398,6 @@ export default function AdminPropositionForm() {
           </p>
         </Field>
 
-        <Field label="Périmètre GeoJSON (optionnel)">
-          <textarea
-            name="geoJson" value={form.geoJson} onChange={handleChange}
-            rows={6} placeholder='{"type": "Polygon", "coordinates": [...]}'
-            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: 13 }}
-          />
-          {/* Champ file "brut" : pas de style personnalisé, on garde le
-              rendu natif du navigateur pour ce type d'input — le personnaliser
-              demande de le masquer et de simuler un bouton, complexité pas
-              justifiée ici pour un usage admin ponctuel. */}
-          <input
-            type="file" accept=".json,.geojson,application/geo+json,application/json"
-            onChange={handleGeoJsonFile}
-            style={{ marginTop: 8, fontSize: 13 }}
-          />
-          <p style={{ fontSize: 12, color: '#6B6257', margin: '4px 0 0' }}>
-            Colle un objet GeoJSON (Feature, FeatureCollection ou géométrie brute)
-            ou importe un fichier .geojson/.json — même format que la couche IRIS.
-          </p>
-        </Field>
-
         <Field label="Date de clôture des votes (optionnel)">
           <input
             type="date" name="closesAt" value={form.closesAt} onChange={handleChange}
@@ -341,12 +414,19 @@ export default function AdminPropositionForm() {
 }
 
 // ── Petit composant local : un label + son champ ─────────
-function Field({ label, children }) {
+// S5R-10 : `hint` = aide sous le champ, reliée par aria-describedby
+// (même composant que dans le constructeur d'enquête, S5R-09)
+function Field({ label, hint, children }) {
+  const hintId = useId();
+  const field = hint && isValidElement(children) ? cloneElement(children, { 'aria-describedby': hintId }) : children;
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, fontWeight: 600, fontSize: 14, color: '#26333A' }}>
-      {label}
-      {children}
-    </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 600, fontSize: 14, color: '#26333A' }}>
+        {label}
+        {field}
+      </label>
+      {hint && <span id={hintId} style={{ fontSize: 13, color: '#6B6257' }}>{hint}</span>}
+    </div>
   );
 }
 
