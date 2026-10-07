@@ -234,6 +234,20 @@ model Proposal {
   // - lat/lng : le "point d'ancrage" (marqueur) — ex : place Henri IV
   // - geoJson : le périmètre dessiné (polygone de la zone piétonne proposée).
   //   Json est volontairement souple : Leaflet produit/consomme du GeoJSON natif.
+  // ── Zone concernée (S5R-10) ─────────────────────────────
+  // Recette du 30/09 : « choisir toute la ville ou des quartiers »,
+  // plutôt que de saisir des coordonnées. Les quartiers sont les 7 IRIS
+  // de l'INSEE (centre historique compris) ; leurs contours sont affichés
+  // depuis client/public/data/iris-senlis.geojson.
+  //   zoneWholeCity = true      → « toute la ville »
+  //   zoneQuartiers = [A, B]    → ces quartiers
+  //   ni l'un ni l'autre        → pas de zone déclarée
+  zoneWholeCity Boolean    @default(false)
+  zoneQuartiers Quartier[] @default([])
+
+  // Réglages AVANCÉS (S5R-10 : rangés sous « Avancé » dans le formulaire) :
+  // un point précis (lat/lng) et/ou un tracé libre (GeoJSON), pour ce
+  // qu'un quartier entier ne décrit pas (une rue, une place, un chantier).
   lat     Float?
   lng     Float?
   geoJson Json?

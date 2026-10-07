@@ -99,6 +99,8 @@ async function main() {
         status: 'PUBLISHED',
         publishedAt: new Date(),
         authorId: admin.id,
+        // S5R-10 : la zone concernée, en quartier IRIS
+        zoneQuartiers: ['CENTRE_HISTORIQUE'],
         lat: 49.2058,
         lng: 2.5847,
       },

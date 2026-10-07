@@ -16,6 +16,10 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+// Prisma (namespace) : pour Prisma.DbNull — même import que lib/prisma.js (Prisma 7)
+import prismaPkg from '../generated/prisma/index.js';
+
+const { Prisma } = prismaPkg;
 import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
 import { saveProposalImage, deleteProposalImage } from '../lib/imageProcessing.js';
@@ -99,6 +103,9 @@ const LIST_SELECT = {
   status: true,
   lat: true,
   lng: true,
+  // S5R-10 : zone concernée (la carte « Explorer » regroupe par quartier)
+  zoneWholeCity: true,
+  zoneQuartiers: true,
   publishedAt: true,
   closesAt: true,
 };
@@ -236,7 +243,9 @@ export async function getBySlug(req, res, next) {
 // ── POST /proposals — créer (admin) ─────────────────────
 export async function create(req, res, next) {
   try {
-    const { title, summary, content, status, lat, lng, geoJson, closesAt } = req.body;
+    const {
+      title, summary, content, status, lat, lng, geoJson, closesAt, zoneWholeCity, zoneQuartiers,
+    } = req.body;
 
     const slug = await generateUniqueSlug(title, prisma.proposal);
 
@@ -256,6 +265,8 @@ export async function create(req, res, next) {
         lng,
         geoJson,
         closesAt,
+        zoneWholeCity: zoneWholeCity ?? false,
+        zoneQuartiers: zoneQuartiers ?? [],
         publishedAt,
         authorId: req.user.userId,
       },
@@ -292,7 +303,14 @@ export async function update(req, res, next) {
 
     const proposal = await prisma.proposal.update({
       where: { id },
-      data: { ...req.body, ...(publishedAt !== undefined && { publishedAt }) },
+      data: {
+        ...req.body,
+        // S5R-10 : effacer le tracé. Un champ Json Prisma n'accepte pas
+        // null tel quel (ambigu : « valeur JSON null » ou « colonne
+        // vide » ?) — DbNull veut dire « colonne vide ».
+        ...(req.body.geoJson === null && { geoJson: Prisma.DbNull }),
+        ...(publishedAt !== undefined && { publishedAt }),
+      },
     });
 
     // Seulement les NOMS des champs modifiés (pas leur contenu) : le

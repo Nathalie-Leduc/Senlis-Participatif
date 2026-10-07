@@ -93,6 +93,18 @@ const parkingIcon = L.divIcon({
  * @param {Array<{id, lat, lng, label}>} parkings - parkings de report (exemple)
  * @param {number|string} height - hauteur du conteneur (la largeur suit son parent)
  */
+/**
+ * Empreinte courte d'un objet GeoJSON (hachage « djb2 » de sa forme
+ * texte) : deux contenus différents donnent, en pratique, deux clés
+ * différentes. Exportée pour les tests.
+ */
+export function contentKey(geoJson) {
+  const text = JSON.stringify(geoJson);
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+  return hash.toString(36);
+}
+
 export default function MapView({
   center = SENLIS_CENTER,
   zoom = 15,
@@ -154,8 +166,17 @@ export default function MapView({
         </Marker>
       ))}
 
+      {/* key = EMPREINTE DU CONTENU, et non la position dans la liste.
+          Le composant <GeoJSON> de react-leaflet lit `data` UNE SEULE FOIS,
+          à sa création : changer `data` ensuite ne redessine rien. Avec
+          key={i}, cocher un 2e quartier gardait le même composant (même
+          clé 0)… et donc l'ancien dessin, avec un seul quartier (retour de
+          test du 06/10). Une clé qui change avec le contenu force React à
+          recréer la couche, donc à redessiner.
+          Analogie : un tableau peint ne se met pas à jour — on en accroche
+          un nouveau quand le sujet change. */}
       {perimeterList.filter(Boolean).map((geoJson, i) => (
-        <GeoJSON key={i} data={geoJson} style={PERIMETER_STYLE} />
+        <GeoJSON key={`${i}-${contentKey(geoJson)}`} data={geoJson} style={PERIMETER_STYLE} />
       ))}
 
       {markers.map((m) => (
