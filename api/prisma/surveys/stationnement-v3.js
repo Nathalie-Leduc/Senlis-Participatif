@@ -64,7 +64,7 @@ const MOBILITES = [
   { label: 'Scooter ou moto' },
   { label: 'Vélo' },
   { label: 'À pied' },
-  { label: 'Trottinette' },
+  { label: 'EDPM (Engins De Déplacement Personnel Motorisés)' },
   { label: 'Covoiturage' },
   { label: 'Autre' },
 ];

@@ -133,6 +133,15 @@ export default function AdminSurveys() {
                 <span style={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{s.title}</span>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {/* S5R-12 : la page telle que les citoyens la voient */}
+                  <Link
+                    to={`/enquetes/${s.slug}`}
+                    className="btn"
+                    aria-label={`Voir « ${s.title} » comme les citoyens`}
+                    style={{ background: '#fff', color: '#1E5F7C', border: '2px solid #E3EEF3', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                  >
+                    Voir
+                  </Link>
                   <Link
                     to={`/admin/enquetes/${s.slug}/modifier`}
                     className="btn"

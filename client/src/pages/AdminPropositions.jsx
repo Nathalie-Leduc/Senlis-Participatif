@@ -128,6 +128,16 @@ export default function AdminPropositions() {
                 <span style={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{p.title}</span>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {/* S5R-12 : la page telle que les citoyens la voient (un
+                      brouillon s'y affiche aussi, signalé, pour l'admin) */}
+                  <Link
+                    to={`/propositions/${p.slug}`}
+                    className="btn"
+                    aria-label={`Voir « ${p.title} » comme les citoyens`}
+                    style={{ background: '#fff', color: '#1E5F7C', border: '2px solid #E3F0F6', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                  >
+                    Voir
+                  </Link>
                   {/* Résultats détaillés (S5-21) : utile dès qu'il peut y
                       avoir des votes, donc pas pour un brouillon. */}
                   {p.status !== 'DRAFT' && (
