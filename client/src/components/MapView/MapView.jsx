@@ -14,7 +14,8 @@
 // ouvrent une page où une carte apparaît réellement.
 // ══════════════════════════════════════════════════════════
 
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from 'react-leaflet';
+import { useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Link } from 'react-router-dom';
@@ -58,11 +59,16 @@ const PERIMETER_STYLE = {
 // "Centre Ville" mis en évidence en doré : c'est précisément ce que
 // demande le cahier des charges ("permettant d'isoler le centre
 // historique"), pas juste afficher les 7 quartiers au même niveau.
-function irisStyle(feature, selectedIris) {
-  // S5R-11 : le quartier choisi sur la carte « Explorer » ressort en bleu
-  if (selectedIris && feature.properties?.code_iris === selectedIris) {
+function irisStyle(feature, selectedIris, neutral) {
+  // S5R-11 : les quartiers choisis sur la carte « Explorer » ressortent en
+  // bleu (un code ou une liste de codes)
+  const selected = Array.isArray(selectedIris) ? selectedIris : [selectedIris].filter(Boolean);
+  if (selected.includes(feature.properties?.code_iris)) {
     return { color: '#1E5F7C', weight: 3, fillColor: '#1E5F7C', fillOpacity: 0.2 };
   }
+  // Carte « Explorer » : tous les quartiers au même niveau (retour du
+  // 07/10 : le centre doré « par défaut » laissait croire à une sélection)
+  if (neutral) return { color: '#948B7D', weight: 1, fillColor: '#948B7D', fillOpacity: 0.06 };
   const isCentreVille = feature.properties?.nom_iris === 'Centre Ville';
   return isCentreVille
     ? { color: '#D4A84A', weight: 2, fillColor: '#D4A84A', fillOpacity: 0.25 }
@@ -83,6 +89,38 @@ const parkingIcon = L.divIcon({
   iconSize: [30, 30],
   iconAnchor: [15, 15],
 });
+
+// Icône enquête (S5R-11 v2) — doré, distinct du cerf des propositions
+// et du « P » des parkings : on ne confond jamais les trois
+const surveyIcon = L.divIcon({
+  className: '',
+  html: `<div style="
+    width: 30px; height: 30px; border-radius: 50%;
+    background: #D4A84A; border: 2px solid #fff; display: flex; align-items: center;
+    justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.3);
+    color: #26333A; font-weight: 800; font-size: 15px;
+  ">?</div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
+
+/**
+ * Recalcule la taille de la carte quand son CONTENEUR change de taille
+ * (passage en plein écran, panneau qui s'ouvre…). Leaflet ne surveille
+ * que la fenêtre : sans ça, une carte agrandie garderait des zones grises
+ * là où il manque des tuiles. Analogie : recadrer une photo quand on
+ * change de cadre.
+ */
+function ResizeWatcher() {
+  const map = useMap();
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
+}
 
 /**
  * @param {[number, number]} center - [latitude, longitude] du centre initial
@@ -119,6 +157,7 @@ export default function MapView({
   // S5R-11 : clic sur un quartier (code IRIS) et quartier mis en valeur
   onIrisClick = null,
   selectedIris = null,
+  neutralIris = false,
   height = 320,
 }) {
   // On accepte un objet GeoJSON unique OU un tableau — plus simple
@@ -158,9 +197,9 @@ export default function MapView({
           // Même raison que pour les périmètres (contentKey) : la couche
           // n'est dessinée qu'une fois — on la recrée quand le quartier
           // sélectionné change, pour que sa couleur suive
-          key={`iris-${selectedIris ?? 'aucun'}`}
+          key={`iris-${[selectedIris].flat().join(',') || 'aucun'}`}
           data={iris}
-          style={(feature) => irisStyle(feature, selectedIris)}
+          style={(feature) => irisStyle(feature, selectedIris, neutralIris)}
           onEachFeature={(feature, layer) => {
             if (onIrisClick) {
               // Carte « Explorer » : le clic choisit le quartier (la liste
@@ -193,19 +232,26 @@ export default function MapView({
         <GeoJSON key={`${i}-${contentKey(geoJson)}`} data={geoJson} style={PERIMETER_STYLE} />
       ))}
 
+      {/* kind (S5R-11 v2) : 'survey' = enquête (icône dorée « ? »),
+          sinon proposition (le cerf). href : lien explicite, sinon celui
+          de la proposition (slug) — comportement d'avant conservé. */}
       {markers.map((m) => (
-        <Marker key={m.id} position={[m.lat, m.lng]} icon={cerfIcon}>
+        <Marker key={m.id} position={[m.lat, m.lng]} icon={m.kind === 'survey' ? surveyIcon : cerfIcon}>
           <Popup>
             <strong>{m.label}</strong>
-            {m.slug && (
+            {(m.href || m.slug) && (
               <>
                 <br />
-                <Link to={`/propositions/${m.slug}`}>Voir la proposition</Link>
+                <Link to={m.href ?? `/propositions/${m.slug}`}>
+                  {m.kind === 'survey' ? "Voir l'enquête" : 'Voir la proposition'}
+                </Link>
               </>
             )}
           </Popup>
         </Marker>
       ))}
+
+      <ResizeWatcher />
     </MapContainer>
   );
 }

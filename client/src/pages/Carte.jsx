@@ -12,12 +12,14 @@ export default function Carte() {
   usePageTitle('Carte des quartiers');
 
   return (
-    <div className="wrap" style={{ padding: '32px 20px 60px' }}>
-      <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 32, marginBottom: 6 }}>Carte des quartiers</h1>
-      <p style={{ color: '#6B6257', fontSize: 17, marginBottom: 20 }}>
-        Les propositions et les enquêtes en cours, quartier par quartier, et les parkings de la ville.
+    // Pleine largeur (pas de .wrap) : retour du 07/10 — la page devait
+    // être nettement plus grande que la carte de l'accueil
+    <div style={{ padding: '16px 20px 24px' }}>
+      <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 26, marginBottom: 4 }}>Carte des quartiers</h1>
+      <p style={{ color: '#6B6257', fontSize: 15, marginBottom: 12 }}>
+        Propositions et enquêtes en cours, quartier par quartier, et les parkings de la ville.
       </p>
-      <ExploreMap height={560} />
+      <ExploreMap fullPage />
     </div>
   );
 }

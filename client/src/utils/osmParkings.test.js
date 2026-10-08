@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { overpassToGeoJson, parkingMarkers, parkingLabel } from './osmParkings.js';
+import { overpassToGeoJson, parkingMarkers, parkingLabel, applyComplements } from './osmParkings.js';
 
 const overpass = {
   elements: [
@@ -24,8 +24,28 @@ describe('parkings OpenStreetMap', () => {
 
   it('libellés et repères pour la carte', () => {
     expect(parkingLabel({ name: 'Parking de la gare', capacity: 120, fee: true })).toBe('Parking de la gare — 120 places, payant');
-    expect(parkingLabel({ name: null, capacity: null, fee: false, kind: 'underground' })).toBe('Parking — gratuit, souterrain');
+    expect(parkingLabel({ name: null, capacity: null, fee: false, kind: 'underground' })).toBe('Parking — places : non renseigné, gratuit, souterrain');
     const [marker] = parkingMarkers(overpassToGeoJson(overpass));
     expect(marker).toMatchObject({ id: 'node/1', lat: 49.2, lng: 2.58 });
+  });
+});
+
+describe('compléments locaux (retour du 07/10)', () => {
+  it('corrige, masque et ajoute des parkings, sans toucher à l’extraction', () => {
+    const fc = overpassToGeoJson(overpass);
+    const result = applyComplements(fc, {
+      corrections: { 'way/2': { name: 'Parking des Arènes', capacity: 80, fee: true, capacite: 'faute de frappe ignorée' } },
+      masques: ['node/1'],
+      ajouts: [{ name: 'Parking de la mairie', lat: 49.207, lng: 2.586, capacity: 12, fee: false }],
+    });
+    expect(result.features.map((f) => f.properties.name)).toEqual(['Parking des Arènes', 'Parking de la mairie']);
+    expect(result.features[0].properties).toMatchObject({ capacity: 80, fee: true, kind: 'underground' });
+    expect(result.features[0].properties.capacite).toBeUndefined();
+    expect(fc.features).toHaveLength(2); // l'extraction d'origine est intacte
+  });
+
+  it('sans fichier de compléments : l’extraction telle quelle', () => {
+    const fc = overpassToGeoJson(overpass);
+    expect(applyComplements(fc, null)).toEqual({ ...fc, features: fc.features });
   });
 });
