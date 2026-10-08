@@ -1,0 +1,6 @@
+{
+  "_mode_d_emploi": "Compléments appliqués PAR-DESSUS l'extraction OpenStreetMap (parkings-senlis.geojson). corrections : identifiant OSM (affiché sur openstreetmap.org, ex. « Chemin 123456 » = way/123456, « Nœud 789 » = node/789) → champs à corriger : name, capacity (nombre), fee (true = payant, false = gratuit), kind (surface, underground, multi-storey). ajouts : parkings absents d'OpenStreetMap (lat, lng obligatoires). masques : identifiants à ne pas afficher. Recharger la page suffit : rien à re-télécharger.",
+  "corrections": {},
+  "ajouts": [],
+  "masques": []
+}

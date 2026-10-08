@@ -67,6 +67,14 @@ export default [
     languageOptions: { globals: { ...globals.node } },
   },
 
+  // ── Scripts lancés avec Node (extraction des parkings…) ──
+  // Sans ce bloc, l'éditeur soulignait fetch, URL, process, console…
+  // comme « non définis » : ce sont des globales de Node, pas du navigateur.
+  {
+    files: ['scripts/**/*.{js,mjs}'],
+    languageOptions: { globals: { ...globals.node } },
+  },
+
   // ── Fichiers de configuration (vite.config.js…) : Node ────
   {
     files: ['*.config.js'],

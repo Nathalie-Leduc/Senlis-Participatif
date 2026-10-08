@@ -18,6 +18,8 @@ vi.mock('react-leaflet', () => ({
   TileLayer: () => null,
   Marker: () => null,
   Popup: () => null,
+  // ResizeWatcher (S5R-11 v2) : une « carte » minimale
+  useMap: () => ({ invalidateSize: () => {}, getContainer: () => document.createElement('div') }),
   GeoJSON: ({ data }) => {
     const [frozen] = useState(data); // comme react-leaflet : lu une seule fois
     return <div data-testid="perimeter">{frozen.features?.length ?? 1}</div>;
