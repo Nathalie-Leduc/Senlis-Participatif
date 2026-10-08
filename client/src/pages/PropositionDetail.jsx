@@ -29,6 +29,7 @@ import useScrollReveal from '../hooks/useScrollReveal.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeZone, zoneFeatures } from '../constants/zones.js';
 import { loadIris } from '../utils/irisData.js';
+import DraftBanner from '../components/DraftBanner/DraftBanner.jsx';
 
 const PENDING_VOTE_KEY = 'senlis:pendingVote';
 
@@ -178,6 +179,7 @@ export default function PropositionDetail() {
           Clôturée
         </span>
       )}
+      <DraftBanner status={proposal.status} />
       <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 30, margin: '10px 0 6px' }}>
         {proposal.title}
       </h1>

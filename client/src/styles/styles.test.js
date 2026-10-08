@@ -20,5 +20,7 @@ describe('Feuilles de style', () => {
     // Les règles du module d'accessibilité sont bien présentes
     expect(css).toContain('.a11y-panel');
     expect(css).toContain('html.a11y-line-height');
+    // S5R-12 : champs et boutons héritent de la police du site
+    expect(css).toMatch(/button, input, select, textarea\s*\{\s*font: inherit;/);
   });
 });

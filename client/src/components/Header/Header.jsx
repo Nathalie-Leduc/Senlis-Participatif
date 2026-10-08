@@ -38,23 +38,28 @@ export default function Header() {
 
         <nav style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <NavBtn to="/" active={isActive('/')}>Accueil</NavBtn>
-          <NavBtn to="/propositions" active={isActive('/propositions')}>Propositions</NavBtn>
-          <NavBtn to="/enquetes" active={isActive('/enquetes')}>Enquêtes</NavBtn>
-          {/* S5R-11 : comme dans la maquette */}
-          <NavBtn to="/carte" active={isActive('/carte')}>Carte</NavBtn>
-          {isAdmin && (
+          {/* S5R-12 (recette du 30/09) : en admin, « Propositions » et
+              « Enquêtes » mènent aux pages de GESTION, et les pages
+              publiques correspondantes quittent le menu — deux paires
+              d'entrées presque homonymes (« Propositions » / « Admin
+              propositions ») prêtaient à confusion. Les pages publiques
+              restent à un clic : bouton « Voir » de chaque ligne.
+              Analogie : le menu d'un commerçant n'est pas celui de ses
+              clients — mais il peut toujours passer côté salle. */}
+          {isAdmin ? (
             <>
-              <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>
-                Admin propositions
-              </NavBtn>
-              <NavBtn to="/admin/enquetes" active={isActive('/admin/enquetes')}>
-                Admin enquêtes
-              </NavBtn>
-              <NavBtn to="/admin/comptes" active={isActive('/admin/comptes')}>
-                Comptes
-              </NavBtn>
+              <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>Propositions</NavBtn>
+              <NavBtn to="/admin/enquetes" active={isActive('/admin/enquetes')}>Enquêtes</NavBtn>
+              <NavBtn to="/admin/comptes" active={isActive('/admin/comptes')}>Comptes</NavBtn>
+            </>
+          ) : (
+            <>
+              <NavBtn to="/propositions" active={isActive('/propositions')}>Propositions</NavBtn>
+              <NavBtn to="/enquetes" active={isActive('/enquetes')}>Enquêtes</NavBtn>
             </>
           )}
+          {/* S5R-11 : comme dans la maquette */}
+          <NavBtn to="/carte" active={isActive('/carte')}>Carte</NavBtn>
 
           {isLogged ? (
             <>

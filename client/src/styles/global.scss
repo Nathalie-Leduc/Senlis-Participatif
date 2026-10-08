@@ -8,6 +8,12 @@
 @use 'accessibility';
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+// S5R-12 (noté en S5R-09) : par défaut, les champs et les boutons
+// n'HÉRITENT PAS de la police de la page — le navigateur leur impose la
+// police du système (Ubuntu, Segoe…) en 13 px. On leur rend celle du
+// site, à sa taille ; un style plus précis (font-size en ligne,
+// .btn…) continue de l'emporter.
+button, input, select, textarea { font: inherit; }
 :root { --a11y-font-scale: 1; }
 body { font-family: $font-body; font-size: calc(#{$font-size-base} * var(--a11y-font-scale)); line-height: 1.6; color: $ardoise; background: $pierre; overflow-x: hidden; }
 h1, h2, h3 { font-family: $font-display; line-height: 1.2; }

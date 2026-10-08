@@ -17,6 +17,7 @@ import Mascot from '../components/Mascot/Mascot.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeSurveyLength } from '../utils/surveyLength.js';
 import { describeAudience, isEveryone } from '../utils/audience.js';
+import DraftBanner from '../components/DraftBanner/DraftBanner.jsx';
 
 export default function EnqueteDetail() {
   const { slug } = useParams();
@@ -93,6 +94,7 @@ export default function EnqueteDetail() {
         {isOpen ? 'Enquête ouverte' : 'Enquête clôturée'}
       </span>
 
+      <DraftBanner status={survey.status} />
       <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 30, margin: '10px 0 14px' }}>
         {survey.title}
       </h1>
