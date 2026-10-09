@@ -16,6 +16,14 @@
 // revenir en arrière, et rien n'est "posté" avant la toute
 // dernière page (Terminer = un seul envoi groupé, jamais un envoi
 // par question).
+//
+// S5R2-01 — MODE TEST (administratrice) : la même page, le même
+// moteur, mais une « répétition générale » : le statut n'est pas
+// vérifié (on teste surtout les BROUILLONS), le profil de l'admin
+// ne pré-remplit rien (on veut pouvoir explorer toutes les branches),
+// et l'envoi final part vers POST /surveys/:id/test, qui valide tout
+// comme pour de vrai… sans rien enregistrer. À la fin, un récapitulatif
+// du chemin parcouru et un bouton « Recommencer le test ».
 // ══════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from 'react';
@@ -97,6 +105,8 @@ const PROFILE_PREFILL_LABELS = {
 export default function EnqueteRepondre() {
   const { slug } = useParams();
   const { user } = useAuth();
+  // Lu sur le rôle plutôt que via isAdmin : une seule source, l'objet user
+  const testMode = user?.role === 'ADMIN';
 
   const [survey, setSurvey] = useState(null);
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
@@ -107,6 +117,8 @@ export default function EnqueteRepondre() {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  // S5R2-01 : réponse de POST /test — { path, totalQuestions, profileWouldUpdate }
+  const [testResult, setTestResult] = useState(null);
   // Une question pré-remplie depuis le profil s'affiche en lecture
   // seule (voir plus bas) — ce drapeau permet de basculer vers le
   // champ interactif normal si la personne clique sur "Modifier".
@@ -140,15 +152,17 @@ export default function EnqueteRepondre() {
         // pas la peine de laisser quelqu'un remplir 8 questions pour
         // découvrir à la fin qu'il avait déjà répondu, ou que
         // l'enquête vient de fermer.
-        if (data.survey.status !== 'OPEN') {
+        if (!testMode && data.survey.status !== 'OPEN') {
           setError("Cette enquête n'est plus ouverte aux réponses.");
           return;
         }
-        if (data.hasResponded) {
+        if (!testMode && data.hasResponded) {
           setError('Vous avez déjà répondu à cette enquête.');
           return;
         }
         setSurvey(data.survey);
+        // Mode test : pas de pré-remplissage depuis le profil de l'admin
+        if (testMode) return;
 
         // Pré-remplissage depuis le profil (S5-XX) : si cette
         // question synchronise un champ dont on connaît DÉJÀ la
@@ -165,7 +179,7 @@ export default function EnqueteRepondre() {
       })
       .catch((err) => setError(err.message || 'Impossible de charger cette enquête'))
       .finally(() => setLoading(false));
-  }, [slug, user]);
+  }, [slug, user, testMode]);
 
   const setAnswer = (questionId, value) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -188,7 +202,7 @@ export default function EnqueteRepondre() {
 
   // Même règle que pour le vote (UC-02) : un compte non vérifié ne
   // peut pas peser dans les résultats.
-  if (!user.emailVerified) {
+  if (!testMode && !user.emailVerified) {
     return (
       <div className="wrap" style={{ padding: '60px 20px', textAlign: 'center', maxWidth: 480, margin: '0 auto' }}>
         <p style={{ color: '#6B6257', fontSize: 16 }}>
@@ -198,6 +212,25 @@ export default function EnqueteRepondre() {
           Retour à l'enquête
         </Link>
       </div>
+    );
+  }
+
+  // S5R2-01 : on remet tout à zéro pour rejouer un autre chemin
+  const restartTest = () => {
+    setAnswers({});
+    setStep(0);
+    setTestResult(null);
+    setError(null);
+    setDone(false);
+  };
+
+  if (done && testMode && testResult) {
+    return (
+      <TestRecap
+        slug={slug}
+        result={testResult}
+        onRestart={restartTest}
+      />
     );
   }
 
@@ -278,7 +311,13 @@ export default function EnqueteRepondre() {
           })
           .filter(Boolean),
       };
-      await api.post(`/surveys/${survey.id}/responses`, payload);
+      if (testMode) {
+        // Répétition générale : validé par l'API, rien d'enregistré
+        const result = await api.post(`/surveys/${survey.id}/test`, payload);
+        setTestResult(result);
+      } else {
+        await api.post(`/surveys/${survey.id}/responses`, payload);
+      }
       setDone(true);
     } catch (err) {
       setError(err.message || "La réponse n'a pas pu être enregistrée");
@@ -296,6 +335,8 @@ export default function EnqueteRepondre() {
       <Link to={`/enquetes/${slug}`} style={{ color: '#6B6257', fontSize: 14 }}>
         ← Annuler et revenir à l'enquête
       </Link>
+
+      {testMode && <TestBanner status={survey.status} />}
 
       {/* ── Barre de progression ─────────────────────────── */}
       <div style={{ margin: '20px 0 8px' }}>
@@ -343,7 +384,9 @@ export default function EnqueteRepondre() {
           // avec la possibilité de revenir au champ normal si elle ne
           // correspond plus (ex. déménagement récent, profil pas à
           // jour).
-          const prefilledOption = prefilledOptionFor(question, user);
+          // S5R2-01 : en mode test, jamais de lecture seule — l'admin
+          // doit pouvoir explorer chaque branche
+          const prefilledOption = testMode ? null : prefilledOptionFor(question, user);
 
           if (prefilledOption && !overrideCurrentQuestion) {
             return (
@@ -406,6 +449,79 @@ export default function EnqueteRepondre() {
           Une réponse est nécessaire pour continuer.
         </p>
       )}
+    </div>
+  );
+}
+
+// ── S5R2-01 : bandeau du mode test ───────────────────────
+// role="status" : annoncé une fois par les lecteurs d'écran, sans
+// interrompre. Le statut est rappelé : tester un brouillon est normal.
+const STATUS_LABELS = { DRAFT: 'brouillon', OPEN: 'ouverte', CLOSED: 'clôturée' };
+
+function TestBanner({ status }) {
+  return (
+    <div role="status" style={{
+      background: '#FFF4D6', border: '2px dashed #C99A2E', color: '#5C4510',
+      padding: '10px 14px', borderRadius: 12, marginTop: 16, fontSize: 14,
+    }}
+    >
+      🧪 <strong>Mode test</strong> — rien n'est enregistré
+      {STATUS_LABELS[status] && <> (enquête {STATUS_LABELS[status]})</>}.
+    </div>
+  );
+}
+
+// ── S5R2-01 : récapitulatif de fin de test ───────────────
+// Le chemin parcouru, question par question : c'est lui qui permet de
+// vérifier que les conditions et les « fin d'enquête » font bien ce
+// qu'on attendait.
+const PROFILE_FIELD_LABELS = {
+  travailleASenlis: 'travaille à Senlis',
+  situation: 'situation (résidence)',
+  quartier: 'quartier',
+  travailleQuartier: 'quartier de travail',
+  travailType: 'type de travail',
+};
+
+export function TestRecap({ slug, result, onRestart }) {
+  const path = result.path || [];
+  const fields = result.profileWouldUpdate || [];
+  return (
+    <div className="wrap" style={{ padding: '40px 20px 60px', maxWidth: 640 }}>
+      <TestBanner />
+      <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 26, margin: '18px 0 8px' }}>
+        Test terminé : le parcours est valide
+      </h1>
+      <p style={{ color: '#6B6257', marginBottom: 18 }}>
+        {path.length} question{path.length > 1 ? 's' : ''} vue{path.length > 1 ? 's' : ''} sur {result.totalQuestions} au total.
+        Aucune réponse n'a été enregistrée.
+      </p>
+
+      <ol style={{ paddingLeft: 22, lineHeight: 1.7, marginBottom: 18 }}>
+        {path.map((step) => (
+          <li key={step.questionId}>
+            {step.label}{' '}
+            <span style={{ color: step.answered ? '#377349' : '#6B6257', fontSize: 14 }}>
+              {step.answered ? '✓ répondue' : '— passée (optionnelle)'}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      <p style={{ fontSize: 14, color: '#6B6257', marginBottom: 24 }}>
+        {fields.length
+          ? `Pour un·e citoyen·ne, ces réponses mettraient à jour son profil : ${fields.map((f) => PROFILE_FIELD_LABELS[f] || f).join(', ')}.`
+          : 'Ces réponses ne modifieraient pas le profil du citoyen.'}
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onRestart} className="btn btn-primary">
+          🔁 Recommencer le test
+        </button>
+        <Link to={`/enquetes/${slug}`} className="btn" style={{ background: '#EFEBE2', color: '#26333A' }}>
+          Retour à l'enquête
+        </Link>
+      </div>
     </div>
   );
 }
