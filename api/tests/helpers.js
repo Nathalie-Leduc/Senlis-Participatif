@@ -173,6 +173,24 @@ export async function makeCitizen() {
  * @returns {Promise<{ user: object, token: string }>}
  */
 export async function makeAdminUser() {
+  return makeStaffUser('ADMIN');
+}
+
+/**
+ * S5R2-11 : un compte « Admin-test » (EDITOR), même parcours qu'un admin
+ * (promotion en base, puis connexion AVEC 2FA).
+ * @returns {Promise<{ user: object, token: string }>}
+ */
+export async function makeEditorUser() {
+  return makeStaffUser('EDITOR');
+}
+
+/**
+ * Parcours commun aux comptes de l'équipe : inscription, vérification,
+ * promotion en base au rôle voulu, connexion en deux étapes (2FA).
+ * @param {'ADMIN' | 'EDITOR'} role
+ */
+async function makeStaffUser(role) {
   const credentials = buildUser();
 
   await request(app).post('/api/v1/auth/register').send(credentials);
@@ -182,7 +200,7 @@ export async function makeAdminUser() {
 
   await prisma.user.update({
     where: { email: credentials.email },
-    data: { role: 'ADMIN' },
+    data: { role },
   });
 
   const loginRes = await request(app)

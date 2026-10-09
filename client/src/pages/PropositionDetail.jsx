@@ -36,7 +36,7 @@ const PENDING_VOTE_KEY = 'senlis:pendingVote';
 export default function PropositionDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { user, isLogged } = useAuth();
+  const { user, isLogged, isStaff } = useAuth();
 
   const [proposal, setProposal] = useState(null);
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
@@ -96,7 +96,8 @@ export default function PropositionDetail() {
   // était en attente pour CETTE proposition précisément, on le
   // rejoue automatiquement — sans que le citoyen ait à re-cliquer.
   useEffect(() => {
-    if (!proposal || !isLogged || !user?.emailVerified) return;
+    // S5R2-11 : un compte de l'équipe ne vote pas (l'API refuserait)
+    if (!proposal || !isLogged || !user?.emailVerified || isStaff) return;
 
     const raw = sessionStorage.getItem(PENDING_VOTE_KEY);
     if (!raw) return;
@@ -110,7 +111,7 @@ export default function PropositionDetail() {
     } catch {
       // JSON corrompu — on ignore silencieusement, pas grave
     }
-  }, [proposal, isLogged, user, submitVote]);
+  }, [proposal, isLogged, user, isStaff, submitVote]);
 
   // ── Réagir à un clic sur un bouton de vote ──────────────
   const handleSelect = (value) => {
@@ -123,6 +124,7 @@ export default function PropositionDetail() {
     }
 
     if (!user.emailVerified) return; // le message est déjà affiché, rien à faire de plus ici
+    if (isStaff) return; // S5R2-11 : idem, message affiché au-dessus des boutons
 
     // Cliquer sur le bouton déjà actif = retirer son vote.
     // Cliquer sur un autre = voter ou changer d'avis.
@@ -267,7 +269,14 @@ export default function PropositionDetail() {
             Les votes sont clos pour cette proposition — les résultats ci-dessus sont définitifs.
           </p>
         )}
-        {!votesClosed && isLogged && !user.emailVerified && (
+        {/* S5R2-11 : l'équipe (admin, Admin-test) organise la consultation,
+            elle n'y vote pas — son vote fausserait les résultats */}
+        {!votesClosed && isStaff && (
+          <p style={{ color: '#6B6257', fontSize: 15, marginBottom: 14 }}>
+            Les votes sont réservés aux citoyen·nes : un compte d'administration ne vote pas.
+          </p>
+        )}
+        {!votesClosed && isLogged && !isStaff && !user.emailVerified && (
           <div style={{ background: '#FFF4DB', color: '#8a6d1f', padding: '12px 16px', borderRadius: 12, marginBottom: 14, fontSize: 15 }}>
             Vérifiez votre adresse email pour pouvoir voter — un lien vous a été envoyé à l'inscription.
           </div>
@@ -283,7 +292,7 @@ export default function PropositionDetail() {
 
         <VoteButtons
           myVote={myVote}
-          disabled={votesClosed || (isLogged && !user.emailVerified)}
+          disabled={votesClosed || isStaff || (isLogged && !user.emailVerified)}
           onSelect={handleSelect}
         />
       </div>

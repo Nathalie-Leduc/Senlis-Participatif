@@ -6,7 +6,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
 export default function Header() {
-  const { isLogged, isAdmin, user, logout } = useAuth();
+  const { isLogged, isAdmin, isStaff, user, logout } = useAuth();
   const { pathname } = useLocation();
 
   // "/" doit être une correspondance EXACTE (sinon elle matcherait
@@ -46,11 +46,12 @@ export default function Header() {
               restent à un clic : bouton « Voir » de chaque ligne.
               Analogie : le menu d'un commerçant n'est pas celui de ses
               clients — mais il peut toujours passer côté salle. */}
-          {isAdmin ? (
+          {/* S5R2-11 : l'Admin-test a le même menu de gestion, sans « Comptes » */}
+          {isStaff ? (
             <>
               <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>Propositions</NavBtn>
               <NavBtn to="/admin/enquetes" active={isActive('/admin/enquetes')}>Enquêtes</NavBtn>
-              <NavBtn to="/admin/comptes" active={isActive('/admin/comptes')}>Comptes</NavBtn>
+              {isAdmin && <NavBtn to="/admin/comptes" active={isActive('/admin/comptes')}>Comptes</NavBtn>}
             </>
           ) : (
             <>

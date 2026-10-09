@@ -8,6 +8,7 @@
 
 import argon2 from 'argon2';
 import prisma from '../lib/prisma.js';
+import { isStaffRole } from '../lib/roles.js';
 import {
   signToken, signTwoFactorChallenge, verifyTwoFactorChallenge,
   signTrustedDeviceToken, verifyTrustedDeviceToken,
@@ -184,7 +185,7 @@ async function recordLogin(user) {
     where: { id: user.id },
     data: { lastLoginAt: new Date(), inactivityWarnedAt: null },
   });
-  if (user.role === 'ADMIN') {
+  if (isStaffRole(user.role)) {
     await logAdminAction({ actorId: user.id, action: AUDIT_ACTIONS.ADMIN_LOGIN });
   }
 }
@@ -270,7 +271,9 @@ export async function login(req, res, next) {
     // verifyTwoFactor ci-dessous) dispense de repasser par le défi
     // email — le mot de passe reste toujours requis, seul le CODE
     // est sauté.
-    if (user.role === 'ADMIN') {
+    // S5R2-11 : un compte Admin-test (EDITOR) aussi — il entre dans
+    // l'administration, il est protégé comme elle.
+    if (isStaffRole(user.role)) {
       let trustedDevice = false;
       if (trustedDeviceToken) {
         try {

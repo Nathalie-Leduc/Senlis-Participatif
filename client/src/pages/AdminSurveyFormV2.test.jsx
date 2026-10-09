@@ -9,6 +9,10 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { api } from '../services/api.js';
 
+// Connecté·e en administratrice (S5R2-11 : les pages de gestion lisent le rôle)
+vi.mock('../contexts/AuthContext.jsx', () => ({
+  useAuth: () => ({ isLogged: true, isAdmin: true, isEditor: false, isStaff: true, user: { role: 'ADMIN' } }),
+}));
 vi.mock('../services/api.js', () => ({ api: { get: vi.fn(), post: vi.fn().mockResolvedValue({}), patch: vi.fn() } }));
 const { default: AdminSurveyForm } = await import('./AdminSurveyForm.jsx');
 

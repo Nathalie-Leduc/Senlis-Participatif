@@ -45,17 +45,18 @@ const PUBLIC_SECTIONS = [
 const ADMIN_LINKS = [
   { to: '/admin/propositions', label: 'Gérer les propositions' },
   { to: '/admin/enquetes', label: 'Gérer les enquêtes' },
-  { to: '/admin/comptes', label: 'Gérer les comptes' },
+  { to: '/admin/comptes', label: 'Gérer les comptes', adminOnly: true },
 ];
 
 export default function PlanDuSite() {
   usePageTitle('Plan du site');
-  const { isLogged, isAdmin } = useAuth();
+  const { isLogged, isAdmin, isStaff } = useAuth();
 
   const sections = [
     ...PUBLIC_SECTIONS,
     ...(isLogged ? [{ title: 'Mon espace', links: [{ to: '/mon-compte', label: 'Mon compte' }] }] : []),
-    ...(isAdmin ? [{ title: 'Administration', links: ADMIN_LINKS }] : []),
+    // S5R2-11 : l'Admin-test voit la gestion, mais pas « Gérer les comptes »
+    ...(isStaff ? [{ title: 'Administration', links: ADMIN_LINKS.filter((l) => isAdmin || !l.adminOnly) }] : []),
   ];
 
   return (

@@ -4,6 +4,11 @@
 // Même structure que AdminPropositions.jsx — même principe de
 // "cahier de cuisine" : on y voit aussi les brouillons, pas
 // seulement les enquêtes déjà ouvertes.
+//
+// S5R2-11 : un compte Admin-test (EDITOR) voit la même liste ;
+// « Modifier », « Tester » et « Supprimer » n'apparaissent que sur
+// les brouillons, « Résultats détaillés » et « Publier les résultats »
+// jamais (réservés à l'administration — l'API répondrait 403).
 // ══════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,6 +17,8 @@ import { api } from '../services/api.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/surveyStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
 
 const FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -27,6 +34,7 @@ export default function AdminSurveys() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { showToast } = useToast();
+  const { isAdmin } = useAuth();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,6 +91,8 @@ export default function AdminSurveys() {
         </Link>
       </div>
 
+      <EditorBanner />
+
       {/* ── Filtres par statut ───────────────────────────── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
         {FILTERS.map((f) => (
@@ -117,6 +127,7 @@ export default function AdminSurveys() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((s) => {
             const meta = STATUS_META[s.status];
+            const canEdit = isAdmin || s.status === 'DRAFT';
             return (
               <div
                 key={s.id}
@@ -142,38 +153,57 @@ export default function AdminSurveys() {
                   >
                     Voir
                   </Link>
-                  <Link
-                    to={`/admin/enquetes/${s.slug}/modifier`}
-                    className="btn"
-                    style={{ background: '#EFEBE2', color: '#26333A', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
-                  >
-                    Modifier
-                  </Link>
-                  <Link
-                    to={`/admin/enquetes/${s.id}/stats`}
-                    className="btn"
-                    style={{ background: '#E3EEF3', color: '#1E5F7C', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
-                  >
-                    Résultats détaillés
-                  </Link>
-                  <button
-                    onClick={() => handleToggleResults(s)}
-                    className="btn"
-                    style={{
-                      background: s.resultsPublished ? '#E0F2E5' : '#EFEBE2',
-                      color: s.resultsPublished ? '#377349' : '#26333A',
-                      padding: '8px 16px', minHeight: 40, fontSize: 14,
-                    }}
-                  >
-                    {s.resultsPublished ? '✓ Résultats publiés' : 'Publier les résultats'}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(s)}
-                    className="btn"
-                    style={{ background: '#FCEAE6', color: '#A8442F', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
-                  >
-                    Supprimer
-                  </button>
+                  {canEdit && (
+                    <>
+                      <Link
+                        to={`/admin/enquetes/${s.slug}/modifier`}
+                        className="btn"
+                        style={{ background: '#EFEBE2', color: '#26333A', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                      >
+                        Modifier
+                      </Link>
+                      {/* S5R2-01/11 : le mode test, directement depuis la liste */}
+                      <Link
+                        to={`/enquetes/${s.slug}/repondre`}
+                        className="btn"
+                        aria-label={`Tester « ${s.title} » (rien n'est enregistré)`}
+                        style={{ background: '#FFF4D6', color: '#5C4510', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                      >
+                        🧪 Tester
+                      </Link>
+                    </>
+                  )}
+                  {isAdmin && (
+                    <>
+                      <Link
+                        to={`/admin/enquetes/${s.id}/stats`}
+                        className="btn"
+                        style={{ background: '#E3EEF3', color: '#1E5F7C', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                      >
+                        Résultats détaillés
+                      </Link>
+                      <button
+                        onClick={() => handleToggleResults(s)}
+                        className="btn"
+                        style={{
+                          background: s.resultsPublished ? '#E0F2E5' : '#EFEBE2',
+                          color: s.resultsPublished ? '#377349' : '#26333A',
+                          padding: '8px 16px', minHeight: 40, fontSize: 14,
+                        }}
+                      >
+                        {s.resultsPublished ? '✓ Résultats publiés' : 'Publier les résultats'}
+                      </button>
+                    </>
+                  )}
+                  {canEdit && (
+                    <button
+                      onClick={() => handleDelete(s)}
+                      className="btn"
+                      style={{ background: '#FCEAE6', color: '#A8442F', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                    >
+                      Supprimer
+                    </button>
+                  )}
                 </div>
               </div>
             );

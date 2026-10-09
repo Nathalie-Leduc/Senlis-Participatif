@@ -8,6 +8,10 @@
 // Analogie : /propositions, c'est la salle du restaurant ouverte
 // au public. Cette page-ci, c'est le cahier de cuisine — on y
 // voit aussi les plats encore en préparation, pas prêts à sortir.
+//
+// S5R2-11 : un compte Admin-test (EDITOR) voit la même liste, mais
+// « Modifier » et « Supprimer » n'apparaissent que sur les brouillons,
+// et « Résultats » jamais (l'API refuserait de toute façon : 403).
 // ══════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
@@ -16,6 +20,8 @@ import { api } from '../services/api.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/proposalStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
 
 const FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -34,6 +40,7 @@ export default function AdminPropositions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { showToast } = useToast();
+  const { isAdmin } = useAuth();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,6 +85,8 @@ export default function AdminPropositions() {
         </Link>
       </div>
 
+      <EditorBanner />
+
       {/* ── Filtres par statut ───────────────────────────── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
         {FILTERS.map((f) => (
@@ -112,6 +121,8 @@ export default function AdminPropositions() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((p) => {
             const meta = STATUS_META[p.status];
+            // Admin : tout ; Admin-test : seulement ses brouillons (et ceux des autres)
+            const canEdit = isAdmin || p.status === 'DRAFT';
             return (
               <div
                 key={p.id}
@@ -140,7 +151,7 @@ export default function AdminPropositions() {
                   </Link>
                   {/* Résultats détaillés (S5-21) : utile dès qu'il peut y
                       avoir des votes, donc pas pour un brouillon. */}
-                  {p.status !== 'DRAFT' && (
+                  {isAdmin && p.status !== 'DRAFT' && (
                     <Link
                       to={`/admin/propositions/${p.id}/stats`}
                       className="btn"
@@ -149,20 +160,24 @@ export default function AdminPropositions() {
                       Résultats
                     </Link>
                   )}
-                  <Link
-                    to={`/admin/propositions/${p.slug}/modifier`}
-                    className="btn"
-                    style={{ background: '#EFEBE2', color: '#26333A', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
-                  >
-                    Modifier
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(p)}
-                    className="btn"
-                    style={{ background: '#FCEAE6', color: '#A8442F', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
-                  >
-                    Supprimer
-                  </button>
+                  {canEdit && (
+                    <>
+                      <Link
+                        to={`/admin/propositions/${p.slug}/modifier`}
+                        className="btn"
+                        style={{ background: '#EFEBE2', color: '#26333A', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                      >
+                        Modifier
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(p)}
+                        className="btn"
+                        style={{ background: '#FCEAE6', color: '#A8442F', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                      >
+                        Supprimer
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );

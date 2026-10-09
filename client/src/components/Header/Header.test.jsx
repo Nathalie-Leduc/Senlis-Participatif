@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════
-// Tests — menu selon le rôle (S5R-12)
+// Tests — menu selon le rôle (S5R-12, S5R2-11)
 // ══════════════════════════════════════════════════════════
 
 import { describe, it, expect, vi } from 'vitest';
@@ -24,7 +24,7 @@ describe('Menu principal', () => {
   });
 
   it("admin : « Propositions » et « Enquêtes » mènent à la GESTION ; plus de doublons publics", () => {
-    auth = { isLogged: true, isAdmin: true, user: { pseudo: 'Mairie' }, logout: vi.fn() };
+    auth = { isLogged: true, isAdmin: true, isStaff: true, user: { pseudo: 'Mairie' }, logout: vi.fn() };
     const nav = renderHeader();
     expect(nav.getByRole('link', { name: 'Propositions' })).toHaveAttribute('href', '/admin/propositions');
     expect(nav.getByRole('link', { name: 'Enquêtes' })).toHaveAttribute('href', '/admin/enquetes');
@@ -32,5 +32,13 @@ describe('Menu principal', () => {
     expect(hrefs(nav)).not.toContain('/enquetes');
     expect(hrefs(nav)).toEqual(expect.arrayContaining(['/admin/comptes', '/carte', '/mon-compte']));
     expect(nav.queryByText(/Admin propositions/)).toBeNull();
+  });
+
+  it('Admin-test : le même menu de gestion, sans « Comptes » (S5R2-11)', () => {
+    auth = { isLogged: true, isAdmin: false, isEditor: true, isStaff: true, user: { pseudo: 'Maison de quartier' }, logout: vi.fn() };
+    const nav = renderHeader();
+    expect(nav.getByRole('link', { name: 'Propositions' })).toHaveAttribute('href', '/admin/propositions');
+    expect(nav.getByRole('link', { name: 'Enquêtes' })).toHaveAttribute('href', '/admin/enquetes');
+    expect(hrefs(nav)).not.toContain('/admin/comptes');
   });
 });

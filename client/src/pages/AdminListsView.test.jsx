@@ -6,6 +6,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
+// Connecté·e en administratrice (S5R2-11 : les pages de gestion lisent le rôle)
+vi.mock('../contexts/AuthContext.jsx', () => ({
+  useAuth: () => ({ isLogged: true, isAdmin: true, isEditor: false, isStaff: true, user: { role: 'ADMIN' } }),
+}));
 vi.mock('../services/api.js', () => ({
   api: {
     get: vi.fn((url) => Promise.resolve({

@@ -5,6 +5,9 @@
 // page d'atterrissage avant d'agir. Ici, "agir" = soit répondre
 // (si ouverte et pas encore fait), soit consulter les résultats.
 //
+// S5R2-11 : même chose pour un compte Admin-test, mais seulement sur un
+// BROUILLON (il ne teste que ce qu'il prépare — l'API refuse le reste).
+//
 // S5R2-01 : pour l'administratrice, « Répondre » est remplacé par
 // « Tester l'enquête » — disponible quel que soit le statut, y compris
 // en brouillon (c'est justement là qu'on en a le plus besoin). Un
@@ -28,7 +31,7 @@ import DraftBanner from '../components/DraftBanner/DraftBanner.jsx';
 export default function EnqueteDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { isLogged, isAdmin } = useAuth();
+  const { isLogged, isAdmin, isStaff } = useAuth();
 
   const [survey, setSurvey] = useState(null);
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
@@ -81,7 +84,9 @@ export default function EnqueteDetail() {
   // à la fois false ET null/anonyme) — c'est le clic qui décide quoi
   // faire ensuite (répondre directement, ou passer par la connexion
   // d'abord), jamais l'affichage du bouton lui-même.
-  const canOfferToRespond = !isAdmin && isOpen && hasResponded !== true;
+  const canOfferToRespond = !isStaff && isOpen && hasResponded !== true;
+  // Admin : n'importe quel statut ; Admin-test : brouillons seulement
+  const canTest = isAdmin || (isStaff && survey.status === 'DRAFT');
 
   const handleRespond = () => {
     if (!isLogged) {
@@ -137,12 +142,12 @@ export default function EnqueteDetail() {
         )}
         {/* S5R2-01 : la répétition générale — on parcourt l'enquête
             comme un·e citoyen·ne, mais rien n'est enregistré */}
-        {isAdmin && (
+        {canTest && (
           <button onClick={() => navigate(`/enquetes/${slug}/repondre`)} className="btn btn-primary">
             🧪 Tester l'enquête
           </button>
         )}
-        {!isAdmin && isOpen && hasResponded === true && (
+        {!isStaff && isOpen && hasResponded === true && (
           <span style={{ color: '#3A7A4D', fontWeight: 700 }}>✓ Vous avez déjà répondu — merci !</span>
         )}
         <Link

@@ -105,8 +105,9 @@ const PROFILE_PREFILL_LABELS = {
 export default function EnqueteRepondre() {
   const { slug } = useParams();
   const { user } = useAuth();
-  // Lu sur le rôle plutôt que via isAdmin : une seule source, l'objet user
-  const testMode = user?.role === 'ADMIN';
+  // Lu sur le rôle plutôt que via isAdmin : une seule source, l'objet user.
+  // S5R2-11 : un compte Admin-test (EDITOR) teste aussi (brouillons)
+  const testMode = user?.role === 'ADMIN' || user?.role === 'EDITOR';
 
   const [survey, setSurvey] = useState(null);
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement

@@ -133,14 +133,16 @@ export default function App() {
             <Route path="/mon-compte" element={
               <ProtectedRoute><MonCompte /></ProtectedRoute>
             } />
+            {/* S5R2-11 : staffOnly = ADMIN ou Admin-test (brouillons) ;
+                adminOnly = ADMIN seul (résultats détaillés, comptes) */}
             <Route path="/admin/propositions" element={
-              <ProtectedRoute adminOnly><AdminPropositions /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminPropositions /></ProtectedRoute>
             } />
             <Route path="/admin/propositions/nouvelle" element={
-              <ProtectedRoute adminOnly><AdminPropositionForm /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminPropositionForm /></ProtectedRoute>
             } />
             <Route path="/admin/propositions/:slug/modifier" element={
-              <ProtectedRoute adminOnly><AdminPropositionForm /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminPropositionForm /></ProtectedRoute>
             } />
             {/* :id (et non :slug) : même convention que /admin/enquetes/:id/stats —
                 l'endpoint API /proposals/:id/stats travaille sur l'identifiant. */}
@@ -148,16 +150,16 @@ export default function App() {
               <ProtectedRoute adminOnly><AdminPropositionStats /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes" element={
-              <ProtectedRoute adminOnly><AdminSurveys /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminSurveys /></ProtectedRoute>
             } />
             <Route path="/admin/comptes" element={
               <ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes/nouvelle" element={
-              <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminSurveyForm /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes/:slug/modifier" element={
-              <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminSurveyForm /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes/:id/stats" element={
               <ProtectedRoute adminOnly><AdminSurveyStats /></ProtectedRoute>
