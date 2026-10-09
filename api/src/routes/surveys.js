@@ -48,6 +48,11 @@ router.post('/', auth, isAdmin, validate(createSurveySchema), ctrl.create);
 router.patch('/:id', auth, isAdmin, validate(updateSurveySchema), ctrl.update);
 router.delete('/:id', auth, isAdmin, ctrl.remove);
 
+// ── Mode test de l'administration (S5R2-01) ─────────────
+// Même validation qu'une vraie réponse, rien n'est enregistré ; tout
+// statut (un brouillon se teste aussi), autant de fois que voulu.
+router.post('/:id/test', auth, isAdmin, validate(submitResponseSchema), ctrl.testResponse);
+
 // ── Réponse (🔐, email vérifié — même exigence que le vote) ──
 router.post(
   '/:id/responses',

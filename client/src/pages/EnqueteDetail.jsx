@@ -5,6 +5,12 @@
 // page d'atterrissage avant d'agir. Ici, "agir" = soit répondre
 // (si ouverte et pas encore fait), soit consulter les résultats.
 //
+// S5R2-01 : pour l'administratrice, « Répondre » est remplacé par
+// « Tester l'enquête » — disponible quel que soit le statut, y compris
+// en brouillon (c'est justement là qu'on en a le plus besoin). Un
+// compte admin ne répond jamais pour de vrai : il fausserait les
+// résultats (l'API le refuse aussi, code ADMIN_CANNOT_RESPOND).
+//
 // hasResponded vient de l'API (S4-05) : null pour un visiteur
 // anonyme (on ne SAIT pas s'il a déjà répondu, différent de "non").
 // ══════════════════════════════════════════════════════════
@@ -22,7 +28,7 @@ import DraftBanner from '../components/DraftBanner/DraftBanner.jsx';
 export default function EnqueteDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { isLogged } = useAuth();
+  const { isLogged, isAdmin } = useAuth();
 
   const [survey, setSurvey] = useState(null);
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
@@ -75,7 +81,7 @@ export default function EnqueteDetail() {
   // à la fois false ET null/anonyme) — c'est le clic qui décide quoi
   // faire ensuite (répondre directement, ou passer par la connexion
   // d'abord), jamais l'affichage du bouton lui-même.
-  const canOfferToRespond = isOpen && hasResponded !== true;
+  const canOfferToRespond = !isAdmin && isOpen && hasResponded !== true;
 
   const handleRespond = () => {
     if (!isLogged) {
@@ -129,7 +135,14 @@ export default function EnqueteDetail() {
             Répondre à l'enquête
           </button>
         )}
-        {isOpen && hasResponded === true && (
+        {/* S5R2-01 : la répétition générale — on parcourt l'enquête
+            comme un·e citoyen·ne, mais rien n'est enregistré */}
+        {isAdmin && (
+          <button onClick={() => navigate(`/enquetes/${slug}/repondre`)} className="btn btn-primary">
+            🧪 Tester l'enquête
+          </button>
+        )}
+        {!isAdmin && isOpen && hasResponded === true && (
           <span style={{ color: '#3A7A4D', fontWeight: 700 }}>✓ Vous avez déjà répondu — merci !</span>
         )}
         <Link

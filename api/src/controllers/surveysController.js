@@ -920,24 +920,132 @@ function buildAnswerRows(question, answer, answersByQuestionId) {
 // déjà une réponse, ce qui serait trompeur pour un questionnaire
 // (le citoyen doit savoir qu'il a déjà participé, pas juste voir sa
 // nouvelle réponse silencieusement ignorée ou fusionnée).
+/**
+ * Évalue une soumission SANS rien écrire en base (S5R2-01).
+ *
+ * Partagée par la vraie réponse (submitResponse) et le mode test de
+ * l'administration (testResponse) : les deux appliquent EXACTEMENT les
+ * mêmes règles — parcours, questions obligatoires, bornes, limites de
+ * cases, synchronisation du profil. Le mode test ne teste donc pas une
+ * maquette, mais le vrai moteur.
+ *
+ * Analogie : la répétition générale d'un spectacle — mêmes décors,
+ * mêmes répliques, seule la billetterie reste fermée.
+ *
+ * @returns {{ visibleIds: string[], answerRows: object[], profileUpdate: object }}
+ * @throws erreur 400 (VALIDATION_ERROR) si une réponse est invalide
+ */
+function evaluateSubmission(survey, answers) {
+  // Chaque questionId envoyé doit appartenir à CETTE enquête — sans ce
+  // contrôle, rien n'empêcherait (erreur de front, ou appel API direct)
+  // de glisser la réponse à la question d'une AUTRE enquête.
+  const questionsById = new Map(survey.questions.map((q) => [q.id, q]));
+  for (const answer of answers) {
+    if (!questionsById.has(answer.questionId)) {
+      rejectAnswer(`La question ${answer.questionId} n'appartient pas à cette enquête`);
+    }
+  }
+
+  const answersByQuestionId = new Map(answers.map((a) => [a.questionId, a]));
+
+  // On parcourt les QUESTIONS de l'enquête (pas les réponses reçues) :
+  // c'est le seul sens qui permet de détecter une question OBLIGATOIRE
+  // restée sans réponse — l'inverse (parcourir les réponses) ne
+  // remarquerait jamais une absence.
+  // S5R-05 : on REJOUE le parcours de la personne avec le même moteur
+  // que le questionnaire (lib/surveyFlow.js) — conditions multiples
+  // (OU) et fins anticipées compris. Seules les questions qu'elle a
+  // réellement VUES comptent : obligatoires pour elle, et seules leurs
+  // réponses sont enregistrées (une réponse à une question qu'elle n'a
+  // pas pu voir est ignorée).
+  const flowQuestions = survey.questions.map(withConditionIds);
+  const chosenOptionIds = (questionId) => {
+    const a = answersByQuestionId.get(questionId);
+    return a?.optionIds ?? (a?.optionId ? [a.optionId] : []);
+  };
+  const visibleIds = visibleQuestionIds(flowQuestions, chosenOptionIds);
+
+  const answerRows = [];
+  for (const questionId of visibleIds) {
+    const question = questionsById.get(questionId);
+    const answer = answersByQuestionId.get(question.id);
+
+    if (!answer) {
+      if (question.required) {
+        rejectAnswer(`La question « ${question.label} » est obligatoire`);
+      }
+      continue; // question optionnelle non répondue : rien à créer
+    }
+
+    answerRows.push(...buildAnswerRows(question, answer, answersByQuestionId));
+  }
+
+  const profileUpdate = {};
+  const visibleSet = new Set(visibleIds);
+  for (const question of survey.questions) {
+    // Seules les questions VUES par la personne mettent à jour son profil
+    if (!question.syncsToProfile || !visibleSet.has(question.id)) continue;
+    const answer = answersByQuestionId.get(question.id);
+    if (!answer?.optionId) continue;
+    const option = question.options.find((o) => o.id === answer.optionId);
+    if (!option?.syncValue) continue;
+    // S5R-05 : « travaille à Senlis » est un oui/non (booléen) ; les
+    // options portent les textes 'true' / 'false', convertis ici
+    profileUpdate[question.syncsToProfile] = question.syncsToProfile === 'travailleASenlis'
+      ? option.syncValue === 'true'
+      : option.syncValue;
+  }
+  // Cohérence du volet « travail » : « non » efface le quartier et le
+  // rôle de travail ; un quartier de travail donné implique « oui »
+  if (profileUpdate.travailleASenlis === false) {
+    profileUpdate.travailleQuartier = null;
+    profileUpdate.travailType = null;
+  }
+  if (profileUpdate.travailleQuartier) profileUpdate.travailleASenlis = true;
+  // Même garde-fou que updateProfile (authController.js) : si la
+  // situation change pour autre chose qu'AUTRE_QUARTIER SANS que
+  // cette même enquête ne resynchronise aussi le quartier, l'ancien
+  // quartier n'aurait plus de sens et resterait périmé en base.
+  if (profileUpdate.situation && profileUpdate.situation !== 'AUTRE_QUARTIER' && !profileUpdate.quartier) {
+    profileUpdate.quartier = null;
+  }
+
+  return { visibleIds, answerRows, profileUpdate };
+}
+
+/** Une enquête avec tout ce qu'il faut pour rejouer un parcours */
+async function loadSurveyForAnswers(surveyId) {
+  const survey = await prisma.survey.findUnique({
+    where: { id: surveyId },
+    // conditions : nécessaires pour rejouer le parcours (S5R-05)
+    include: { questions: { include: { options: true, conditions: { select: { optionId: true } } } } },
+  });
+  if (!survey) {
+    const error = new Error('Enquête introuvable');
+    error.status = 404;
+    error.code = 'NOT_FOUND';
+    throw error;
+  }
+  return survey;
+}
+
 export async function submitResponse(req, res, next) {
   try {
     const { id: surveyId } = req.params;
     const { answers } = req.body;
     const userId = req.user.userId;
 
-    const survey = await prisma.survey.findUnique({
-      where: { id: surveyId },
-      // conditions : nécessaires pour rejouer le parcours (S5R-05)
-      include: { questions: { include: { options: true, conditions: { select: { optionId: true } } } } },
-    });
-
-    if (!survey) {
-      const error = new Error('Enquête introuvable');
-      error.status = 404;
-      error.code = 'NOT_FOUND';
+    // S5R2-01 : une administratrice ne répond jamais « pour de vrai » —
+    // sa réponse fausserait les résultats. Elle utilise le mode test
+    // (POST /surveys/:id/test), illimité et sans aucune écriture.
+    if (req.user.role === 'ADMIN') {
+      const error = new Error("Un compte d'administration ne répond pas aux enquêtes : utilisez « Tester l'enquête »");
+      error.status = 403;
+      error.code = 'ADMIN_CANNOT_RESPOND';
       throw error;
     }
+
+    const survey = await loadSurveyForAnswers(surveyId);
 
     const now = new Date();
     const isClosed = survey.status !== 'OPEN'
@@ -964,54 +1072,13 @@ export async function submitResponse(req, res, next) {
       throw error;
     }
 
-    // Chaque questionId envoyé doit appartenir à CETTE enquête — sans
-    // ce contrôle, rien n'empêcherait (erreur de front, ou appel API
-    // direct) de glisser la réponse à la question d'une AUTRE enquête.
-    const questionsById = new Map(survey.questions.map((q) => [q.id, q]));
-    for (const answer of answers) {
-      if (!questionsById.has(answer.questionId)) {
-        rejectAnswer(`La question ${answer.questionId} n'appartient pas à cette enquête`);
-      }
-    }
-
-    const answersByQuestionId = new Map(answers.map((a) => [a.questionId, a]));
-
-    // On parcourt les QUESTIONS de l'enquête (pas les réponses reçues) :
-    // c'est le seul sens qui permet de détecter une question OBLIGATOIRE
-    // restée sans réponse — l'inverse (parcourir les réponses) ne
-    // remarquerait jamais une absence.
-    // S5R-05 : on REJOUE le parcours de la personne avec le même moteur
-    // que le questionnaire (lib/surveyFlow.js) — conditions multiples
-    // (OU) et fins anticipées compris. Seules les questions qu'elle a
-    // réellement VUES comptent : obligatoires pour elle, et seules leurs
-    // réponses sont enregistrées (une réponse à une question qu'elle n'a
-    // pas pu voir est ignorée).
-    const flowQuestions = survey.questions.map(withConditionIds);
-    const chosenOptionIds = (questionId) => {
-      const a = answersByQuestionId.get(questionId);
-      return a?.optionIds ?? (a?.optionId ? [a.optionId] : []);
-    };
-    const visibleIds = visibleQuestionIds(flowQuestions, chosenOptionIds);
-
-    const answerRows = [];
-    for (const questionId of visibleIds) {
-      const question = questionsById.get(questionId);
-      const answer = answersByQuestionId.get(question.id);
-
-      if (!answer) {
-        if (question.required) {
-          rejectAnswer(`La question « ${question.label} » est obligatoire`);
-        }
-        continue; // question optionnelle non répondue : rien à créer
-      }
-
-      answerRows.push(...buildAnswerRows(question, answer, answersByQuestionId));
-    }
+    // Validation complète (parcours, obligatoires, bornes, limites…)
+    // et préparation des lignes à écrire — voir evaluateSubmission
+    const { answerRows, profileUpdate } = evaluateSubmission(survey, answers);
 
     // $transaction : le bulletin (SurveyResponse) et TOUTES ses lignes
-    // de réponse (Answer) doivent être créés ENSEMBLE ou pas du tout —
-    // un crash au milieu ne doit jamais laisser un bulletin à moitié
-    // rempli en base (le fameux "tout ou rien" du ticket).
+    // de réponse (Answer) sont créés ENSEMBLE ou pas du tout — un crash
+    // au milieu ne laisse jamais un bulletin à moitié rempli en base.
     let response;
     try {
       response = await prisma.$transaction(async (tx) => {
@@ -1051,35 +1118,6 @@ export async function submitResponse(req, res, next) {
     // transaction ci-dessus : le bulletin est la donnée qui compte
     // vraiment pour l'enquête, un souci sur la synchro du profil ne
     // doit jamais faire échouer la soumission elle-même.
-    const profileUpdate = {};
-    const visibleSet = new Set(visibleIds);
-    for (const question of survey.questions) {
-      // Seules les questions VUES par la personne mettent à jour son profil
-      if (!question.syncsToProfile || !visibleSet.has(question.id)) continue;
-      const answer = answersByQuestionId.get(question.id);
-      if (!answer?.optionId) continue;
-      const option = question.options.find((o) => o.id === answer.optionId);
-      if (!option?.syncValue) continue;
-      // S5R-05 : « travaille à Senlis » est un oui/non (booléen) ; les
-      // options portent les textes 'true' / 'false', convertis ici
-      profileUpdate[question.syncsToProfile] = question.syncsToProfile === 'travailleASenlis'
-        ? option.syncValue === 'true'
-        : option.syncValue;
-    }
-    // Cohérence du volet « travail » : « non » efface le quartier et le
-    // rôle de travail ; un quartier de travail donné implique « oui »
-    if (profileUpdate.travailleASenlis === false) {
-      profileUpdate.travailleQuartier = null;
-      profileUpdate.travailType = null;
-    }
-    if (profileUpdate.travailleQuartier) profileUpdate.travailleASenlis = true;
-    // Même garde-fou que updateProfile (authController.js) : si la
-    // situation change pour autre chose qu'AUTRE_QUARTIER SANS que
-    // cette même enquête ne resynchronise aussi le quartier, l'ancien
-    // quartier n'aurait plus de sens et resterait périmé en base.
-    if (profileUpdate.situation && profileUpdate.situation !== 'AUTRE_QUARTIER' && !profileUpdate.quartier) {
-      profileUpdate.quartier = null;
-    }
     if (Object.keys(profileUpdate).length) {
       await prisma.user.update({ where: { id: userId }, data: profileUpdate }).catch((err) => {
         // Une erreur ici (ex. valeur invalide malgré la validation
@@ -1091,6 +1129,33 @@ export async function submitResponse(req, res, next) {
 
     res.status(201).json({
       response: { id: response.id, submittedAt: response.submittedAt },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── POST /surveys/:id/test — mode test de l'administration (S5R2-01) ──
+//
+// Rejoue une soumission complète (evaluateSubmission) et renvoie le
+// parcours suivi, sans RIEN enregistrer : ni réponse, ni mise à jour du
+// profil. Quel que soit le statut (un brouillon se teste aussi) et
+// autant de fois qu'on veut : il n'y a rien à « déjà avoir répondu ».
+export async function testResponse(req, res, next) {
+  try {
+    const survey = await loadSurveyForAnswers(req.params.id);
+    const { visibleIds, answerRows, profileUpdate } = evaluateSubmission(survey, req.body.answers);
+
+    const labelOf = new Map(survey.questions.map((q) => [q.id, q.label]));
+    const answered = new Set(answerRows.map((row) => row.questionId));
+    res.json({
+      test: true,
+      saved: false,
+      // Le parcours tel que la personne l'aurait vécu, dans l'ordre
+      path: visibleIds.map((id) => ({ questionId: id, label: labelOf.get(id), answered: answered.has(id) })),
+      totalQuestions: survey.questions.length,
+      // Ce que la réponse AURAIT changé dans le profil (rien n'est écrit)
+      profileWouldUpdate: Object.keys(profileUpdate),
     });
   } catch (err) {
     next(err);
