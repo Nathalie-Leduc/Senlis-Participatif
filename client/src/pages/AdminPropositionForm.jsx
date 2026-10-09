@@ -16,6 +16,8 @@ import { useState, useEffect, useId, isValidElement, cloneElement } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, assetUrl } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import ZonePicker from '../components/ZonePicker/ZonePicker.jsx';
 import LazyMapView from '../components/MapView/LazyMapView.jsx';
@@ -41,6 +43,8 @@ export default function AdminPropositionForm() {
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(isEdit ? 'Modifier une proposition' : 'Nouvelle proposition');
   const navigate = useNavigate();
+  // S5R2-11 : un compte Admin-test ne travaille que sur des brouillons
+  const { isEditor } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [proposalId, setProposalId] = useState(null);
@@ -261,12 +265,22 @@ export default function AdminPropositionForm() {
         {isEdit ? 'Modifier la proposition' : 'Nouvelle proposition'}
       </h1>
 
+      <EditorBanner />
+
       {error && (
         <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
           {error}
         </div>
       )}
 
+      {/* S5R2-11 : une proposition déjà publiée n'est plus modifiable par
+          un Admin-test — on l'explique au lieu d'un formulaire qui
+          échouerait à l'enregistrement (l'API répondrait 403). */}
+      {isEditor && isEdit && !loading && form.status !== 'DRAFT' ? (
+        <p role="status" style={{ fontSize: 16 }}>
+          Cette proposition n'est plus un brouillon : seule l'administration peut la modifier.
+        </p>
+      ) : (
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <Field label="Titre" hint="Une action concrète, en quelques mots. Ex. : « Piétonniser le centre historique le samedi ».">
           <input
@@ -294,13 +308,21 @@ export default function AdminPropositionForm() {
             choix (voir authController pour la même logique de defaults
             appliquée ailleurs dans le projet). On le laisse quand même
             modifiable ici : rien n'empêche de publier dès la création. */}
-        <Field label="Statut" hint="Brouillon : invisible des citoyens · Publiée : visible, on peut voter · Clôturée : visible, votes fermés.">
-          <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </Field>
+        {/* S5R2-11 : pas de choix de statut pour un Admin-test — il reste
+            « Brouillon », la publication est faite par l'administration */}
+        {isEditor ? (
+          <p style={{ fontSize: 15, margin: 0 }}>
+            <strong>Statut :</strong> Brouillon <span style={{ color: '#6B6257' }}>— la publication est faite par l'administration.</span>
+          </p>
+        ) : (
+          <Field label="Statut" hint="Brouillon : invisible des citoyens · Publiée : visible, on peut voter · Clôturée : visible, votes fermés.">
+            <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </Field>
+        )}
 
         {/* ── Zone concernée (S5R-10) ── */}
         <ZonePicker
@@ -409,6 +431,7 @@ export default function AdminPropositionForm() {
           {saving ? 'Enregistrement…' : (isEdit ? 'Enregistrer les modifications' : 'Créer la proposition')}
         </button>
       </form>
+      )}
     </div>
   );
 }

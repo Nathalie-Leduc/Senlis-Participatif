@@ -14,6 +14,7 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+import { isStaffRole } from '../lib/roles.js';
 import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
 import { MIN_GROUP_SIZE, isTooSmall, maskSmallQuestions } from '../lib/privacy.js';
@@ -155,9 +156,11 @@ export async function getBySlug(req, res, next) {
     });
 
     // req.user n'existe que si optionalAuth a trouvé un JWT valide.
-    const isAdmin = req.user?.role === 'ADMIN';
+    // S5R2-11 : toute l'équipe (ADMIN et Admin-test) voit les brouillons
+    // — c'est là qu'on prépare et qu'on teste.
+    const isStaff = isStaffRole(req.user?.role);
 
-    if (!survey || (!VISIBLE_STATUSES.includes(survey.status) && !isAdmin)) {
+    if (!survey || (!VISIBLE_STATUSES.includes(survey.status) && !isStaff)) {
       const error = new Error('Enquête introuvable');
       error.status = 404;
       error.code = 'NOT_FOUND';
@@ -1038,7 +1041,8 @@ export async function submitResponse(req, res, next) {
     // S5R2-01 : une administratrice ne répond jamais « pour de vrai » —
     // sa réponse fausserait les résultats. Elle utilise le mode test
     // (POST /surveys/:id/test), illimité et sans aucune écriture.
-    if (req.user.role === 'ADMIN') {
+    // S5R2-11 : même règle pour un compte Admin-test (EDITOR).
+    if (isStaffRole(req.user.role)) {
       const error = new Error("Un compte d'administration ne répond pas aux enquêtes : utilisez « Tester l'enquête »");
       error.status = 403;
       error.code = 'ADMIN_CANNOT_RESPOND';

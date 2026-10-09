@@ -22,6 +22,8 @@ import {
 } from '../constants/surveyStatus.js';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
 import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
 import { SURVEY_TEMPLATES, PROFILE_QUESTIONS, instantiateQuestions } from '../constants/surveyTemplates.js';
 import { EMPTY_AUDIENCE } from '../utils/audience.js';
@@ -185,6 +187,8 @@ export default function AdminSurveyForm() {
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(isEdit ? 'Modifier une enquête' : 'Nouvelle enquête');
   const navigate = useNavigate();
+  // S5R2-11 : un compte Admin-test ne travaille que sur des brouillons
+  const { isEditor } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [surveyId, setSurveyId] = useState(null);
@@ -575,6 +579,21 @@ export default function AdminSurveyForm() {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
   }
 
+  // S5R2-11 : une enquête ouverte ou clôturée n'est plus modifiable par
+  // un Admin-test — on l'explique plutôt qu'un formulaire voué au 403.
+  if (isEditor && isEdit && form.status !== 'DRAFT') {
+    return (
+      <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
+        <Link to="/admin/enquetes" style={{ color: '#6B6257', fontSize: 14 }}>← Retour à la liste</Link>
+        <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0 24px' }}>Modifier l'enquête</h1>
+        <EditorBanner />
+        <p role="status" style={{ fontSize: 16 }}>
+          Cette enquête n'est plus un brouillon : seule l'administration peut la modifier.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
       <Link to="/admin/enquetes" style={{ color: '#6B6257', fontSize: 14 }}>← Retour à la liste</Link>
@@ -582,6 +601,8 @@ export default function AdminSurveyForm() {
       <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0 24px' }}>
         {isEdit ? "Modifier l'enquête" : 'Nouvelle enquête'}
       </h1>
+
+      <EditorBanner />
 
       {error && (
         <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
@@ -606,15 +627,22 @@ export default function AdminSurveyForm() {
 
         <AudiencePicker value={form.audience} onChange={(audience) => setForm((f) => ({ ...f, audience }))} />
 
-        <div style={{ display: 'flex', gap: 14 }}>
-          <Field label="Statut" hint="Brouillon : invisible des citoyens · Ouverte : on peut répondre · Clôturée : plus de nouvelles réponses.">
-            <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        {/* S5R2-11 : pas de choix de statut pour un Admin-test */}
+        {isEditor ? (
+          <p style={{ fontSize: 15, margin: 0 }}>
+            <strong>Statut :</strong> Brouillon <span style={{ color: '#6B6257' }}>— l'ouverture aux réponses est faite par l'administration.</span>
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 14 }}>
+            <Field label="Statut" hint="Brouillon : invisible des citoyens · Ouverte : on peut répondre · Clôturée : plus de nouvelles réponses.">
+              <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 14 }}>
           <Field label="Ouverture (optionnel)">

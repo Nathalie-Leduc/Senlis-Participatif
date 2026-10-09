@@ -18,7 +18,8 @@
 // l'inverse, et jamais sans prévenir.
 //
 // Garde-fous :
-//  - les comptes ADMIN ne sont JAMAIS supprimés automatiquement
+//  - les comptes ADMIN et EDITOR (Admin-test, S5R2-11) ne sont JAMAIS
+//    supprimés automatiquement (seul le rôle CITIZEN est purgé)
 //    (perdre le dernier admin bloquerait toute la plateforme) ;
 //  - pas d'avertissement parti (échec SMTP) → pas de suppression :
 //    on ne supprime jamais un compte dont le titulaire n'a pas pu

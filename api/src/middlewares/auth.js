@@ -8,6 +8,8 @@
 //   auth                 → 401 si pas connecté (ou compte supprimé)
 //   optionalAuth         → identifie si possible, ne bloque jamais
 //   isAdmin              → 403 si connecté mais pas ADMIN
+//   isStaff              → 403 si ni ADMIN ni EDITOR (« Admin-test », S5R2-11)
+//   canEditDrafts(model) → un EDITOR ne touche qu'aux BROUILLONS (S5R2-11)
 //   requireVerifiedEmail → 403 si email non vérifié
 //
 // ── S5A-01 : pourquoi relire le compte en base ──────────────
@@ -30,6 +32,7 @@
 
 import { verifyToken } from '../lib/jwt.js';
 import prisma from '../lib/prisma.js';
+import { isStaffRole } from '../lib/roles.js';
 
 /**
  * Retrouve le compte désigné par un JWT, avec ses droits ACTUELS.
@@ -176,6 +179,78 @@ export function isAdmin(req, _res, next) {
     return next(error);
   }
   next();
+}
+
+/**
+ * S5R2-11 : exige un rôle « en cuisine » — ADMIN ou EDITOR (Admin-test).
+ * À chaîner APRÈS auth. Donne accès aux listes d'administration et aux
+ * routes de préparation ; ce qu'un EDITOR peut y MODIFIER est ensuite
+ * limité aux brouillons par canEditDrafts().
+ * Usage : router.get('/admin', auth, isStaff, ctrl.listAdmin);
+ */
+export function isStaff(req, _res, next) {
+  if (!isStaffRole(req.user.role)) {
+    const error = new Error("Accès réservé à l'équipe d'administration");
+    error.status = 403;
+    error.code = 'FORBIDDEN';
+    return next(error);
+  }
+  next();
+}
+
+function draftsOnlyError(message) {
+  const error = new Error(message);
+  error.status = 403;
+  error.code = 'DRAFTS_ONLY';
+  return error;
+}
+
+/**
+ * S5R2-11 : un Admin-test (EDITOR) ne travaille que sur des BROUILLONS.
+ * À chaîner APRÈS auth + isStaff (et après validate, pour lire un
+ * corps déjà vérifié). Un ADMIN passe toujours.
+ *
+ * Deux vérifications, pour un brouillon qui l'est ET LE RESTE :
+ *  1. le corps ne demande jamais de sortir du brouillon — `status`
+ *     autre que DRAFT, ou `resultsPublished: true` → 403 ;
+ *  2. si la route vise un élément existant (`:id`), il doit être
+ *     actuellement en DRAFT → 403 sinon. Élément introuvable : on
+ *     laisse passer, le contrôleur répond son 404 habituel.
+ *
+ * Analogie : l'apprenti peut retoucher une assiette tant qu'elle est
+ * en cuisine ; une fois servie en salle, il n'y touche plus — et il
+ * ne peut pas non plus l'envoyer en salle lui-même.
+ *
+ * @param {'proposal' | 'survey'} model - nom du modèle Prisma visé
+ * @example router.patch('/:id', auth, isStaff, validate(schema), canEditDrafts('survey'), ctrl.update);
+ */
+export function canEditDrafts(model) {
+  return async function canEditDraftsMiddleware(req, _res, next) {
+    try {
+      if (req.user.role === 'ADMIN') return next();
+
+      const body = req.body ?? {};
+      if (body.status !== undefined && body.status !== 'DRAFT') {
+        return next(draftsOnlyError('Un compte Admin-test ne peut pas publier : la publication est faite par l’administration'));
+      }
+      if (body.resultsPublished === true) {
+        return next(draftsOnlyError('Un compte Admin-test ne peut pas publier des résultats'));
+      }
+
+      if (req.params.id) {
+        const item = await prisma[model].findUnique({
+          where: { id: req.params.id },
+          select: { status: true },
+        });
+        if (item && item.status !== 'DRAFT') {
+          return next(draftsOnlyError('Un compte Admin-test ne peut modifier, supprimer ou tester que des brouillons'));
+        }
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
 }
 
 /**

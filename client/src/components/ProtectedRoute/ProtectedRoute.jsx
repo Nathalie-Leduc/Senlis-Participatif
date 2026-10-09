@@ -4,7 +4,8 @@
 // Encapsule les routes qui nécessitent une connexion.
 // Si l'utilisateur n'est pas connecté, il est redirigé
 // vers /connexion. Si adminOnly est true, il faut aussi
-// le rôle ADMIN.
+// le rôle ADMIN. Si staffOnly est true (S5R2-11), ADMIN ou
+// EDITOR (« Admin-test ») suffit — pages de gestion des brouillons.
 //
 // Usage dans App.jsx :
 //   <Route path="/mon-compte" element={
@@ -15,8 +16,8 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
-export default function ProtectedRoute({ children, adminOnly = false }) {
-  const { isLogged, isAdmin, loading } = useAuth();
+export default function ProtectedRoute({ children, adminOnly = false, staffOnly = false }) {
+  const { isLogged, isAdmin, isStaff, loading } = useAuth();
 
   // Pendant le check initial du token, on ne redirige pas
   // (sinon on flashe la page de connexion puis la vraie page)
@@ -27,6 +28,10 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
   }
 
   if (adminOnly && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (staffOnly && !isStaff) {
     return <Navigate to="/" replace />;
   }
 

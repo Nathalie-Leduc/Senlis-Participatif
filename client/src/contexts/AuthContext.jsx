@@ -110,10 +110,14 @@ export function AuthProvider({ children }) {
 
   const isLogged = !!user;
   const isAdmin = user?.role === 'ADMIN';
+  // S5R2-11 : « Admin-test » — prépare et teste des brouillons, ne publie jamais
+  const isEditor = user?.role === 'EDITOR';
+  // L'équipe « en cuisine » : accès aux pages de gestion (ADMIN ou Admin-test)
+  const isStaff = isAdmin || isEditor;
 
   return (
     <AuthContext.Provider value={{
-      user, isLogged, isAdmin, loading,
+      user, isLogged, isAdmin, isEditor, isStaff, loading,
       register, login, verifyTwoFactor, logout, refreshUser, replaceToken,
     }}>
       {children}

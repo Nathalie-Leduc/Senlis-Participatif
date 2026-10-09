@@ -16,6 +16,7 @@
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+import { isStaffRole } from '../lib/roles.js';
 // Prisma (namespace) : pour Prisma.DbNull — même import que lib/prisma.js (Prisma 7)
 import prismaPkg from '../generated/prisma/index.js';
 
@@ -208,9 +209,10 @@ export async function getBySlug(req, res, next) {
     // req.user n'existe que si optionalAuth a trouvé un JWT valide
     // (voir middlewares/auth.js) — un visiteur anonyme n'a pas ce
     // passe-droit, quoi qu'il arrive.
-    const isAdmin = req.user?.role === 'ADMIN';
+    // S5R2-11 : l'Admin-test (EDITOR) aussi — il prépare des brouillons
+    const isStaff = isStaffRole(req.user?.role);
 
-    if (!proposal || (!VISIBLE_STATUSES.includes(proposal.status) && !isAdmin)) {
+    if (!proposal || (!VISIBLE_STATUSES.includes(proposal.status) && !isStaff)) {
       const error = new Error('Proposition introuvable');
       error.status = 404;
       error.code = 'NOT_FOUND';
@@ -523,6 +525,16 @@ export async function castVote(req, res, next) {
     const { id: proposalId } = req.params;
     const { value } = req.body;
     const userId = req.user.userId;
+
+    // S5R2-11 : l'équipe (ADMIN, Admin-test) ne vote pas — son vote
+    // fausserait les résultats d'une consultation dont elle est
+    // l'organisatrice. Retirer un ancien vote reste possible (removeVote).
+    if (isStaffRole(req.user.role)) {
+      const error = new Error("Un compte d'administration ne vote pas : les votes sont réservés aux citoyen·nes");
+      error.status = 403;
+      error.code = 'STAFF_CANNOT_VOTE';
+      throw error;
+    }
 
     const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } });
     assertVotingOpen(proposal); // lève 404 ou 403 VOTES_CLOSED si besoin

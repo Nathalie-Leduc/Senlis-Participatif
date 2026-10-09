@@ -7,6 +7,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { api } from '../services/api.js';
 
+// Connecté·e en administratrice (S5R2-11 : les pages de gestion lisent le rôle)
+vi.mock('../contexts/AuthContext.jsx', () => ({
+  useAuth: () => ({ isLogged: true, isAdmin: true, isEditor: false, isStaff: true, user: { role: 'ADMIN' } }),
+}));
 vi.mock('../services/api.js', () => ({
   api: { get: vi.fn(), post: vi.fn().mockResolvedValue({ proposal: { id: 'p1' } }), patch: vi.fn().mockResolvedValue({ proposal: { id: 'p1' } }) },
   assetUrl: (p) => p,

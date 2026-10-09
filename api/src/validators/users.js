@@ -8,7 +8,8 @@ export const listUsersQuerySchema = z.object({
 });
 
 export const updateUserRoleSchema = z.object({
-  role: z.enum(['CITIZEN', 'ADMIN'], {
+  // S5R2-11 : EDITOR = « Admin-test » (brouillons seulement)
+  role: z.enum(['CITIZEN', 'EDITOR', 'ADMIN'], {
     errorMap: () => ({ message: 'Rôle invalide' }),
   }),
 });

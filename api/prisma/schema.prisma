@@ -36,7 +36,8 @@ datasource db {
 
 enum Role {
   CITIZEN // citoyen inscrit : vote, répond aux enquêtes
-  ADMIN   // toi : crée propositions et enquêtes, modère
+  EDITOR  // « Admin-test » (S5R2-11) : prépare et teste des BROUILLONS, ne publie jamais
+  ADMIN   // toi : crée propositions et enquêtes, modère, publie
 }
 
 enum ProposalStatus {

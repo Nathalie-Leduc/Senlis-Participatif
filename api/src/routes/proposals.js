@@ -2,20 +2,23 @@
 // Routes Propositions — /api/v1/proposals/...
 //
 // 🔓 GET  /proposals          liste publique (paginée)
-// 👑 GET  /proposals/admin    liste ADMIN, tous statuts (brouillons inclus)
+// 🛠️ GET  /proposals/admin    liste d'administration, tous statuts (brouillons inclus)
 // 🔓 GET  /proposals/:slug    détail public + agrégat des votes
-//                             (un admin peut aussi y voir un brouillon)
-// 👑 POST /proposals          créer
-// 👑 PATCH  /proposals/:id    éditer / changer de statut
-// 👑 DELETE /proposals/:id    supprimer
+//                             (l'équipe peut aussi y voir un brouillon)
+// 🛠️ POST /proposals          créer
+// 🛠️ PATCH  /proposals/:id    éditer / changer de statut
+// 🛠️ DELETE /proposals/:id    supprimer
 // 👑 GET    /proposals/:id/stats   résultats détaillés, ?segmentBy=<champ du profil>
-// 🔐 PUT    /proposals/:id/vote     voter (email vérifié)
+// 🔐 PUT    /proposals/:id/vote     voter (email vérifié, citoyen·nes seulement)
 // 🔐 DELETE /proposals/:id/vote     retirer son vote
+//
+// 👑 = ADMIN seulement ; 🛠️ = ADMIN ou EDITOR (« Admin-test », S5R2-11),
+// l'EDITOR étant limité aux BROUILLONS par canEditDrafts()
 // ══════════════════════════════════════════════════════════
 
 import { Router } from 'express';
 import { validate, validateQuery } from '../middlewares/validate.js';
-import { auth, isAdmin, requireVerifiedEmail, optionalAuth } from '../middlewares/auth.js';
+import { auth, isAdmin, isStaff, canEditDrafts, requireVerifiedEmail, optionalAuth } from '../middlewares/auth.js';
 import { uploadImage } from '../middlewares/upload.js';
 import * as ctrl from '../controllers/proposalsController.js';
 import {
@@ -36,7 +39,7 @@ router.get('/', validateQuery(listProposalsQuerySchema), ctrl.list);
 // sinon Express interpréterait "admin" comme une VALEUR de :slug
 // (il cherche une correspondance dans l'ORDRE où les routes sont
 // écrites, et s'arrête à la première qui correspond).
-router.get('/admin', auth, isAdmin, validateQuery(adminListProposalsQuerySchema), ctrl.listAdmin);
+router.get('/admin', auth, isStaff, validateQuery(adminListProposalsQuerySchema), ctrl.listAdmin);
 
 router.get('/:slug', optionalAuth, ctrl.getBySlug);
 
@@ -44,9 +47,9 @@ router.get('/:slug', optionalAuth, ctrl.getBySlug);
 // auth vérifie le JWT ; isAdmin vérifie ENSUITE le rôle — l'ordre
 // compte, on ne peut pas savoir si quelqu'un est admin avant de
 // savoir qui il est.
-router.post('/', auth, isAdmin, validate(createProposalSchema), ctrl.create);
-router.patch('/:id', auth, isAdmin, validate(updateProposalSchema), ctrl.update);
-router.delete('/:id', auth, isAdmin, ctrl.remove);
+router.post('/', auth, isStaff, validate(createProposalSchema), canEditDrafts('proposal'), ctrl.create);
+router.patch('/:id', auth, isStaff, validate(updateProposalSchema), canEditDrafts('proposal'), ctrl.update);
+router.delete('/:id', auth, isStaff, canEditDrafts('proposal'), ctrl.remove);
 // Deux segments d'URL (/:id/stats) : aucune collision possible avec
 // GET /:slug déclaré plus haut, qui n'en a qu'un.
 router.get('/:id/stats', auth, isAdmin, validateQuery(proposalStatsQuerySchema), ctrl.getStats);
@@ -55,7 +58,7 @@ router.get('/:id/stats', auth, isAdmin, validateQuery(proposalStatsQuerySchema),
 // qui lit le multipart/form-data et remplit req.file. Pas de validate()
 // Zod ici — Multer + le contrôleur font déjà leurs propres vérifications
 // (type MIME, présence du fichier).
-router.post('/:id/image', auth, isAdmin, uploadImage, ctrl.uploadImageHandler);
+router.post('/:id/image', auth, isStaff, canEditDrafts('proposal'), uploadImage, ctrl.uploadImageHandler);
 
 // ── Vote (🔐, email vérifié) ─────────────────────────────
 // Même logique d'ordre : auth (qui es-tu) → requireVerifiedEmail
