@@ -12,13 +12,15 @@
 // change ce qu'il fait du formulaire une fois complété.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useId, isValidElement, cloneElement } from 'react';
+import { useState, useEffect, useMemo, useId, isValidElement, cloneElement } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, assetUrl } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
 import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
+import DraftRestorePrompt from '../components/DraftRestorePrompt/DraftRestorePrompt.jsx';
+import { useFormDraft } from '../hooks/useFormDraft.js';
 import { PROPOSAL_TEMPLATES, hasPlaceholders } from '../constants/proposalTemplates.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import ZonePicker from '../components/ZonePicker/ZonePicker.jsx';
@@ -46,13 +48,37 @@ export default function AdminPropositionForm() {
   usePageTitle(isEdit ? 'Modifier une proposition' : 'Nouvelle proposition');
   const navigate = useNavigate();
   // S5R2-11 : un compte Admin-test ne travaille que sur des brouillons
-  const { isEditor } = useAuth();
+  const { user, isEditor } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [proposalId, setProposalId] = useState(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  // S5R2-12 : modèle appliqué en dernier, pour le mettre en valeur (voir
+  // applyTemplate plus bas) — déclaré ici car il fait partie de la
+  // sauvegarde automatique
+  const [appliedTemplateId, setAppliedTemplateId] = useState(null);
+
+  // ── S5R2-13 : sauvegarde automatique de la saisie en cours ──
+  // Tout le formulaire SAUF l'image : un fichier ne se range pas dans
+  // le stockage du navigateur (le bandeau de reprise le précise)
+  const snapshot = useMemo(() => ({ form, appliedTemplateId }), [form, appliedTemplateId]);
+  const draft = useFormDraft({
+    userId: user?.id,
+    scope: isEdit ? `proposal-form:${slug}` : 'proposal-form:new',
+    ready: !loading,
+    snapshot,
+    checkOnMount: !isEdit,
+  });
+  const checkDraft = draft.check;
+
+  const restoreDraft = () => {
+    const data = draft.restore();
+    if (!data) return;
+    setForm(data.form);
+    setAppliedTemplateId(data.appliedTemplateId ?? null);
+  };
 
   // ── Image : traitée à PART du reste du formulaire ────────
   // Pourquoi ? title/summary/content/lat/lng/geoJson partent tous
@@ -95,9 +121,10 @@ export default function AdminPropositionForm() {
         // conversion nécessaire, contrairement au geoJson.
         if (p.imagePath) setImagePreview(assetUrl(p.imagePath));
       })
+      .then(() => checkDraft()) // S5R2-13 : des modifications non enregistrées ?
       .catch((err) => setError(err.message || 'Impossible de charger cette proposition'))
       .finally(() => setLoading(false));
-  }, [slug, isEdit]);
+  }, [slug, isEdit, checkDraft]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -105,8 +132,7 @@ export default function AdminPropositionForm() {
   };
 
   // ── S5R2-12 : partir d'un modèle (création uniquement) ───
-  // Modèle appliqué en dernier, pour le mettre en valeur (comme S5R-09)
-  const [appliedTemplateId, setAppliedTemplateId] = useState(null);
+  // appliedTemplateId (déclaré en haut) : modèle appliqué en dernier
 
   const applyTemplate = (template) => {
     // Texte « à soi » = différent de ce que le modèle précédent avait
@@ -249,6 +275,7 @@ export default function AdminPropositionForm() {
         await api.uploadProposalImage(saved.id, imageFile);
       }
 
+      draft.clear(); // S5R2-13 : enregistrée pour de bon, le brouillon ne sert plus
       navigate('/admin/propositions');
     } catch (err) {
       // Si l'API renvoie des détails de validation (Zod), on affiche
@@ -283,6 +310,26 @@ export default function AdminPropositionForm() {
 
   if (loading) {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
+  }
+
+  // S5R2-13 : une saisie non enregistrée a été retrouvée → on demande
+  // d'abord quoi en faire (le formulaire viendra juste après)
+  if (draft.pending) {
+    return (
+      <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 640 }}>
+        <Link to="/admin/propositions" style={{ color: '#6B6257', fontSize: 14 }}>← Retour à la liste</Link>
+        <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0 24px' }}>
+          {isEdit ? 'Modifier la proposition' : 'Nouvelle proposition'}
+        </h1>
+        <DraftRestorePrompt
+          savedAt={draft.pending.savedAt}
+          what={isEdit ? 'les modifications de cette proposition' : 'une nouvelle proposition'}
+          note="L'image n'est pas gardée : il faudra la choisir à nouveau."
+          onRestore={restoreDraft}
+          onDiscard={draft.discard}
+        />
+      </div>
+    );
   }
 
   return (

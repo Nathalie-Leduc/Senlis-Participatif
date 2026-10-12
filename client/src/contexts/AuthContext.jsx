@@ -15,6 +15,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api.js';
+import { clearAllDrafts } from '../utils/draftStorage.js';
 
 const AuthContext = createContext(null);
 
@@ -99,6 +100,9 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
+    // S5R2-13 : sur un ordinateur partagé, on ne laisse aucune saisie
+    // en cours derrière soi (réponses d'enquête, brouillons d'admin)
+    clearAllDrafts();
     setUser(null);
   }, []);
 
