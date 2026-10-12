@@ -54,7 +54,7 @@ describe('Carte « Explorer » v2', () => {
   it('par défaut : TOUTE LA VILLE, aucun quartier mis en valeur, tous les éléments listés', async () => {
     await renderMap();
     expect(screen.getByRole('checkbox', { name: 'Toute la ville' })).toBeChecked();
-    expect(mapProps.selectedIris).toEqual([]);
+    expect(mapProps.selectedQuartiers).toEqual([]);
     expect(mapProps.neutralIris).toBe(true); // plus de centre doré « par défaut »
     expect(screen.getByRole('link', { name: 'Piétonnisation' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Stationnement' })).toBeInTheDocument();
@@ -70,15 +70,15 @@ describe('Carte « Explorer » v2', () => {
   it('plusieurs quartiers : cases à cocher et clics sur la carte s’additionnent', async () => {
     await renderMap();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Villevert' }));
-    act(() => mapProps.onIrisClick('606120101')); // clic sur le centre historique
+    act(() => mapProps.onQuartierClick('CENTRE_HISTORIQUE')); // clic sur le centre historique (S5R2-06 : par quartier)
     expect(screen.getByRole('checkbox', { name: 'Villevert' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Centre historique' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Toute la ville' })).not.toBeChecked();
-    expect(mapProps.selectedIris).toEqual(['606120201', '606120101']);
+    expect(mapProps.selectedQuartiers).toEqual(['VILLEVERT', 'CENTRE_HISTORIQUE']);
 
     // Revenir à toute la ville
     fireEvent.click(screen.getByRole('checkbox', { name: 'Toute la ville' }));
-    expect(mapProps.selectedIris).toEqual([]);
+    expect(mapProps.selectedQuartiers).toEqual([]);
   });
 
   it('parkings : couche décochée par défaut (320 repères surchargeaient la carte), source affichée une fois cochée', async () => {

@@ -10,6 +10,11 @@
 .stat-pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.15); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,.2); border-radius: $radius-pill; padding: 8px 18px; font: 700 15px $font-body; color: $blanc; .num { font-size: 20px; color: $dore-bright; } }
 .btn { display: inline-flex; align-items: center; gap: 8px; font: 700 17px $font-body; padding: 16px 32px; border-radius: $radius-md; border: none; cursor: pointer; min-height: 52px; @include motion { transition: all .25s $ease-bounce; &:active { transform: translateY(0) scale(.98); } } }
 .btn-gold { background: $dore-bright; color: $ardoise; box-shadow: $shadow-gold; @include motion { &:hover { transform: translateY(-3px) scale(1.02); } } }
+// S5R2-06 : un bouton désactivé doit SE VOIR désactivé (avant, « Suivant »
+// ou « Calculer » grisés restaient identiques à un bouton actif). Opacité
+// ET curseur, jamais la couleur seule ; pas de bond au survol (le
+// translateY des :hover est annulé — !important car ces :hover sont plus précis).
+.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; transform: none !important; }
 .btn-primary { background: $nonette; color: $blanc; box-shadow: $shadow-nonette; @include motion { &:hover { transform: translateY(-3px); } } }
 .btn-ghost { background: rgba(255,255,255,.15); color: $blanc; border: 2px solid rgba(255,255,255,.3); @include motion { &:hover { background: rgba(255,255,255,.25); transform: translateY(-2px); } } }
 .card-joyful { background: $blanc; border-radius: $radius-lg; box-shadow: $shadow-card; @include motion { transition: all .3s $ease-bounce; &:hover { transform: translateY(-8px); box-shadow: $shadow-card-hover; } } }

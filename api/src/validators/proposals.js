@@ -3,6 +3,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { z } from 'zod';
+import { QUARTIERS } from '../lib/quartiers.js';
 
 // Les 6 statuts existent tous côté BDD (schema.prisma), mais un
 // admin ne devrait normalement passer que par certaines transitions
@@ -24,8 +25,8 @@ const lat = z.number().min(-90).max(90).optional();
 const lng = z.number().min(-180).max(180).optional();
 
 // ── Zone concernée (S5R-10) ──────────────────────────────
-// Les 7 quartiers IRIS de Senlis, centre historique compris
-const QUARTIERS = ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'];
+// Les 8 quartiers de Senlis, centre historique et Saint-Vincent compris
+// (liste commune : lib/quartiers.js, S5R2-06)
 const zoneQuartiers = z.array(z.enum(QUARTIERS)).max(QUARTIERS.length)
   .refine((list) => new Set(list).size === list.length, 'Quartier en double');
 

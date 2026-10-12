@@ -19,6 +19,7 @@ import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-l
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Link } from 'react-router-dom';
+import { quartierOfFeature, ZONE_LABELS } from '../../constants/zones.js';
 
 // Icône personnalisée — un pin rond aux couleurs de la charte
 // graphique, avec le cerf en filigrane.
@@ -59,18 +60,23 @@ const PERIMETER_STYLE = {
 // "Centre Ville" mis en évidence en doré : c'est précisément ce que
 // demande le cahier des charges ("permettant d'isoler le centre
 // historique"), pas juste afficher les 7 quartiers au même niveau.
-function irisStyle(feature, selectedIris, neutral) {
+// S5R2-06 : les quartiers sont repérés par leur NOM de quartier
+// (CENTRE_HISTORIQUE, SAINT_VINCENT…), plus par leur code IRIS — deux
+// quartiers du centre partagent le même code.
+function irisStyle(feature, selectedQuartiers, neutral) {
   // S5R-11 : les quartiers choisis sur la carte « Explorer » ressortent en
-  // bleu (un code ou une liste de codes)
-  const selected = Array.isArray(selectedIris) ? selectedIris : [selectedIris].filter(Boolean);
-  if (selected.includes(feature.properties?.code_iris)) {
+  // bleu (un quartier ou une liste de quartiers)
+  const selected = Array.isArray(selectedQuartiers) ? selectedQuartiers : [selectedQuartiers].filter(Boolean);
+  const quartier = quartierOfFeature(feature);
+  if (selected.includes(quartier)) {
     return { color: '#1E5F7C', weight: 3, fillColor: '#1E5F7C', fillOpacity: 0.2 };
   }
   // Carte « Explorer » : tous les quartiers au même niveau (retour du
   // 07/10 : le centre doré « par défaut » laissait croire à une sélection)
   if (neutral) return { color: '#948B7D', weight: 1, fillColor: '#948B7D', fillOpacity: 0.06 };
-  const isCentreVille = feature.properties?.nom_iris === 'Centre Ville';
-  return isCentreVille
+  // Seul le Centre historique est doré (S5R2-06 : Saint-Vincent, séparé
+  // du centre, prend le gris des autres quartiers — couleurs inchangées)
+  return quartier === 'CENTRE_HISTORIQUE'
     ? { color: '#D4A84A', weight: 2, fillColor: '#D4A84A', fillOpacity: 0.25 }
     : { color: '#948B7D', weight: 1, fillColor: '#948B7D', fillOpacity: 0.06 };
 }
@@ -154,9 +160,10 @@ export default function MapView({
   perimeters = [],
   iris = null,
   parkings = [],
-  // S5R-11 : clic sur un quartier (code IRIS) et quartier mis en valeur
-  onIrisClick = null,
-  selectedIris = null,
+  // S5R-11 : clic sur un quartier et quartier(s) mis en valeur — S5R2-06 :
+  // par nom de quartier (ex. 'SAINT_VINCENT'), plus par code IRIS
+  onQuartierClick = null,
+  selectedQuartiers = null,
   neutralIris = false,
   height = 320,
 }) {
@@ -197,17 +204,19 @@ export default function MapView({
           // Même raison que pour les périmètres (contentKey) : la couche
           // n'est dessinée qu'une fois — on la recrée quand le quartier
           // sélectionné change, pour que sa couleur suive
-          key={`iris-${[selectedIris].flat().join(',') || 'aucun'}`}
+          key={`iris-${[selectedQuartiers].flat().join(',') || 'aucun'}`}
           data={iris}
-          style={(feature) => irisStyle(feature, selectedIris, neutralIris)}
+          style={(feature) => irisStyle(feature, selectedQuartiers, neutralIris)}
           onEachFeature={(feature, layer) => {
-            if (onIrisClick) {
+            if (onQuartierClick) {
               // Carte « Explorer » : le clic choisit le quartier (la liste
               // à côté de la carte affiche ce qui le concerne)
-              layer.on('click', () => onIrisClick(feature.properties?.code_iris));
-            } else if (feature.properties?.nom_iris) {
+              layer.on('click', () => onQuartierClick(quartierOfFeature(feature)));
+            } else if (ZONE_LABELS[quartierOfFeature(feature)]) {
               // Ailleurs : chaque quartier affiche son nom au clic
-              layer.bindPopup(`<strong>${feature.properties.nom_iris}</strong>`);
+              // Nom du QUARTIER (« Quartier Saint-Vincent »), pas celui de
+              // l'IRIS (« Centre Ville » valait pour les deux moitiés)
+              layer.bindPopup(`<strong>${ZONE_LABELS[quartierOfFeature(feature)]}</strong>`);
             }
           }}
         />

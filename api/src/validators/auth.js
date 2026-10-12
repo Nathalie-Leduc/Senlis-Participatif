@@ -11,6 +11,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { z } from 'zod';
+import { QUARTIERS, QUARTIERS_RESIDENCE } from '../lib/quartiers.js';
 
 // ── Champs réutilisables ────────────────────────────────
 
@@ -55,13 +56,13 @@ const situation = z.enum(
   { errorMap: () => ({ message: 'Merci de préciser votre situation' }) },
 );
 
-// Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
-// historique (déjà couvert par Situation) — menu affiché en cascade
+// Les quartiers de Senlis autres que le centre historique (déjà
+// couvert par Situation ; liste commune : lib/quartiers.js) — menu affiché en cascade
 // uniquement quand situation = AUTRE_QUARTIER, pour que ces citoyens
 // ne se sentent pas réduits à une case fourre-tout, et pour pouvoir
 // cibler de futures enquêtes/propositions par quartier précis.
 const quartier = z.enum(
-  ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  QUARTIERS_RESIDENCE,
   { errorMap: () => ({ message: 'Merci de préciser votre quartier' }) },
 );
 
@@ -69,7 +70,7 @@ const quartier = z.enum(
 // plus — a du sens comme lieu de TRAVAIL (contrairement à la
 // résidence, où Situation.CENTRE_RESIDENT couvre déjà ce cas).
 const travailleQuartier = z.enum(
-  ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  QUARTIERS,
   { errorMap: () => ({ message: 'Merci de préciser le quartier de travail' }) },
 );
 const travailType = z.enum(
