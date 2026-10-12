@@ -25,6 +25,7 @@ import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
 import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
+import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
 import { SURVEY_TEMPLATES, PROFILE_QUESTIONS, instantiateQuestions } from '../constants/surveyTemplates.js';
 import { EMPTY_AUDIENCE } from '../utils/audience.js';
 
@@ -611,6 +612,21 @@ export default function AdminSurveyForm() {
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* S5R2-12 : le modèle d'abord (création uniquement) — il remplit
+            le titre et la description s'ils sont vides, et les questions */}
+        {!isEdit && (
+          <TemplatePicker
+            templates={SURVEY_TEMPLATES}
+            appliedId={appliedTemplateId}
+            onApply={applyTemplate}
+            intro="Un questionnaire qui fonctionne déjà, à adapter. Le titre et la description du modèle ne remplacent que des champs vides."
+            appliedHint="Modèle appliqué : questions plus bas"
+            status={appliedTemplateId
+              ? `Modèle « ${SURVEY_TEMPLATES.find((t) => t.id === appliedTemplateId)?.name} » appliqué : ${form.questions.length} question${form.questions.length > 1 ? 's' : ''} plus bas.`
+              : ''}
+          />
+        )}
+
         <Field label="Titre" hint="Court et concret. Ex. : « Stationnement dans le centre historique ».">
           <input
             type="text" name="title" value={form.title} onChange={handleChange} required
@@ -665,47 +681,6 @@ export default function AdminSurveyForm() {
             Questions
           </h2>
 
-          {/* S5R-09 : partir d'un modèle (création uniquement) */}
-          {!isEdit && (
-            <section aria-labelledby="templates-title" style={{ marginBottom: 16 }}>
-              <h3 id="templates-title" style={{ fontSize: 15, marginBottom: 8 }}>Partir d'un modèle</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
-                {SURVEY_TEMPLATES.map((template) => {
-                  const applied = appliedTemplateId === template.id;
-                  return (
-                    <button
-                      key={template.id} type="button" onClick={() => applyTemplate(template)}
-                      // aria-pressed : un lecteur d'écran annonce « bouton, enfoncé »
-                      aria-pressed={applied}
-                      style={{
-                        textAlign: 'left', borderRadius: 14, padding: '12px 14px', cursor: 'pointer',
-                        // Sans « inherit », un <button> prend la police du système
-                        // (Ubuntu, Segoe…) au lieu de celle du site
-                        fontFamily: 'inherit',
-                        // Mis en valeur : bordure ET fond ET coche — jamais la couleur seule (RGAA 3.1)
-                        background: applied ? '#E3EEF3' : '#fff',
-                        border: applied ? '3px solid #1E5F7C' : '2px solid #e3dcce',
-                      }}
-                    >
-                      <strong style={{ display: 'block', fontSize: 15, color: '#26333A' }}>
-                        {applied && <span aria-hidden="true">✓ </span>}{template.name}
-                      </strong>
-                      <span style={{ fontSize: 13, color: '#6B6257' }}>{template.summary}</span>
-                      {applied && (
-                        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1E5F7C', marginTop: 6 }}>
-                          Modèle appliqué : questions ci-dessous
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Annonce aux lecteurs d'écran : le contenu a changé plus bas */}
-              <p role="status" className="sr-only">
-                {appliedTemplateId && `Modèle « ${SURVEY_TEMPLATES.find((t) => t.id === appliedTemplateId)?.name} » appliqué : ${form.questions.length} question${form.questions.length > 1 ? 's' : ''} ci-dessous.`}
-              </p>
-            </section>
-          )}
 
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <button

@@ -18,6 +18,8 @@ import { api, assetUrl } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
+import { PROPOSAL_TEMPLATES, hasPlaceholders } from '../constants/proposalTemplates.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import ZonePicker from '../components/ZonePicker/ZonePicker.jsx';
 import LazyMapView from '../components/MapView/LazyMapView.jsx';
@@ -102,6 +104,25 @@ export default function AdminPropositionForm() {
     setError(null);
   };
 
+  // ── S5R2-12 : partir d'un modèle (création uniquement) ───
+  // Modèle appliqué en dernier, pour le mettre en valeur (comme S5R-09)
+  const [appliedTemplateId, setAppliedTemplateId] = useState(null);
+
+  const applyTemplate = (template) => {
+    // Texte « à soi » = différent de ce que le modèle précédent avait
+    // mis. Changer de modèle sans avoir rien écrit ne demande donc pas
+    // de confirmation ; écraser SA propre saisie, si.
+    const previous = PROPOSAL_TEMPLATES.find((t) => t.id === appliedTemplateId);
+    const fromPrevious = { title: previous?.title ?? '', summary: previous?.summaryText ?? '', content: previous?.content ?? '' };
+    const hasOwnText = ['title', 'summary', 'content']
+      .some((field) => form[field].trim() && form[field] !== fromPrevious[field]);
+    if (hasOwnText && !window.confirm("Remplacer le titre, l'accroche et l'argumentaire déjà saisis par ceux du modèle ?")) return;
+
+    setAppliedTemplateId(template.id);
+    setForm((prev) => ({ ...prev, title: template.title, summary: template.summaryText, content: template.content }));
+    setError(null);
+  };
+
   // ── Import d'un fichier .geojson ─────────────────────────
   // Analogie : c'est un copier-coller automatique. On ne fait AUCUNE
   // validation ici — le fichier atterrit tel quel dans le textarea,
@@ -178,6 +199,13 @@ export default function AdminPropositionForm() {
 
     if (form.zoneMode === 'quartiers' && form.zoneQuartiers.length === 0) {
       setError('Cochez au moins un quartier, ou choisissez « toute la ville ».');
+      return;
+    }
+
+    // S5R2-12 : un « [lieu] » oublié d'un modèle se verrait en ligne.
+    // Confirmation plutôt que blocage : des crochets peuvent être voulus.
+    if (hasPlaceholders(form.title, form.summary, form.content)
+      && !window.confirm('Il reste des passages entre [crochets] à compléter. Enregistrer quand même ?')) {
       return;
     }
 
@@ -282,6 +310,20 @@ export default function AdminPropositionForm() {
         </p>
       ) : (
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* S5R2-12 : le modèle d'abord (création uniquement) */}
+        {!isEdit && (
+          <TemplatePicker
+            templates={PROPOSAL_TEMPLATES}
+            appliedId={appliedTemplateId}
+            onApply={applyTemplate}
+            intro="Un exemple de titre et d'accroche, et un argumentaire en quatre rubriques. Remplacez les passages entre [crochets]."
+            appliedHint="Modèle appliqué : textes ci-dessous"
+            status={appliedTemplateId
+              ? `Modèle « ${PROPOSAL_TEMPLATES.find((t) => t.id === appliedTemplateId)?.name} » appliqué : titre, accroche et argumentaire remplis ci-dessous.`
+              : ''}
+          />
+        )}
+
         <Field label="Titre" hint="Une action concrète, en quelques mots. Ex. : « Piétonniser le centre historique le samedi ».">
           <input
             name="title" value={form.title} onChange={handleChange} required
