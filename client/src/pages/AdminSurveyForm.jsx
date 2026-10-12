@@ -85,7 +85,18 @@ const SYNC_VALUE_OPTIONS = {
 // position d'index plutôt que par identité).
 function emptyOption() {
   // endsSurvey (S5R-05) : choisir cette option termine l'enquête
-  return { key: crypto.randomUUID(), label: '', syncValue: null, endsSurvey: false };
+  // conditions (S5R2-02) : clés d'options de questions ANTÉRIEURES ; l'option
+  // n'est proposée que si l'une d'elles a été choisie (vide = toujours)
+  return { key: crypto.randomUUID(), label: '', syncValue: null, endsSurvey: false, conditions: [] };
+}
+
+/**
+ * Toutes les clés d'options dont une question dépend (S5R2-02) : ses
+ * propres conditions ET celles de ses options. Sert à savoir où elle
+ * peut être déplacée, et quelles questions dépendent d'un bloc retiré.
+ */
+function dependencyKeys(q) {
+  return [...q.conditions, ...q.options.flatMap((o) => o.conditions ?? [])];
 }
 
 /**
@@ -157,9 +168,10 @@ export function allowedPositions(questions, index) {
 
   questions.forEach((other, i) => {
     if (i === index) return;
-    const isSource = q.conditions.some((key) => other.options.some((o) => o.key === key))
+    // S5R2-02 : les conditions des OPTIONS comptent comme celles de la question
+    const isSource = dependencyKeys(q).some((key) => other.options.some((o) => o.key === key))
       || q.maxChoicesFromKey === other.key;
-    const isDependent = other.conditions.some((key) => ownOptionKeys.has(key))
+    const isDependent = dependencyKeys(other).some((key) => ownOptionKeys.has(key))
       || other.maxChoicesFromKey === q.key;
     if (isSource) after = after === null ? i : Math.max(after, i);
     if (isDependent) before = before === null ? i : Math.min(before, i);
@@ -247,6 +259,8 @@ export default function AdminSurveyForm() {
             options: q.options.length
               ? q.options.map((o) => ({
                 key: o.id, label: o.label, syncValue: o.syncValue || null, endsSurvey: Boolean(o.endsSurvey),
+                // S5R2-02 : les id des déclencheurs servent de clés, comme les conditions
+                conditions: o.conditionOptionIds || [],
               }))
               : [emptyOption(), emptyOption()],
             // Les id d'options en base servent de clés React (ci-dessus) :
@@ -292,6 +306,8 @@ export default function AdminSurveyForm() {
   const withoutStaleReferences = (q, removedOptionKeys, lostNumberQuestionKey) => ({
     ...q,
     conditions: q.conditions.filter((key) => !removedOptionKeys.has(key)),
+    // S5R2-02 : même nettoyage pour les conditions de chaque option
+    options: q.options.map((o) => ({ ...o, conditions: (o.conditions ?? []).filter((key) => !removedOptionKeys.has(key)) })),
     maxChoicesFromKey: q.maxChoicesFromKey === lostNumberQuestionKey ? null : q.maxChoicesFromKey,
   });
 
@@ -445,7 +461,7 @@ export default function AdminSurveyForm() {
     const blockKeys = new Set(profileBlockKeys);
     const blockOptionKeys = new Set(form.questions.filter((q) => blockKeys.has(q.key)).flatMap((q) => q.options.map((o) => o.key)));
     const dependents = form.questions.filter((q) => !blockKeys.has(q.key)
-      && (q.conditions.some((key) => blockOptionKeys.has(key)) || blockKeys.has(q.maxChoicesFromKey)));
+      && (dependencyKeys(q).some((key) => blockOptionKeys.has(key)) || blockKeys.has(q.maxChoicesFromKey)));
     const message = `Retirer les ${blockKeys.size} questions de profil ?`
       + (dependents.length
         ? ` ${dependents.length} autre${dependents.length > 1 ? 's questions en dépendent' : ' question en dépend'} : ${dependents.length > 1 ? 'leurs conditions' : 'sa condition'} sur ces questions ser${dependents.length > 1 ? 'ont' : 'a'} supprimée${dependents.length > 1 ? 's' : ''}.`
@@ -564,6 +580,13 @@ export default function AdminSurveyForm() {
               // automatiquement (S5R-05) ; sinon la valeur choisie
               syncValue: syncsToProfile === 'travailleASenlis' ? (i === 0 ? 'true' : 'false') : (o.syncValue || undefined),
               endsSurvey: (q.type === 'CHOIX_UNIQUE' || q.type === 'OUI_NON') ? Boolean(o.endsSurvey) : undefined,
+              // S5R2-02 : option conditionnelle — seulement des questions ANTÉRIEURES
+              showIfAny: (() => {
+                const refs = (o.conditions ?? [])
+                  .map((key) => positionOfOption.get(key))
+                  .filter((pos) => pos && pos.questionOrder < questionIndex);
+                return refs.length ? refs : undefined;
+              })(),
             })),
           };
         }
@@ -780,6 +803,7 @@ export default function AdminSurveyForm() {
                 onOptionChange={(optionKey, label) => updateOption(question.key, optionKey, { label })}
                 onOptionSyncValueChange={(optionKey, syncValue) => updateOption(question.key, optionKey, { syncValue: syncValue || null })}
                 onOptionEndsSurveyChange={(optionKey, endsSurvey) => updateOption(question.key, optionKey, { endsSurvey })}
+                onOptionConditionsChange={(optionKey, conditions) => updateOption(question.key, optionKey, { conditions })}
                 onAddOption={() => addOption(question.key)}
                 onRemoveOption={(optionKey) => removeOption(question.key, optionKey)}
               />
@@ -811,7 +835,8 @@ export default function AdminSurveyForm() {
 function QuestionEditor({
   question, index, canRemove, priorOptions, priorNumberQuestions, onChange, onTypeChange, onRemove, onDuplicate,
   total, positions, onMove,
-  onConditionsChange, onOptionChange, onOptionSyncValueChange, onOptionEndsSurveyChange, onAddOption, onRemoveOption,
+  onConditionsChange, onOptionChange, onOptionSyncValueChange, onOptionEndsSurveyChange, onOptionConditionsChange,
+  onAddOption, onRemoveOption,
 }) {
   const canEndSurvey = question.type === 'CHOIX_UNIQUE' || question.type === 'OUI_NON';
   const availableConditions = priorOptions.filter((opt) => !question.conditions.includes(opt.key));
@@ -1080,50 +1105,64 @@ function QuestionEditor({
             )}
           </span>
 
-          {question.options.map((option) => (
-            <div key={option.key} style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="text" value={option.label}
-                placeholder={meta.needsOptions === 'optional' ? (question.options.indexOf(option) === 0 ? 'Oui' : 'Non') : ''}
-                onChange={(e) => onOptionChange(option.key, e.target.value)}
-                style={{ ...inputStyle, flex: 1, minHeight: 42, padding: '9px 12px' }}
-              />
-              {/* Quelle valeur EXACTE écrire dans le profil quand
-                  cette option précise est choisie — ex. l'option
-                  "Je réside dans le centre historique" correspond à
-                  la valeur CENTRE_RESIDENT, pas au texte lui-même. */}
-              {question.syncsToProfile && question.type === 'CHOIX_UNIQUE' && (
-                <select
-                  value={option.syncValue || ''}
-                  onChange={(e) => onOptionSyncValueChange(option.key, e.target.value)}
+          {question.options.map((option, optionIndex) => (
+            <div key={option.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text" value={option.label}
+                  // Un nom pour les lecteurs d'écran (RGAA 11.1) — S5R2-02
+                  aria-label={`Option ${optionIndex + 1} de la question ${index + 1}`}
+                  placeholder={meta.needsOptions === 'optional' ? (question.options.indexOf(option) === 0 ? 'Oui' : 'Non') : ''}
+                  onChange={(e) => onOptionChange(option.key, e.target.value)}
                   style={{ ...inputStyle, flex: 1, minHeight: 42, padding: '9px 12px' }}
-                >
-                  <option value="">Ne correspond à rien</option>
-                  {SYNC_VALUE_OPTIONS[question.syncsToProfile].map((v) => (
-                    <option key={v.value} value={v.value}>{v.label}</option>
-                  ))}
-                </select>
-              )}
-              {/* S5R-05 : « Termine l'enquête » — ex. « Aucun véhicule » */}
-              {canEndSurvey && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
-                  <input
-                    type="checkbox" checked={Boolean(option.endsSurvey)}
-                    onChange={(e) => onOptionEndsSurveyChange(option.key, e.target.checked)}
-                  />
-                  Termine l'enquête
-                </label>
-              )}
-              {/* CHOIX_UNIQUE/CHOIX_MULTIPLE : jamais moins de 2 options
-                  (contrainte de l'API) — bouton masqué en dessous de 3. */}
-              {meta.needsOptions === true && question.options.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => onRemoveOption(option.key)}
-                  style={{ background: '#FCEAE6', color: '#A8442F', border: 'none', borderRadius: 10, padding: '0 14px', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  ×
-                </button>
+                />
+                {/* Quelle valeur EXACTE écrire dans le profil quand
+                    cette option précise est choisie — ex. l'option
+                    "Je réside dans le centre historique" correspond à
+                    la valeur CENTRE_RESIDENT, pas au texte lui-même. */}
+                {question.syncsToProfile && question.type === 'CHOIX_UNIQUE' && (
+                  <select
+                    value={option.syncValue || ''}
+                    onChange={(e) => onOptionSyncValueChange(option.key, e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minHeight: 42, padding: '9px 12px' }}
+                  >
+                    <option value="">Ne correspond à rien</option>
+                    {SYNC_VALUE_OPTIONS[question.syncsToProfile].map((v) => (
+                      <option key={v.value} value={v.value}>{v.label}</option>
+                    ))}
+                  </select>
+                )}
+                {/* S5R-05 : « Termine l'enquête » — ex. « Aucun véhicule » */}
+                {canEndSurvey && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
+                    <input
+                      type="checkbox" checked={Boolean(option.endsSurvey)}
+                      onChange={(e) => onOptionEndsSurveyChange(option.key, e.target.checked)}
+                    />
+                    Termine l'enquête
+                  </label>
+                )}
+                {/* CHOIX_UNIQUE/CHOIX_MULTIPLE : jamais moins de 2 options
+                    (contrainte de l'API) — bouton masqué en dessous de 3. */}
+                {meta.needsOptions === true && question.options.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveOption(option.key)}
+                    style={{ background: '#FCEAE6', color: '#A8442F', border: 'none', borderRadius: 10, padding: '0 14px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              {/* S5R2-02 : option conditionnelle (choix uniquement) */}
+              {priorOptions.length > 0 && question.type !== 'OUI_NON' && (
+                <OptionConditionEditor
+                  option={option}
+                  optionNumber={optionIndex + 1}
+                  questionNumber={index + 1}
+                  priorOptions={priorOptions}
+                  onChange={(conditions) => onOptionConditionsChange(option.key, conditions)}
+                />
               )}
             </div>
           ))}
@@ -1138,6 +1177,64 @@ function QuestionEditor({
             </button>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── S5R2-02 : « Proposer cette option seulement si… » ─────
+// Replié par défaut (la plupart des options sont toujours proposées) :
+// un simple lien sous l'option l'ouvre. Ouvert d'office si l'option a
+// déjà une condition, pour qu'on la voie toujours.
+// Analogie : la mention « sur demande » à côté d'un plat sur un menu.
+function OptionConditionEditor({ option, optionNumber, questionNumber, priorOptions, onChange }) {
+  const conditions = option.conditions ?? [];
+  const [open, setOpen] = useState(conditions.length > 0);
+  const labelOf = (key) => priorOptions.find((o) => o.key === key)?.label ?? key;
+  const available = priorOptions.filter((o) => !conditions.includes(o.key));
+  const name = option.label.trim() ? `« ${option.label.trim()} »` : `l'option ${optionNumber}`;
+
+  if (!open && conditions.length === 0) {
+    return (
+      <button
+        type="button" onClick={() => setOpen(true)}
+        aria-label={`Proposer ${name} de la question ${questionNumber} seulement si…`}
+        style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: '2px 0', color: '#1E5F7C', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+      >
+        + Proposer seulement si…
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginLeft: 12, paddingLeft: 10, borderLeft: '3px solid #E3EEF3', fontSize: 13 }}>
+      <span style={{ fontWeight: 600, color: '#26333A' }}>Proposée seulement si…</span>
+      <span style={{ color: '#6B6257' }}> (une seule condition remplie suffit)</span>
+      {conditions.map((key) => (
+        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0' }}>
+          <span style={{ flex: 1 }}>{labelOf(key)}</span>
+          <button
+            type="button"
+            onClick={() => onChange(conditions.filter((k) => k !== key))}
+            aria-label={`Retirer la condition ${labelOf(key)} de ${name}`}
+            style={{ background: '#FCEAE6', color: '#A8442F', border: 'none', borderRadius: 10, padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Retirer
+          </button>
+        </div>
+      ))}
+      {available.length > 0 && (
+        <select
+          value=""
+          aria-label={`Ajouter une condition à ${name} de la question ${questionNumber}`}
+          onChange={(e) => e.target.value && onChange([...conditions, e.target.value])}
+          style={{ ...inputStyle, width: '100%', marginTop: 4, minHeight: 40, padding: '6px 10px', fontSize: 13 }}
+        >
+          <option value="">{conditions.length ? '+ Ajouter une autre condition (OU)…' : '+ Choisir la réponse qui fait apparaître cette option…'}</option>
+          {available.map((opt) => (
+            <option key={opt.key} value={opt.key}>{opt.label}</option>
+          ))}
+        </select>
       )}
     </div>
   );

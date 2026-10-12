@@ -54,6 +54,13 @@ const questionOptionSchema = z.object({
   // S5R-05 : choisir cette option termine l'enquête (CHOIX_UNIQUE et
   // OUI_NON uniquement — vérifié dans questionSchema plus bas)
   endsSurvey: z.boolean().optional(),
+  // S5R2-02 : option CONDITIONNELLE — proposée seulement si l'une de ces
+  // options d'une question ANTÉRIEURE a été choisie (OU). Même format
+  // de référence par position que les conditions de question.
+  showIfAny: z.array(z.object({
+    questionOrder: z.number().int().min(0),
+    optionOrder: z.number().int().min(0),
+  })).min(1).max(20).optional(),
 });
 
 // Une seule liste de valeurs valides par champ profil ciblé — la

@@ -444,6 +444,14 @@ model QuestionOption {
   // Questions dont l'affichage dépend du choix de cette option (S5R-05)
   conditionsTriggered QuestionCondition[] @relation("ConditionOption")
 
+  // S5R2-02 : options CONDITIONNELLES. Cette option n'est proposée que
+  // si l'une de ces options-déclencheurs a été choisie plus tôt (OU) —
+  // ex. « Bus régional » seulement pour qui réside dans une autre ville.
+  // Vide = toujours proposée.
+  conditions                OptionCondition[] @relation("OptionConditions")
+  // … et, dans l'autre sens, les options qu'ELLE fait apparaître
+  optionConditionsTriggered OptionCondition[] @relation("OptionConditionTrigger")
+
   // Choisir cette option TERMINE l'enquête (S5R-05) : les questions
   // suivantes ne sont plus posées — ex. « 0 véhicule » dans l'enquête
   // stationnement. CHOIX_UNIQUE et OUI_NON uniquement.
@@ -581,6 +589,19 @@ model AdminAuditLog {
 // peut pas être enregistrée deux fois. Cascade des deux côtés : si la
 // question OU l'option disparaît, la condition n'a plus de sens.
 // ══════════════════════════════════════════════════════════
+// S5R2-02 : « l'option optionId n'est proposée que si triggerOptionId
+// a été choisie » — même principe que QuestionCondition, une ligne par
+// déclencheur (plusieurs lignes = OU). Le déclencheur appartient
+// toujours à une question ANTÉRIEURE (vérifié à la création).
+model OptionCondition {
+  optionId        String
+  option          QuestionOption @relation("OptionConditions", fields: [optionId], references: [id], onDelete: Cascade)
+  triggerOptionId String
+  triggerOption   QuestionOption @relation("OptionConditionTrigger", fields: [triggerOptionId], references: [id], onDelete: Cascade)
+
+  @@id([optionId, triggerOptionId])
+}
+
 model QuestionCondition {
   questionId String
   question   Question       @relation("QuestionConditions", fields: [questionId], references: [id], onDelete: Cascade)

@@ -39,7 +39,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Confetti from '../components/Confetti/Confetti.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
-import { visibleQuestionIds, chosenFromAnswers } from '../utils/surveyFlow.js';
+import { visibleQuestionIds, surveyPath, chosenFromAnswers } from '../utils/surveyFlow.js';
 import { loadDraft, clearDraft, formatDraftDate } from '../utils/draftStorage.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 
@@ -101,6 +101,25 @@ export function prefilledOptionFor(question, user) {
   }
   if (question.type === 'OUI_NON') return question.options[0]; // « Oui » toujours en premier
   return question.options?.find((o) => o.syncValue === value) ?? null;
+}
+
+/**
+ * S5R2-02 : la réponse SANS les options qui ne sont plus proposées.
+ * Cas typique : on coche « Bus régional » (proposé car « Autre ville »),
+ * on revient corriger « Senlis » — « Bus régional » disparaît de la
+ * liste, et ne doit plus compter comme réponse (l'API la refuserait).
+ * @param {object | undefined} answer
+ * @param {Set<string> | null} offered - options proposées (null = question sans options)
+ * @returns {object | undefined}
+ */
+export function keepOffered(answer, offered) {
+  if (!answer || !offered) return answer;
+  if (answer.optionId !== undefined) return offered.has(answer.optionId) ? answer : undefined;
+  if (Array.isArray(answer.optionIds)) {
+    const kept = answer.optionIds.filter((id) => offered.has(id));
+    return kept.length ? { optionIds: kept } : undefined;
+  }
+  return answer;
 }
 
 /**
@@ -337,10 +356,17 @@ export default function EnqueteRepondre() {
   // (même moteur que l'API, voir utils/surveyFlow.js). Le total
   // « Question 3 sur N » ne compte donc que les questions qu'elle
   // verra réellement — plus le questionnaire complet, décourageant.
-  const visibleIds = visibleQuestionIds(survey.questions, chosenFromAnswers(answers));
-  const visibleQuestions = visibleIds.map((id) => survey.questions.find((q) => q.id === id));
+  // S5R2-02 : le parcours donne aussi, pour chaque question, les options
+  // PROPOSÉES à cette personne (une option peut être conditionnelle)
+  const path = surveyPath(survey.questions, chosenFromAnswers(answers));
+  const visibleQuestions = path.questionIds.map((id) => survey.questions.find((q) => q.id === id));
+  const offeredFor = (q) => (q.options?.length ? new Set(path.offeredOptions.get(q.id)) : null);
 
-  const question = visibleQuestions[step];
+  const fullQuestion = visibleQuestions[step];
+  // La question telle que la personne la voit : seulement ses options proposées
+  const question = fullQuestion && fullQuestion.options?.length
+    ? { ...fullQuestion, options: fullQuestion.options.filter((o) => offeredFor(fullQuestion).has(o.id)) }
+    : fullQuestion;
   if (!question) {
     // Cas limite improbable (ex. la dernière question visible vient
     // de disparaître suite à un retour en arrière) — on ramène
@@ -348,7 +374,8 @@ export default function EnqueteRepondre() {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
   }
   const total = visibleQuestions.length;
-  const answer = answers[question.id];
+  // Une option cochée puis devenue non proposée ne compte plus
+  const answer = keepOffered(answers[question.id], offeredFor(question));
   const answered = isAnswered(question, answer);
   const rangeError = numberRangeError(question, answer);
   // Limite de cases (S5R-05) : la réponse donnée à la question « Nombre »
@@ -384,7 +411,7 @@ export default function EnqueteRepondre() {
       const payload = {
         answers: visibleQuestions
           .map((q) => {
-            const a = answers[q.id];
+            const a = keepOffered(answers[q.id], offeredFor(q)); // S5R2-02
             if (!isAnswered(q, a)) return null;
             return { questionId: q.id, ...a };
           })

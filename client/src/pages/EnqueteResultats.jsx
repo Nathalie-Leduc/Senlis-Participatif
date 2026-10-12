@@ -128,7 +128,13 @@ function ResultBar({ option }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-        <span>{option.label}</span>
+        <span>
+          {option.label}
+          {/* S5R2-02 : option proposée à une partie des répondants seulement */}
+          {typeof option.offeredTo === 'number' && (
+            <span style={{ color: '#6B6257', fontSize: 13 }}> · proposée à {option.offeredTo} personne{option.offeredTo > 1 ? 's' : ''}</span>
+          )}
+        </span>
         <span style={{ color: '#6B6257' }}>{option.count} — {option.percentage}%</span>
       </div>
       <div ref={ref} className="result-bar" style={{ '--w': `${option.percentage}%` }}>
