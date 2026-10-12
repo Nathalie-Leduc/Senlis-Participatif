@@ -27,7 +27,6 @@ import { loadParkings, parkingMarkers } from '../../utils/osmParkings.js';
 import { itemsForSelection, irisCentroids, mapMarkers, unplacedProposals } from '../../utils/explore.js';
 
 const SENLIS_CENTER = [49.2058, 2.5847];
-const codeOf = (q) => ZONE_QUARTIERS.find((z) => z.value === q)?.codeIris;
 
 /**
  * @param {{ height?: number|string, fullPage?: boolean }} props
@@ -78,9 +77,9 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
   };
 
   const toggleQuartier = (q) => setSelected((list) => (list.includes(q) ? list.filter((v) => v !== q) : [...list, q]));
-  const handleIrisClick = (code) => {
-    const match = ZONE_QUARTIERS.find((z) => z.codeIris === code);
-    if (match) toggleQuartier(match.value);
+  // S5R2-06 : la carte renvoie directement le quartier cliqué
+  const handleQuartierClick = (quartier) => {
+    if (ZONE_QUARTIERS.some((z) => z.value === quartier)) toggleQuartier(quartier);
   };
 
   const items = useMemo(() => itemsForSelection(selected, proposals, surveys), [selected, proposals, surveys]);
@@ -89,7 +88,7 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
   const markers = useMemo(() => mapMarkers({
     proposals: layers.proposals ? items.proposals : [],
     surveys: layers.surveys ? items.surveys : [],
-    centroids, codeOf, selected, cityCenter: SENLIS_CENTER,
+    centroids, selected, cityCenter: SENLIS_CENTER,
   }), [items, layers, centroids, selected]);
   const parkingList = useMemo(() => parkingMarkers(parkings), [parkings]);
 
@@ -117,8 +116,8 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
             zoom={14}
             iris={iris}
             neutralIris
-            selectedIris={selected.map(codeOf)}
-            onIrisClick={handleIrisClick}
+            selectedQuartiers={selected}
+            onQuartierClick={handleQuartierClick}
             markers={markers}
             parkings={layers.parkings ? parkingList : []}
             // Plein écran : toute la hauteur de l'écran ; page /carte : la

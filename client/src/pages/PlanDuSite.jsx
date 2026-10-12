@@ -46,6 +46,8 @@ const ADMIN_LINKS = [
   { to: '/admin/propositions', label: 'Gérer les propositions' },
   { to: '/admin/enquetes', label: 'Gérer les enquêtes' },
   { to: '/admin/comptes', label: 'Gérer les comptes', adminOnly: true },
+  // S5R2-06 : outil de tracé des quartiers (Centre historique / Saint-Vincent)
+  { to: '/admin/quartiers', label: 'Contours des quartiers', adminOnly: true },
 ];
 
 export default function PlanDuSite() {

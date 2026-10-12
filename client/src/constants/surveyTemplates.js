@@ -33,13 +33,15 @@ export const PROFILE_QUESTIONS = [
     label: 'Où résidez-vous ?', type: 'CHOIX_UNIQUE', syncsToProfile: 'situation',
     options: [
       { ref: 'p_centre', label: 'Le centre historique', syncValue: 'CENTRE_RESIDENT' },
-      { ref: 'p_autre', label: 'Un autre quartier de Senlis', syncValue: 'AUTRE_QUARTIER' },
+      // S5R2-06 : Saint-Vincent, séparé du centre, est « un autre quartier »
+      { ref: 'p_autre', label: 'Un autre quartier de Senlis (dont Saint-Vincent)', syncValue: 'AUTRE_QUARTIER' },
       { ref: 'p_hors', label: 'Une autre ville', syncValue: 'HORS_SENLIS' },
     ],
   },
   {
     label: 'Dans quel quartier ?', type: 'CHOIX_UNIQUE', syncsToProfile: 'quartier', showIf: ['p_autre'],
     options: [
+      { label: 'Quartier Saint-Vincent', syncValue: 'SAINT_VINCENT' },
       { label: 'Brichebay', syncValue: 'BRICHEBAY' },
       { label: 'Bon Secours', syncValue: 'BON_SECOURS' },
       { label: "Val d'Aunette - La Gâtelière", syncValue: 'VAL_AUNETTE_GATELIERE' },
@@ -56,6 +58,7 @@ export const PROFILE_QUESTIONS = [
     label: 'Dans quel quartier travaillez-vous ?', type: 'CHOIX_UNIQUE', syncsToProfile: 'travailleQuartier', showIf: ['p_travaille'],
     options: [
       { label: 'Centre historique', syncValue: 'CENTRE_HISTORIQUE' },
+      { label: 'Quartier Saint-Vincent', syncValue: 'SAINT_VINCENT' },
       { label: 'Brichebay', syncValue: 'BRICHEBAY' },
       { label: 'Bon Secours', syncValue: 'BON_SECOURS' },
       { label: "Val d'Aunette - La Gâtelière", syncValue: 'VAL_AUNETTE_GATELIERE' },

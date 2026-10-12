@@ -14,7 +14,9 @@ describe('rattacher une enquête à des quartiers (via son public visé)', () =>
   it('habitants du centre, autres quartiers (précis ou tous), quartiers de travail', () => {
     expect(surveyPlaces(survey({ situations: ['CENTRE_RESIDENT'] }))).toEqual({ wholeCity: false, quartiers: ['CENTRE_HISTORIQUE'] });
     expect(surveyPlaces(survey({ situations: ['AUTRE_QUARTIER'], quartiers: ['VILLEVERT'] })).quartiers).toEqual(['VILLEVERT']);
-    expect(surveyPlaces(survey({ situations: ['AUTRE_QUARTIER'] })).quartiers).toHaveLength(6); // tous sauf le centre
+    // tous sauf le Centre historique — Saint-Vincent compris (S5R2-06)
+    expect(surveyPlaces(survey({ situations: ['AUTRE_QUARTIER'] })).quartiers).toHaveLength(7);
+    expect(surveyPlaces(survey({ situations: ['AUTRE_QUARTIER'] })).quartiers).toContain('SAINT_VINCENT');
     expect(surveyPlaces(survey({ workQuartiers: ['BRICHEBAY'], workTypes: ['COMMERCANT'] })).quartiers).toEqual(['BRICHEBAY']);
   });
 });
@@ -58,8 +60,9 @@ describe('v2 : toute la ville par défaut, un ou plusieurs quartiers', () => {
   });
 
   it('centre d’un quartier = moyenne des sommets de son contour', () => {
-    const iris = { features: [{ properties: { code_iris: 'X' }, geometry: { type: 'Polygon', coordinates: [[[2, 49], [4, 49], [4, 51], [2, 51]]] } }] };
-    expect(irisCentroids(iris).get('X')).toEqual([50, 3]);
+    // S5R2-06 : repéré par QUARTIER (deux quartiers partagent le code IRIS du centre)
+    const iris = { features: [{ properties: { code_iris: '606120101', quartier: 'SAINT_VINCENT' }, geometry: { type: 'Polygon', coordinates: [[[2, 49], [4, 49], [4, 51], [2, 51]]] } }] };
+    expect(irisCentroids(iris).get('SAINT_VINCENT')).toEqual([50, 3]);
   });
 
   it('repères : point précis, sinon centre du quartier, sinon centre-ville ; enquêtes comprises', () => {

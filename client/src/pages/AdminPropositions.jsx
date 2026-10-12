@@ -80,9 +80,15 @@ export default function AdminPropositions() {
         <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28 }}>
           Administration — Propositions
         </h1>
-        <Link to="/admin/propositions/nouvelle" className="btn btn-primary">
-          + Nouvelle proposition
-        </Link>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* S5R2-06 : outil de tracé de Saint-Vincent (zones des propositions) */}
+          {isAdmin && (
+            <Link to="/admin/quartiers" style={{ fontSize: 14, color: '#1E5F7C' }}>Contours des quartiers</Link>
+          )}
+          <Link to="/admin/propositions/nouvelle" className="btn btn-primary">
+            + Nouvelle proposition
+          </Link>
+        </div>
       </div>
 
       <EditorBanner />

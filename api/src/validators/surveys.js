@@ -3,14 +3,15 @@
 // ══════════════════════════════════════════════════════════
 
 import { z } from 'zod';
+import { QUARTIERS, QUARTIERS_RESIDENCE } from '../lib/quartiers.js';
 
 const surveyStatus = z.enum(['DRAFT', 'OPEN', 'CLOSED']);
 // ── Public visé (S5R-07) ──────────────────────────────────
 // Critères de profil combinables ; toutes les listes vides (ou objet
 // absent) = tout le monde. Voir lib/audience.js pour leur logique.
 const SITUATIONS = ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'];
-const QUARTIERS_RESIDENCE = ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'];
-const QUARTIERS_TRAVAIL = ['CENTRE_HISTORIQUE', ...QUARTIERS_RESIDENCE];
+// S5R2-06 : listes communes (lib/quartiers.js), Saint-Vincent compris
+const QUARTIERS_TRAVAIL = QUARTIERS;
 const uniqueList = (values) => z.array(z.enum(values)).max(values.length)
   .refine((list) => new Set(list).size === list.length, 'Valeur en double');
 
@@ -70,8 +71,8 @@ const questionOptionSchema = z.object({
 // généré (voir les autres enums de ce fichier, ex. questionType).
 const SYNC_VALID_VALUES = {
   situation: ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
-  quartier: ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
-  travailleQuartier: ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
+  quartier: QUARTIERS_RESIDENCE,
+  travailleQuartier: QUARTIERS,
   travailType: ['COMMERCANT', 'SALARIE'],
   // S5R-05 : oui / non, écrits en texte dans syncValue ('true' / 'false')
   travailleASenlis: ['true', 'false'],

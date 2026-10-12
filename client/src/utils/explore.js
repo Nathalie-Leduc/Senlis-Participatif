@@ -12,7 +12,7 @@
 // Un élément « toute la ville » apparaît dans CHAQUE quartier.
 // ══════════════════════════════════════════════════════════
 
-import { ZONE_QUARTIERS } from '../constants/zones.js';
+import { ZONE_QUARTIERS, quartierOfFeature } from '../constants/zones.js';
 import { isEveryone } from './audience.js';
 
 const ALL = ZONE_QUARTIERS.map((q) => q.value);
@@ -82,7 +82,8 @@ export function itemsForSelection(selected, proposals, surveys) {
  * contour) : sert à placer sur la carte les propositions et enquêtes
  * rattachées à un quartier SANS point précis. Approximatif, mais
  * toujours DANS le quartier pour des formes aussi compactes.
- * @returns {Map<string, [number, number]>} code IRIS → [lat, lng]
+ * @returns {Map<string, [number, number]>} quartier (ex. 'SAINT_VINCENT') → [lat, lng]
+ *   (S5R2-06 : par quartier, plus par code IRIS — deux quartiers partagent un code)
  */
 export function irisCentroids(iris) {
   const centroids = new Map();
@@ -93,7 +94,7 @@ export function irisCentroids(iris) {
     if (!ring?.length) continue;
     const lng = ring.reduce((sum, [x]) => sum + x, 0) / ring.length;
     const lat = ring.reduce((sum, [, y]) => sum + y, 0) / ring.length;
-    centroids.set(feature.properties?.code_iris, [lat, lng]);
+    centroids.set(quartierOfFeature(feature), [lat, lng]);
   }
   return centroids;
 }
@@ -110,7 +111,7 @@ export function irisCentroids(iris) {
  * @param {object} opts
  * @returns {Array<{ id, lat, lng, label, href, kind }>}
  */
-export function mapMarkers({ proposals, surveys, centroids, codeOf, selected, cityCenter }) {
+export function mapMarkers({ proposals, surveys, centroids, codeOf = (q) => q, selected, cityCenter }) {
   const spots = new Map(); // « lat,lng » → nombre de repères déjà posés là
   const markers = [];
   const place = (id, [lat, lng], item) => {
