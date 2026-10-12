@@ -17,7 +17,7 @@ vi.mock('../services/api.js', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 // Profil volontairement rempli : en mode test, il ne doit RIEN pré-remplir.
 const mockAdmin = { role: 'ADMIN', emailVerified: false, travailleASenlis: true };
 vi.mock('../contexts/AuthContext.jsx', () => ({
-  useAuth: () => ({ user: mockAdmin, isLogged: true, isAdmin: true }),
+  useAuth: () => ({ user: mockAdmin, isLogged: true, isAdmin: true, isStaff: true }),
 }));
 
 const { default: EnqueteRepondre } = await import('./EnqueteRepondre.jsx');

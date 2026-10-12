@@ -93,6 +93,29 @@ describe('Admin-test — ce qu’il peut faire', () => {
   });
 });
 
+describe('Admin-test — tester une enquête déjà en ligne (retour du 09/10)', () => {
+  it('teste une enquête ouverte ou clôturée : validée, rien n’est enregistré', async () => {
+    const { token, user } = await makeEditorUser();
+
+    for (const status of ['OPEN', 'CLOSED']) {
+      const survey = await seedSurvey({ status });
+      const q = survey.questions[0];
+      const res = await request(app).post(`${SURVEYS}/${survey.id}/test`).set(as(token))
+        .send({ answers: [{ questionId: q.id, optionId: q.options[0].id }] });
+      expect(res.status).toBe(200);
+      expect(res.body.saved).toBe(false);
+      // La validation reste la vraie : une question obligatoire oubliée est refusée
+      const empty = await request(app).post(`${SURVEYS}/${survey.id}/test`).set(as(token)).send({ answers: [] });
+      expect(empty.status).toBe(400);
+      // Statut inchangé
+      expect((await prisma.survey.findUnique({ where: { id: survey.id } })).status).toBe(status);
+    }
+
+    expect(await prisma.surveyResponse.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.answer.count()).toBe(0);
+  });
+});
+
 describe('Admin-test — ce qu’il ne peut pas faire (403)', () => {
   it('publier à la création : refusé, rien n’est créé', async () => {
     const { token } = await makeEditorUser();
@@ -122,7 +145,7 @@ describe('Admin-test — ce qu’il ne peut pas faire (403)', () => {
     expect(after.resultsPublished).toBe(false);
   });
 
-  it('modifier, supprimer, tester ou illustrer un élément publié/ouvert : refusé', async () => {
+  it('modifier, supprimer ou illustrer un élément publié/ouvert : refusé', async () => {
     const { token } = await makeEditorUser();
     const published = await seedProposal(); // PUBLISHED
     const open = await seedSurvey(); // OPEN
@@ -133,8 +156,6 @@ describe('Admin-test — ce qu’il ne peut pas faire (403)', () => {
       request(app).post(`${PROPOSALS}/${published.id}/image`).set(as(token)),
       request(app).patch(`${SURVEYS}/${open.id}`).set(as(token)).send({ title: 'Titre modifié en douce' }),
       request(app).delete(`${SURVEYS}/${open.id}`).set(as(token)),
-      request(app).post(`${SURVEYS}/${open.id}/test`).set(as(token))
-        .send({ answers: [{ questionId: open.questions[0].id, optionId: open.questions[0].options[0].id }] }),
     ];
     for (const res of await Promise.all(checks)) {
       expect(res.status).toBe(403);
