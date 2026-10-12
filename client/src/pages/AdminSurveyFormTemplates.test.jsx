@@ -216,12 +216,20 @@ describe('Modèle choisi', () => {
     fireEvent.click(avis);
     expect(avis).toHaveAttribute('aria-pressed', 'true');
     expect(avis).toHaveTextContent('Modèle appliqué');
-    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Modèle « Avis sur un projet » appliqué : 4 questions ci-dessous.');
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Modèle « Avis sur un projet » appliqué : 4 questions plus bas.');
 
     const sondage = screen.getByRole('button', { name: /Sondage rapide/ });
     fireEvent.click(sondage);
     expect(sondage).toHaveAttribute('aria-pressed', 'true');
     expect(avis).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('S5R2-12 : le choix du modèle est le PREMIER bloc, avant le titre', () => {
+    renderForm();
+    const templates = screen.getByRole('heading', { name: "Partir d'un modèle" });
+    const title = screen.getByLabelText('Titre');
+    // DOCUMENT_POSITION_FOLLOWING : le titre vient APRÈS le bloc des modèles
+    expect(templates.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('refuser la confirmation ne change pas le modèle mis en valeur', () => {
