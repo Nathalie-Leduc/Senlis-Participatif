@@ -17,6 +17,13 @@
 // dernière page (Terminer = un seul envoi groupé, jamais un envoi
 // par question).
 //
+// S5R2-13 — REPRISE : les réponses déjà données et la question atteinte
+// sont gardées dans le navigateur à chaque changement. En revenant, on
+// reprend au même endroit (« ← Précédent » fonctionne toujours, toutes
+// les réponses antérieures étant là), avec un lien « Recommencer à
+// zéro ». Effacé à l'envoi, à la déconnexion, au bout de 7 jours ;
+// jamais en mode test. Analogie : le marque-page dans un livre.
+//
 // S5R2-01 — MODE TEST (administratrice) : la même page, le même
 // moteur, mais une « répétition générale » : le statut n'est pas
 // vérifié (on teste surtout les BROUILLONS), le profil de l'admin
@@ -26,13 +33,15 @@
 // du chemin parcouru et un bouton « Recommencer le test ».
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Confetti from '../components/Confetti/Confetti.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { visibleQuestionIds, chosenFromAnswers } from '../utils/surveyFlow.js';
+import { loadDraft, clearDraft, formatDraftDate } from '../utils/draftStorage.js';
+import { useFormDraft } from '../hooks/useFormDraft.js';
 
 // Une réponse est-elle "remplie" pour CETTE question ? Dépend du
 // type — un CHOIX_MULTIPLE vide (aucune case cochée) n'est pas
@@ -94,6 +103,45 @@ export function prefilledOptionFor(question, user) {
   return question.options?.find((o) => o.syncValue === value) ?? null;
 }
 
+/**
+ * S5R2-13 : remet en place des réponses sauvegardées, en ne gardant que
+ * ce qui a encore un sens pour l'enquête TELLE QU'ELLE EST aujourd'hui
+ * (une question ou une option a pu être retirée entre-temps).
+ * @param {{ questions: Array<{ id: string, options: Array<{ id: string }> }> }} survey
+ * @param {Record<string, object>} saved - { [questionId]: réponse }
+ * @returns {Record<string, object>}
+ */
+export function restoreAnswers(survey, saved) {
+  const restored = {};
+  for (const question of survey.questions) {
+    const answer = saved?.[question.id];
+    if (!answer || typeof answer !== 'object') continue;
+    const optionIds = new Set(question.options.map((o) => o.id));
+    if (answer.optionId !== undefined) {
+      if (optionIds.has(answer.optionId)) restored[question.id] = { optionId: answer.optionId };
+    } else if (Array.isArray(answer.optionIds)) {
+      const kept = answer.optionIds.filter((id) => optionIds.has(id));
+      if (kept.length) restored[question.id] = { optionIds: kept };
+    } else if (typeof answer.valueNumber === 'number') {
+      restored[question.id] = { valueNumber: answer.valueNumber };
+    } else if (typeof answer.valueText === 'string') {
+      restored[question.id] = { valueText: answer.valueText };
+    }
+  }
+  return restored;
+}
+
+/**
+ * S5R2-13 : la question où reprendre — jamais au-delà de la dernière
+ * question VISIBLE avec ces réponses (sinon la page n'aurait rien à
+ * afficher).
+ */
+export function resumeStep(survey, answers, savedStep) {
+  const visibleCount = visibleQuestionIds(survey.questions, chosenFromAnswers(answers)).length;
+  const step = Number.isInteger(savedStep) ? savedStep : 0;
+  return Math.max(0, Math.min(step, visibleCount - 1));
+}
+
 const PROFILE_PREFILL_LABELS = {
   travailleASenlis: 'Vous travaillez à Senlis :',
   situation: 'Vous résidez :',
@@ -120,6 +168,21 @@ export default function EnqueteRepondre() {
   const [done, setDone] = useState(false);
   // S5R2-01 : réponse de POST /test — { path, totalQuestions, profileWouldUpdate }
   const [testResult, setTestResult] = useState(null);
+  // S5R2-13 : date des réponses reprises (pour le message « reprises du… »)
+  // et réponses venues du profil (point de départ de « Recommencer »)
+  const [resumedAt, setResumedAt] = useState(null);
+  const prefilledRef = useRef({});
+
+  // ── S5R2-13 : sauvegarde automatique des réponses en cours ──
+  // Jamais en mode test (rien ne doit rester d'un test), ni après l'envoi
+  const draftScope = `survey-answers:${survey?.id}`;
+  const snapshot = useMemo(() => ({ answers, step }), [answers, step]);
+  const draft = useFormDraft({
+    userId: user?.id,
+    scope: draftScope,
+    ready: Boolean(survey) && !testMode && !done,
+    snapshot,
+  });
   // Une question pré-remplie depuis le profil s'affiche en lecture
   // seule (voir plus bas) — ce drapeau permet de basculer vers le
   // champ interactif normal si la personne clique sur "Modifier".
@@ -158,6 +221,9 @@ export default function EnqueteRepondre() {
           return;
         }
         if (!testMode && data.hasResponded) {
+          // Répondu entre-temps (autre appareil, autre onglet) : la
+          // saisie gardée ici ne servira plus jamais
+          clearDraft(user?.id, `survey-answers:${data.survey.id}`);
           setError('Vous avez déjà répondu à cette enquête.');
           return;
         }
@@ -175,6 +241,18 @@ export default function EnqueteRepondre() {
         for (const q of data.survey.questions) {
           const option = prefilledOptionFor(q, user);
           if (option) prefilled[q.id] = { optionId: option.id };
+        }
+        prefilledRef.current = prefilled;
+
+        // S5R2-13 : des réponses déjà commencées ? On reprend où on en
+        // était — ce que la personne avait répondu l'emporte sur le profil
+        const saved = loadDraft(user?.id, `survey-answers:${data.survey.id}`);
+        if (saved) {
+          const restored = { ...prefilled, ...restoreAnswers(data.survey, saved.data?.answers) };
+          setAnswers(restored);
+          setStep(resumeStep(data.survey, restored, saved.data?.step));
+          setResumedAt(saved.savedAt);
+          return;
         }
         if (Object.keys(prefilled).length) setAnswers(prefilled);
       })
@@ -318,6 +396,7 @@ export default function EnqueteRepondre() {
         setTestResult(result);
       } else {
         await api.post(`/surveys/${survey.id}/responses`, payload);
+        draft.clear(); // S5R2-13 : envoyé pour de bon, plus rien à garder
       }
       setDone(true);
     } catch (err) {
@@ -325,6 +404,17 @@ export default function EnqueteRepondre() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // S5R2-13 : « Recommencer à zéro » — on oublie les réponses gardées
+  // (sauf celles venues du profil, comme à une première visite)
+  const restartFromScratch = () => {
+    // discard (et non clear) : le nouveau point de départ n'est pas
+    // ré-enregistré tant que la personne n'a rien répondu
+    draft.discard();
+    setAnswers(prefilledRef.current);
+    setStep(0);
+    setResumedAt(null);
   };
 
   const handlePrevious = () => {
@@ -338,6 +428,22 @@ export default function EnqueteRepondre() {
       </Link>
 
       {testMode && <TestBanner status={survey.status} />}
+
+      {/* S5R2-13 : on dit qu'on a repris — et comment repartir de zéro */}
+      {resumedAt && (
+        <p role="status" style={{
+          background: '#E3F0F6', borderRadius: 12, padding: '10px 14px', marginTop: 16, fontSize: 15,
+        }}
+        >
+          Nous avons repris vos réponses du {formatDraftDate(resumedAt)}.{' '}
+          <button
+            type="button" onClick={restartFromScratch}
+            style={{ background: 'none', border: 'none', padding: 0, color: '#1E5F7C', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}
+          >
+            Recommencer à zéro
+          </button>
+        </p>
+      )}
 
       {/* ── Barre de progression ─────────────────────────── */}
       <div style={{ margin: '20px 0 8px' }}>

@@ -21,7 +21,7 @@
 // ══════════════════════════════════════════════════════════
 
 /** Date de dernière mise à jour des deux pages (à changer à chaque modification de fond). */
-export const LAST_UPDATED = '25 septembre 2026';
+export const LAST_UPDATED = '12 octobre 2026';
 
 export const SITE = {
   name: 'Senlis Participatif',
@@ -100,7 +100,9 @@ export const RECIPIENTS = [
  * délibération CNIL n° 2020-091).
  *
  * `key` doit correspondre EXACTEMENT à la clé utilisée dans le code :
- * le test LegalPages.test.jsx le vérifie dans les deux sens.
+ * le test LegalPages.test.jsx le vérifie dans les deux sens. Une clé
+ * qui se termine par « * » est une FAMILLE de clés de même préfixe
+ * (ex. un brouillon par compte et par formulaire, S5R2-13).
  */
 export const BROWSER_STORAGE = [
   {
@@ -132,6 +134,13 @@ export const BROWSER_STORAGE = [
     storage: 'sessionStorage',
     purpose: 'Retenir un vote cliqué avant la connexion, pour l’enregistrer juste après',
     duration: 'Jusqu’à la fermeture de l’onglet',
+  },
+  {
+    // S5R2-13 : un brouillon par compte et par formulaire
+    key: 'senlis:draft:*',
+    storage: 'localStorage',
+    purpose: 'Garder une saisie en cours (réponses à une enquête commencée ; pour l’administration, enquête ou proposition en préparation) pour la reprendre plus tard sur ce navigateur — rien n’est envoyé avant que vous validiez',
+    duration: 'Jusqu’à l’envoi, la déconnexion, ou 7 jours au plus',
   },
 ];
 

@@ -14,7 +14,7 @@
 // jamais mélanger les autres.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useId, isValidElement, cloneElement } from 'react';
+import { useState, useEffect, useMemo, useId, isValidElement, cloneElement } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import {
@@ -24,6 +24,8 @@ import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import DraftRestorePrompt from '../components/DraftRestorePrompt/DraftRestorePrompt.jsx';
+import { useFormDraft } from '../hooks/useFormDraft.js';
 import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
 import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
 import { SURVEY_TEMPLATES, PROFILE_QUESTIONS, instantiateQuestions } from '../constants/surveyTemplates.js';
@@ -189,13 +191,35 @@ export default function AdminSurveyForm() {
   usePageTitle(isEdit ? 'Modifier une enquête' : 'Nouvelle enquête');
   const navigate = useNavigate();
   // S5R2-11 : un compte Admin-test ne travaille que sur des brouillons
-  const { isEditor } = useAuth();
+  const { user, isEditor } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [surveyId, setSurveyId] = useState(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  // Modèle appliqué en dernier (S5R-09, voir applyTemplate plus bas) —
+  // déclaré ici car il fait partie de la sauvegarde automatique
+  const [appliedTemplateId, setAppliedTemplateId] = useState(null);
+
+  // ── S5R2-13 : sauvegarde automatique de la saisie en cours ──
+  // Une clé par enquête modifiée, une pour « nouvelle enquête »
+  const snapshot = useMemo(() => ({ form, appliedTemplateId }), [form, appliedTemplateId]);
+  const draft = useFormDraft({
+    userId: user?.id,
+    scope: isEdit ? `survey-form:${slug}` : 'survey-form:new',
+    ready: !loading,
+    snapshot,
+    checkOnMount: !isEdit,
+  });
+  const checkDraft = draft.check;
+
+  const restoreDraft = () => {
+    const data = draft.restore();
+    if (!data) return;
+    setForm(data.form);
+    setAppliedTemplateId(data.appliedTemplateId ?? null);
+  };
 
   // ── En mode édition, charger l'enquête existante ─────────
   useEffect(() => {
@@ -236,9 +260,10 @@ export default function AdminSurveyForm() {
           })),
         });
       })
+      .then(() => checkDraft()) // S5R2-13 : des modifications non enregistrées ?
       .catch((err) => setError(err.message || 'Impossible de charger cette enquête'))
       .finally(() => setLoading(false));
-  }, [slug, isEdit]);
+  }, [slug, isEdit, checkDraft]);
 
   // ── Champs "de l'enquête" (niveau racine) ────────────────
   const handleChange = (e) => {
@@ -378,9 +403,9 @@ export default function AdminSurveyForm() {
   };
 
   // ── S5R-09 : partir d'un modèle ──────────────────────────
-  // Modèle appliqué en dernier (retour du 03/10 : « on ne voit pas le
-  // modèle choisi quand on clique dessus ») — sert à le mettre en valeur
-  const [appliedTemplateId, setAppliedTemplateId] = useState(null);
+  // appliedTemplateId (déclaré en haut) : modèle appliqué en dernier
+  // (retour du 03/10 : « on ne voit pas le modèle choisi quand on
+  // clique dessus ») — sert à le mettre en valeur
 
   const applyTemplate = (template) => {
     const hasContent = form.questions.some((q) => q.label.trim());
@@ -562,6 +587,7 @@ export default function AdminSurveyForm() {
         await api.post('/surveys', payload);
       }
 
+      draft.clear(); // S5R2-13 : enregistré pour de bon, le brouillon ne sert plus
       navigate('/admin/enquetes');
     } catch (err) {
       // Même convention que AdminPropositionForm : premier détail Zod
@@ -591,6 +617,25 @@ export default function AdminSurveyForm() {
         <p role="status" style={{ fontSize: 16 }}>
           Cette enquête n'est plus un brouillon : seule l'administration peut la modifier.
         </p>
+      </div>
+    );
+  }
+
+  // S5R2-13 : une saisie non enregistrée a été retrouvée → on demande
+  // d'abord quoi en faire (le formulaire viendra juste après)
+  if (draft.pending) {
+    return (
+      <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
+        <Link to="/admin/enquetes" style={{ color: '#6B6257', fontSize: 14 }}>← Retour à la liste</Link>
+        <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0 24px' }}>
+          {isEdit ? "Modifier l'enquête" : 'Nouvelle enquête'}
+        </h1>
+        <DraftRestorePrompt
+          savedAt={draft.pending.savedAt}
+          what={isEdit ? 'les modifications de cette enquête' : 'une nouvelle enquête'}
+          onRestore={restoreDraft}
+          onDiscard={draft.discard}
+        />
       </div>
     );
   }
