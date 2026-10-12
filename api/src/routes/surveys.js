@@ -10,7 +10,8 @@
 // 🛠️ POST /surveys          créer (questions/options imbriquées)
 // 🛠️ PATCH  /surveys/:id    éditer (questions = remplacement complet si fourni)
 // 🛠️ DELETE /surveys/:id    supprimer
-// 🛠️ POST /surveys/:id/test mode test : rien n'est enregistré (S5R2-01)
+// 🛠️ POST /surveys/:id/test mode test : rien n'est enregistré (S5R2-01) —
+//                           tout statut, Admin-test compris (retour du 09/10)
 // 🔐 POST /surveys/:id/responses  répondre (citoyen·nes seulement)
 //
 // 👑 = ADMIN seulement ; 🛠️ = ADMIN ou EDITOR (« Admin-test », S5R2-11),
@@ -56,7 +57,11 @@ router.delete('/:id', auth, isStaff, canEditDrafts('survey'), ctrl.remove);
 // ── Mode test de l'administration (S5R2-01) ─────────────
 // Même validation qu'une vraie réponse, rien n'est enregistré ; tout
 // statut (un brouillon se teste aussi), autant de fois que voulu.
-router.post('/:id/test', auth, isStaff, validate(submitResponseSchema), canEditDrafts('survey'), ctrl.testResponse);
+// Pas de canEditDrafts ici : le mode test n'écrit RIEN en base. L'Admin-test
+// peut donc rejouer une enquête ouverte ou clôturée (préparer une variante,
+// vérifier un parcours signalé par un citoyen) sans aucun risque — comme
+// goûter une assiette déjà en salle sans pouvoir la modifier.
+router.post('/:id/test', auth, isStaff, validate(submitResponseSchema), ctrl.testResponse);
 
 // ── Réponse (🔐, email vérifié — même exigence que le vote) ──
 router.post(

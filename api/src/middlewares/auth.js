@@ -243,7 +243,7 @@ export function canEditDrafts(model) {
           select: { status: true },
         });
         if (item && item.status !== 'DRAFT') {
-          return next(draftsOnlyError('Un compte Admin-test ne peut modifier, supprimer ou tester que des brouillons'));
+          return next(draftsOnlyError('Un compte Admin-test ne peut modifier ou supprimer que des brouillons'));
         }
       }
       next();

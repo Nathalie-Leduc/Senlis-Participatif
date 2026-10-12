@@ -61,6 +61,8 @@ describe('Admin-test — listes de gestion', () => {
 
     const open = rowOf('Enquête ouverte');
     expect(open.getByRole('link', { name: /Voir/ })).toBeInTheDocument();
+    // Retour du 09/10 : on teste aussi une enquête déjà ouverte (rien n'est enregistré)
+    expect(open.getByRole('link', { name: /Tester/ })).toHaveAttribute('href', '/enquetes/ouverte/repondre');
     expect(open.queryByRole('link', { name: 'Modifier' })).toBeNull();
     expect(open.queryByRole('button', { name: 'Supprimer' })).toBeNull();
 
@@ -122,20 +124,12 @@ describe('Admin-test — page publique d’une enquête', () => {
     id: 's1', slug: 'x', title: 'Enquête', description: 'Desc', status, audience: null, questions: [],
   });
 
-  it('brouillon : « Tester l’enquête » ; ouverte : ni tester ni répondre', async () => {
-    api.get.mockResolvedValueOnce({ survey: survey('DRAFT'), hasResponded: false });
-    const { unmount } = render(
-      <MemoryRouter initialEntries={['/enquetes/x']}><Routes><Route path="/enquetes/:slug" element={<EnqueteDetail />} /></Routes></MemoryRouter>,
-    );
-    expect(await screen.findByRole('button', { name: /Tester l'enquête/ })).toBeInTheDocument();
-    unmount();
-
-    api.get.mockResolvedValueOnce({ survey: survey('OPEN'), hasResponded: false });
+  it.each(['DRAFT', 'OPEN', 'CLOSED'])('%s : « Tester l’enquête », jamais « Répondre »', async (status) => {
+    api.get.mockResolvedValueOnce({ survey: survey(status), hasResponded: false });
     render(
       <MemoryRouter initialEntries={['/enquetes/x']}><Routes><Route path="/enquetes/:slug" element={<EnqueteDetail />} /></Routes></MemoryRouter>,
     );
-    await screen.findByText('Voir les résultats');
-    expect(screen.queryByRole('button', { name: /Tester/ })).toBeNull();
+    expect(await screen.findByRole('button', { name: /Tester l'enquête/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Répondre/ })).toBeNull();
   });
 });

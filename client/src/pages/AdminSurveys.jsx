@@ -6,9 +6,10 @@
 // seulement les enquêtes déjà ouvertes.
 //
 // S5R2-11 : un compte Admin-test (EDITOR) voit la même liste ;
-// « Modifier », « Tester » et « Supprimer » n'apparaissent que sur
-// les brouillons, « Résultats détaillés » et « Publier les résultats »
-// jamais (réservés à l'administration — l'API répondrait 403).
+// « Modifier » et « Supprimer » n'apparaissent que sur les brouillons,
+// « Résultats détaillés » et « Publier les résultats » jamais (réservés
+// à l'administration — l'API répondrait 403). « Tester » est proposé
+// sur TOUTES les lignes : le mode test n'enregistre rien (09/10).
 // ══════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
@@ -162,17 +163,18 @@ export default function AdminSurveys() {
                       >
                         Modifier
                       </Link>
-                      {/* S5R2-01/11 : le mode test, directement depuis la liste */}
-                      <Link
-                        to={`/enquetes/${s.slug}/repondre`}
-                        className="btn"
-                        aria-label={`Tester « ${s.title} » (rien n'est enregistré)`}
-                        style={{ background: '#FFF4D6', color: '#5C4510', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
-                      >
-                        🧪 Tester
-                      </Link>
                     </>
                   )}
+                  {/* S5R2-01/11 : le mode test, directement depuis la liste,
+                      quel que soit le statut (rien n'est enregistré) */}
+                  <Link
+                    to={`/enquetes/${s.slug}/repondre`}
+                    className="btn"
+                    aria-label={`Tester « ${s.title} » (rien n'est enregistré)`}
+                    style={{ background: '#FFF4D6', color: '#5C4510', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                  >
+                    🧪 Tester
+                  </Link>
                   {isAdmin && (
                     <>
                       <Link
