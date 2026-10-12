@@ -18,7 +18,7 @@ import { isStaffRole } from '../lib/roles.js';
 import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { generateUniqueSlug } from '../lib/slug.js';
 import { MIN_GROUP_SIZE, isTooSmall, maskSmallQuestions } from '../lib/privacy.js';
-import { visibleQuestionIds, withConditionIds } from '../lib/surveyFlow.js';
+import { surveyPath, withConditionIds } from '../lib/surveyFlow.js';
 import { audienceOf, matchesAudience, isEveryone, AUDIENCE_PROFILE_SELECT } from '../lib/audience.js';
 import { toNestedQuestionsCreate, resolveReferences, questionsUnchanged } from '../services/surveyBuilder.js';
 
@@ -49,7 +49,8 @@ const QUESTIONS_INCLUDE = {
   questions: {
     orderBy: { order: 'asc' },
     include: {
-      options: { orderBy: { order: 'asc' } },
+      // S5R2-02 : chaque option porte ses propres conditions (déclencheurs)
+      options: { orderBy: { order: 'asc' }, include: { conditions: { select: { triggerOptionId: true } } } },
       // S5R-05 : les conditions d'affichage (OU) de chaque question
       conditions: { select: { optionId: true } },
     },
@@ -519,14 +520,22 @@ async function computeResults(survey, { detailed = false, responseIds = null } =
   // (lib/surveyFlow.js).
   const flowQuestions = survey.questions.map(withConditionIds);
   const seenCount = new Map();
+  // S5R2-02 : à combien de personnes chaque option conditionnelle a-t-elle
+  // été PROPOSÉE ? (« Bus régional : 3 choix sur 8 personnes à qui on l'a
+  // proposé » se lit mieux qu'un pourcentage sur tous les répondants)
+  const offeredCount = new Map();
   for (const response of responsesForFlow) {
     const chosen = new Map();
     for (const a of response.answers) {
       if (!chosen.has(a.questionId)) chosen.set(a.questionId, []);
       chosen.get(a.questionId).push(a.optionId);
     }
-    for (const id of visibleQuestionIds(flowQuestions, (qid) => chosen.get(qid) ?? [])) {
+    const path = surveyPath(flowQuestions, (qid) => chosen.get(qid) ?? []);
+    for (const id of path.questionIds) {
       seenCount.set(id, (seenCount.get(id) || 0) + 1);
+      for (const optionId of path.offeredOptions.get(id) ?? []) {
+        offeredCount.set(optionId, (offeredCount.get(optionId) || 0) + 1);
+      }
     }
   }
 
@@ -553,6 +562,8 @@ async function computeResults(survey, { detailed = false, responseIds = null } =
           percentage: questionTotal > 0
             ? Math.round((count / questionTotal) * 1000) / 10
             : 0,
+          // S5R2-02 : seulement pour une option conditionnelle
+          ...(option.conditionOptionIds?.length && { offeredTo: offeredCount.get(option.id) || 0 }),
         };
       });
       return { ...base, options };
@@ -834,7 +845,17 @@ function rejectAnswer(message) {
 // par l'appelant) et retourne les lignes Answer à créer. Un tableau
 // en retour, pas un objet : CHOIX_MULTIPLE peut produire plusieurs
 // lignes pour une seule réponse (une ligne par option cochée).
-function buildAnswerRows(question, answer, answersByQuestionId) {
+//
+// S5R2-02 : `offered` = les options PROPOSÉES à cette personne (moteur
+// surveyPath). Une option qui existe mais n'a pas été proposée — ex.
+// « Bus régional » pour qui réside à Senlis — est refusée comme une
+// option étrangère : elle n'a pas pu être choisie honnêtement.
+function buildAnswerRows(question, answer, answersByQuestionId, offered = null) {
+  const rejectIfNotOffered = (optionId) => {
+    if (offered && !offered.has(optionId)) {
+      rejectAnswer(`Une option choisie n'était pas proposée pour « ${question.label} »`);
+    }
+  };
   switch (question.type) {
     case 'CHOIX_UNIQUE':
     case 'OUI_NON': {
@@ -845,6 +866,7 @@ function buildAnswerRows(question, answer, answersByQuestionId) {
       if (!isValidOption) {
         rejectAnswer(`L'option choisie n'appartient pas à la question « ${question.label} »`);
       }
+      rejectIfNotOffered(answer.optionId);
       return [{ questionId: question.id, optionId: answer.optionId }];
     }
 
@@ -857,6 +879,7 @@ function buildAnswerRows(question, answer, answersByQuestionId) {
         if (!validIds.has(optionId)) {
           rejectAnswer(`Une option choisie n'appartient pas à la question « ${question.label} »`);
         }
+        rejectIfNotOffered(optionId);
       }
       // new Set() déduplique : cocher deux fois la même case dans le
       // payload ne doit pas créer deux lignes identiques en base (la
@@ -966,7 +989,8 @@ function evaluateSubmission(survey, answers) {
     const a = answersByQuestionId.get(questionId);
     return a?.optionIds ?? (a?.optionId ? [a.optionId] : []);
   };
-  const visibleIds = visibleQuestionIds(flowQuestions, chosenOptionIds);
+  // S5R2-02 : le parcours donne aussi les options PROPOSÉES à chaque question
+  const { questionIds: visibleIds, offeredOptions } = surveyPath(flowQuestions, chosenOptionIds);
 
   const answerRows = [];
   for (const questionId of visibleIds) {
@@ -980,7 +1004,7 @@ function evaluateSubmission(survey, answers) {
       continue; // question optionnelle non répondue : rien à créer
     }
 
-    answerRows.push(...buildAnswerRows(question, answer, answersByQuestionId));
+    answerRows.push(...buildAnswerRows(question, answer, answersByQuestionId, new Set(offeredOptions.get(question.id))));
   }
 
   const profileUpdate = {};
@@ -1020,8 +1044,16 @@ function evaluateSubmission(survey, answers) {
 async function loadSurveyForAnswers(surveyId) {
   const survey = await prisma.survey.findUnique({
     where: { id: surveyId },
-    // conditions : nécessaires pour rejouer le parcours (S5R-05)
-    include: { questions: { include: { options: true, conditions: { select: { optionId: true } } } } },
+    // conditions : nécessaires pour rejouer le parcours (S5R-05) — celles
+    // des questions ET, depuis S5R2-02, celles des options
+    include: {
+      questions: {
+        include: {
+          options: { include: { conditions: { select: { triggerOptionId: true } } } },
+          conditions: { select: { optionId: true } },
+        },
+      },
+    },
   });
   if (!survey) {
     const error = new Error('Enquête introuvable');

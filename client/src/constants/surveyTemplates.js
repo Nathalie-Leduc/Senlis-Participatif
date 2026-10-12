@@ -15,6 +15,8 @@
 //   { …, showIf: ['oui'] }                  ← affichée si « oui » choisie
 //   { ref: 'nb', …, type: 'NOMBRE' }        ← une question nommée
 //   { …, maxChoicesFrom: 'nb' }             ← cases limitées par « nb »
+//   options: [{ label: 'Bus régional', showIf: ['ailleurs'] }]
+//                                           ← option proposée si « ailleurs » (S5R2-02)
 // instantiateQuestions() remplace ces noms par de vraies clés.
 // ══════════════════════════════════════════════════════════
 
@@ -162,7 +164,8 @@ export function instantiateQuestions(templateQuestions, emptyQuestion) {
     const options = (tq.options ?? []).map((o) => {
       const key = newKey();
       if (o.ref) keyOfRef.set(o.ref, key);
-      return { key, label: o.label, syncValue: o.syncValue ?? null, endsSurvey: Boolean(o.endsSurvey) };
+      // showIf gardé de côté : résolu au 2e passage (S5R2-02)
+      return { key, label: o.label, syncValue: o.syncValue ?? null, endsSurvey: Boolean(o.endsSurvey), showIf: o.showIf ?? [] };
     });
     return { tq, questionKey, options };
   });
@@ -178,7 +181,10 @@ export function instantiateQuestions(templateQuestions, emptyQuestion) {
     syncsToProfile: tq.syncsToProfile ?? null,
     minValue: tq.minValue ?? '',
     maxValue: tq.maxValue ?? '',
-    options,
+    options: options.map(({ showIf, ...option }) => ({
+      ...option,
+      conditions: showIf.map((ref) => keyOfRef.get(ref)).filter(Boolean),
+    })),
     conditions: (tq.showIf ?? []).map((ref) => keyOfRef.get(ref)).filter(Boolean),
     maxChoicesFromKey: tq.maxChoicesFrom ? keyOfRef.get(tq.maxChoicesFrom) ?? null : null,
   }));

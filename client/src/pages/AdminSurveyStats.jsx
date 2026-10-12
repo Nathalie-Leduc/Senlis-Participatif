@@ -292,7 +292,13 @@ export function ResultBars({ options }) {
       {options.map((o) => (
         <li key={o.id ?? o.label}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14, marginBottom: 4 }}>
-            <span>{o.label}</span>
+            <span>
+              {o.label}
+              {/* S5R2-02 : option conditionnelle — proposée à une partie seulement */}
+              {typeof o.offeredTo === 'number' && (
+                <span style={{ color: '#6B6257', fontSize: 13 }}> · proposée à {o.offeredTo} personne{o.offeredTo > 1 ? 's' : ''}</span>
+              )}
+            </span>
             <span style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>
               {o.count} <span style={{ fontWeight: 400, color: '#6B6257' }}>({o.percentage} %)</span>
             </span>
