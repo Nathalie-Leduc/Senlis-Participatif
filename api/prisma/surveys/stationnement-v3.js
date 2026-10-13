@@ -1,6 +1,20 @@
 // ══════════════════════════════════════════════════════════
 // Enquête « Stationnement et déplacements dans le centre historique »
 // Version 3 — S5R-06, d'après la recette du 30/09/2026
+// Version 3.1 — S5R2-03, relue en entier pour la présentation à la
+// mairie (recette du 08/10, décisions des 09 et 12/10) :
+//  - le centre est coupé en deux quartiers (S5R2-06) : l'enquête porte
+//    sur le seul Centre historique ; Saint-Vincent est « un autre
+//    quartier de Senlis », proposé comme tel ;
+//  - activités regroupées en 6 familles (+ « Autre » → « Laquelle ? »,
+//    désormais facultative), exemples en aide sous la question ;
+//  - « véhicules motorisés » → « voitures ou motos » (les EDPM ne sont
+//    pas concernés) ;
+//  - « Bus régional » proposé SEULEMENT aux résident·es d'une autre
+//    ville : option conditionnelle (S5R2-02) ;
+//  - EDPM à la place de « Trottinette » (modification de Nath, reprise).
+// Le fichier garde son nom (stationnement-v3.js) et l'enquête son slug :
+// la v3.1 REMPLACE la v3 (seed:prod -- --remplacer, voir seed-prod.js).
 //
 // Séparée de seed-prod.js : c'est du CONTENU (des questions), que l'on
 // relira et corrigera plus souvent que le code du seed. Le format est
@@ -35,7 +49,10 @@
 
 // ── Listes réutilisées ───────────────────────────────────
 
+// S5R2-06 : Saint-Vincent en tête — c'est le quartier le plus proche du
+// Centre historique, celui que ses habitant·es chercheront d'abord
 const RESIDENCE_QUARTIERS = [
+  { label: 'Quartier Saint-Vincent', syncValue: 'SAINT_VINCENT' },
   { label: 'Brichebay', syncValue: 'BRICHEBAY' },
   { label: 'Bon Secours', syncValue: 'BON_SECOURS' },
   { label: "Val d'Aunette - La Gâtelière", syncValue: 'VAL_AUNETTE_GATELIERE' },
@@ -47,19 +64,31 @@ const RESIDENCE_QUARTIERS = [
 // Le centre historique EN PREMIER : sa position (0) sert de condition
 const TRAVAIL_QUARTIERS = [{ label: 'Centre historique', syncValue: 'CENTRE_HISTORIQUE' }, ...RESIDENCE_QUARTIERS];
 
+// S5R2-03 : 6 familles d'activités (recette du 08/10) ; leurs exemples
+// sont donnés en aide sous la question (ACTIVITES_AIDE)
 const ACTIVITES = [
-  { label: 'Commerce' },
-  { label: 'Banque, assurance ou agence (immobilière, voyages…)' },
-  { label: 'Cabinet médical ou paramédical' },
-  { label: 'Restaurant, bar ou tabac' },
-  { label: 'Service municipal (mairie, police…)' },
-  { label: 'École' },
+  { label: 'Commerces et boutiques' },
+  { label: 'Services de proximité, agences et santé' },
+  { label: 'Cafés, hôtels et restaurants' },
+  { label: 'Administrations et services publics' },
+  { label: 'Enseignement, culture et social' },
+  { label: 'Bureaux et secteur tertiaire' },
   { label: 'Autre activité' },
 ];
+// ≤ 300 caractères (limite d'une aide, validators/surveys.js — vérifié par test)
+const ACTIVITES_AIDE = 'Exemples — commerces : alimentation, mode, fleuriste… ; services : banque, assurance, '
+  + 'agence, coiffure, cabinet médical, pharmacie… ; administrations : mairie, police, poste… ; '
+  + 'enseignement, culture et social : école, médiathèque, association… ; bureaux : conseil, informatique…';
 
-const MOBILITES = [
+/**
+ * Les moyens de transport. « Bus régional » n'est proposé qu'aux
+ * résident·es d'une AUTRE ville (S5R2-02, option conditionnelle) : à
+ * Senlis, on ne vient pas au centre en bus régional.
+ * @param {{ questionOrder: number, optionOrder: number }} residentAutreVille
+ */
+const mobilites = (residentAutreVille) => [
   { label: 'TUS (bus gratuit de Senlis)' },
-  { label: 'Bus régional' },
+  { label: 'Bus régional', showIfAny: [residentAutreVille] },
   { label: 'Voiture' },
   { label: 'Scooter ou moto' },
   { label: 'Vélo' },
@@ -68,6 +97,8 @@ const MOBILITES = [
   { label: 'Covoiturage' },
   { label: 'Autre' },
 ];
+// Même liste, sans les conditions : pour retrouver une position par libellé
+const MOBILITES = mobilites(null).map(({ label }) => ({ label }));
 
 // « Je n'ai pas de véhicule » retiré (recette, test 1) : on ne pose
 // cette question qu'à qui a déclaré au moins un véhicule
@@ -122,9 +153,11 @@ function buildQuestions() {
   const when = (questionOrder, optionOrder) => ({ questionOrder, optionOrder });
 
   // ══ 1. PROFIL ════════════════════════════════════════════
+  // S5R2-06 : « le » Centre historique seulement — Saint-Vincent est
+  // nommé dans la 2e réponse, pour que ses habitant·es s'y reconnaissent
   const RESIDENCES = [
-    { label: 'Le centre historique', syncValue: 'CENTRE_RESIDENT' },
-    { label: 'Un autre quartier de Senlis', syncValue: 'AUTRE_QUARTIER' },
+    { label: 'Le Centre historique', syncValue: 'CENTRE_RESIDENT' },
+    { label: 'Un autre quartier de Senlis (dont Saint-Vincent)', syncValue: 'AUTRE_QUARTIER' },
     { label: 'Une autre ville', syncValue: 'HORS_SENLIS' },
   ];
   const qResidence = add({
@@ -158,6 +191,9 @@ function buildQuestions() {
 
   add({
     label: 'À ce titre…', type: 'CHOIX_UNIQUE', syncsToProfile: 'travailType', showIf: travailleOui,
+    // S5R2-03 : déplacée ici (l'aide de la question suivante donne
+    // désormais les exemples d'activités)
+    helpText: 'Si vous dirigez cette activité, merci de transmettre aussi ce questionnaire à vos salarié·es : leurs réponses comptent autant que les vôtres.',
     options: [
       { label: 'Je dirige ou gère cette activité', syncValue: 'COMMERCANT' },
       { label: "J'y suis salarié·e", syncValue: 'SALARIE' },
@@ -165,16 +201,20 @@ function buildQuestions() {
   });
   const qActivite = add({
     label: "Quel type d'activité (la vôtre, ou celle qui vous emploie) ?",
-    helpText: 'Si vous dirigez cette activité, merci de transmettre aussi ce questionnaire à vos salarié·es : leurs réponses comptent autant que les vôtres.',
+    helpText: ACTIVITES_AIDE,
     type: 'CHOIX_UNIQUE', showIf: travailleOui, options: ACTIVITES,
   });
-  // Recette, test 2 : « Autre » → « Laquelle ? »
-  add({ label: 'Laquelle ?', type: 'TEXTE_LIBRE', showIf: when(qActivite, at(ACTIVITES, 'Autre activité')) });
+  // Recette, test 2 : « Autre » → « Laquelle ? » — facultative depuis
+  // la v3.1 (recette du 08/10 : ne pas bloquer qui ne sait pas la nommer)
+  add({
+    label: 'Laquelle ?', type: 'TEXTE_LIBRE', required: false,
+    showIf: when(qActivite, at(ACTIVITES, 'Autre activité')),
+  });
 
   // ══ 2. TRAVAIL DANS LE CENTRE HISTORIQUE ════════════════
   const qVenirTravail = add({
     label: 'Comment venez-vous travailler le plus souvent ?', type: 'CHOIX_UNIQUE',
-    showIf: travailleCentre, options: MOBILITES,
+    showIf: travailleCentre, options: mobilites(residentAutreVille),
   });
   add({
     label: 'Quel autre mode de transport ?', type: 'TEXTE_LIBRE',
@@ -231,7 +271,7 @@ function buildQuestions() {
   const vientDansLeCentre = FREQUENCES.map((f) => when(qFrequenceVisite, at(FREQUENCES_VISITE, f.label)));
   const qVenirCentre = add({
     label: 'Le plus souvent, comment venez-vous dans le centre historique ?', type: 'CHOIX_UNIQUE',
-    showIfAny: vientDansLeCentre, options: MOBILITES,
+    showIfAny: vientDansLeCentre, options: mobilites(residentAutreVille),
   });
   add({ label: 'Quel autre mode de transport ?', type: 'TEXTE_LIBRE', showIf: when(qVenirCentre, at(MOBILITES, 'Autre')) });
   const vientEnVoiture = when(qVenirCentre, at(MOBILITES, 'Voiture'));
@@ -250,8 +290,10 @@ function buildQuestions() {
   add({ label: 'Précisez cet autre frein', type: 'TEXTE_LIBRE', showIf: when(qFreinsVisite, at(FREINS, 'Autre frein')) });
 
   // ══ 4. RÉSIDER DANS LE CENTRE — en dernier (fin anticipée) ══
+  // S5R2-03 : « voitures ou motos » plutôt que « véhicules motorisés »
+  // (un EDPM est motorisé, mais ne pose pas de question de stationnement)
   const qAVehicule = add({
-    label: 'Votre foyer possède-t-il un ou plusieurs véhicules motorisés ?',
+    label: 'Votre foyer possède-t-il une ou plusieurs voitures ou motos ?',
     // Recette, test 2 : ne pas compter deux fois les véhicules pro
     helpText: "Si vous travaillez à Senlis, ne comptez pas les véhicules liés à votre activité : ils ont leurs propres questions.",
     type: 'OUI_NON', showIf: residentCentre,
@@ -260,12 +302,12 @@ function buildQuestions() {
   });
   const aVehicule = when(qAVehicule, 0);
   const qNbFoyer = add({
-    label: 'Combien de véhicules motorisés compte votre foyer ?', type: 'NOMBRE', minValue: 1, maxValue: 20, showIf: aVehicule,
+    label: 'Combien de voitures ou motos compte votre foyer ?', type: 'NOMBRE', minValue: 1, maxValue: 20, showIf: aVehicule,
   });
   // Recette, test 1 : obligatoire, et pas plus de cases que de véhicules
   add({
-    label: 'Où sont garés vos véhicules ?',
-    helpText: "Cochez tout ce qui s'applique — au plus une case par véhicule.",
+    label: 'Où sont garées vos voitures ou motos ?',
+    helpText: "Cochez tout ce qui s'applique — au plus une case par voiture ou moto.",
     type: 'CHOIX_MULTIPLE', showIf: aVehicule, maxChoicesFrom: { questionOrder: qNbFoyer }, options: STATIONNEMENTS,
   });
   const qDifficultesFoyer = add({

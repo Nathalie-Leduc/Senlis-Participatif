@@ -8,7 +8,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { describe, it, expect } from 'vitest';
-import { validateAdminCredentials } from '../prisma/seed-prod.js';
+import { validateAdminCredentials, surveySeedAction } from '../prisma/seed-prod.js';
 
 describe('validateAdminCredentials', () => {
   it('accepte un email et un mot de passe valides (12+ caractères)', () => {
@@ -37,5 +37,24 @@ describe('validateAdminCredentials', () => {
 
   it('accepte un mot de passe de exactement 12 caractères (limite incluse)', () => {
     expect(validateAdminCredentials('mairie@senlis.fr', 'A1b2C3d4E5f!')).toEqual([]);
+  });
+});
+
+// S5R2-03 : « npm run seed:prod -- --remplacer »
+describe('surveySeedAction', () => {
+  const state = (over) => ({ exists: true, responses: 0, replace: false, production: false, ...over });
+
+  it('pas encore en base : on la crée', () => {
+    expect(surveySeedAction(state({ exists: false }))).toBe('create');
+  });
+  it('déjà en base, sans --remplacer : on n’y touche pas', () => {
+    expect(surveySeedAction(state({ responses: 12 }))).toBe('skip');
+  });
+  it('avec --remplacer en développement : remplacée, même avec des réponses de test', () => {
+    expect(surveySeedAction(state({ replace: true, responses: 7 }))).toBe('replace');
+  });
+  it('avec --remplacer en production : refusé dès qu’il y a de vraies réponses', () => {
+    expect(surveySeedAction(state({ replace: true, production: true, responses: 1 }))).toBe('refuse');
+    expect(surveySeedAction(state({ replace: true, production: true, responses: 0 }))).toBe('replace');
   });
 });

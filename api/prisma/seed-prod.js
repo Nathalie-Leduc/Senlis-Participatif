@@ -17,6 +17,12 @@
 //
 // Lancer avec : npm run seed:prod
 //   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed:prod
+//
+// S5R2-03 : remplacer l'enquête stationnement par sa dernière version
+// (ex. v3 → v3.1 sur une base de développement qui a des réponses de test) :
+//   ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed:prod -- --remplacer
+// Refusé en PRODUCTION si l'enquête a déjà de vraies réponses : on
+// n'efface jamais la parole des habitant·es.
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../src/lib/prisma.js';
@@ -46,6 +52,24 @@ export function validateAdminCredentials(email, password) {
   }
 
   return errors;
+}
+
+/**
+ * Que faire de l'enquête stationnement ? (S5R2-03) — fonction PURE,
+ * testée directement.
+ *
+ * Analogie : réimprimer un questionnaire. Tant que personne n'y a
+ * répondu « pour de vrai », on peut jeter l'ancienne pile ; une fois de
+ * vraies réponses reçues, on ne détruit plus rien.
+ *
+ * @param {{ exists: boolean, responses: number, replace: boolean, production: boolean }} state
+ * @returns {'create' | 'skip' | 'replace' | 'refuse'}
+ */
+export function surveySeedAction({ exists, responses, replace, production }) {
+  if (!exists) return 'create';
+  if (!replace) return 'skip';
+  if (production && responses > 0) return 'refuse';
+  return 'replace';
 }
 
 async function main() {
@@ -109,7 +133,7 @@ async function main() {
     console.log('✅ Proposition "Piétonnisation du centre historique" créée (PUBLISHED).');
   }
 
-  // ── L'enquête réelle (S5R-06 : version 3) ────────────────────
+  // ── L'enquête réelle (S5R-06 : version 3 ; S5R2-03 : version 3.1) ──
   // Créée si AUCUNE enquête ne porte déjà son slug — et non plus
   // « si la base est vide » : sur une base de développement qui
   // contient l'ancienne version (v2, avec des réponses de test), la v3
@@ -120,14 +144,35 @@ async function main() {
   // stationnement-v3.js ; la création passe par le MÊME service que
   // l'administration (services/surveyBuilder.js, S5R-05).
   const existingSurvey = await prisma.survey.findUnique({ where: { slug: PARKING_SURVEY.slug } });
-  if (existingSurvey) {
-    console.log(`ℹ️  Enquête « ${PARKING_SURVEY.title} » (v3) déjà en base — aucune créée.`);
+  const responses = existingSurvey
+    ? await prisma.surveyResponse.count({ where: { surveyId: existingSurvey.id } })
+    : 0;
+  const action = surveySeedAction({
+    exists: Boolean(existingSurvey),
+    responses,
+    replace: process.argv.includes('--remplacer'),
+    production: process.env.NODE_ENV === 'production',
+  });
+
+  if (action === 'skip') {
+    console.log(`ℹ️  Enquête « ${PARKING_SURVEY.title} » déjà en base — aucune créée.`
+      + '\n   Pour la remplacer par la dernière version : npm run seed:prod -- --remplacer');
     return;
   }
+  if (action === 'refuse') {
+    console.error(`❌ L'enquête a déjà ${responses} vraie(s) réponse(s) en production : remplacement refusé.`
+      + '\n   Clôturez-la dans l\'administration, puis créez la nouvelle version sous un autre slug.');
+    process.exit(1);
+  }
 
-  // $transaction : création ET résolution des conditions réussissent
-  // ENSEMBLE, ou pas du tout
+  // $transaction : (suppression,) création ET résolution des conditions
+  // réussissent ENSEMBLE, ou pas du tout — jamais de base sans enquête
   await prisma.$transaction(async (tx) => {
+    if (action === 'replace') {
+      // Cascade : questions, options, conditions, bulletins et réponses de test
+      await tx.survey.delete({ where: { id: existingSurvey.id } });
+      console.log(`♻️  Ancienne version supprimée (${responses} réponse(s) de test).`);
+    }
     const survey = await tx.survey.create({
       data: {
         slug: PARKING_SURVEY.slug,
@@ -141,7 +186,7 @@ async function main() {
     await resolveReferences(tx, survey.id, PARKING_SURVEY.questions);
   });
 
-  console.log(`✅ Enquête « ${PARKING_SURVEY.title} » (v3, ${PARKING_SURVEY.questions.length} questions, parcours par profil) créée (OPEN).`);
+  console.log(`✅ Enquête « ${PARKING_SURVEY.title} » (v3.1, ${PARKING_SURVEY.questions.length} questions, parcours par profil) créée (OPEN).`);
 }
 
 // N'exécute main() QUE si ce fichier est lancé directement
