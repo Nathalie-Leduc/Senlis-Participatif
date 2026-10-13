@@ -24,6 +24,7 @@ import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import FormSaveBar from '../components/FormSaveBar/FormSaveBar.jsx';
 import DraftRestorePrompt from '../components/DraftRestorePrompt/DraftRestorePrompt.jsx';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
@@ -673,11 +674,8 @@ export default function AdminSurveyForm() {
 
       <EditorBanner />
 
-      {error && (
-        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
-          {error}
-        </div>
-      )}
+      {/* Recette du 13/10 : l'erreur d'enregistrement s'affiche désormais
+          dans la barre du bas, à côté du bouton (FormSaveBar) */}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         {/* S5R2-12 : le modèle d'abord (création uniquement) — il remplit
@@ -820,9 +818,10 @@ export default function AdminSurveyForm() {
           </button>
         </div>
 
-        <button type="submit" disabled={saving} className="btn btn-primary" style={{ alignSelf: 'flex-start', marginTop: 10 }}>
-          {saving ? 'Enregistrement…' : (isEdit ? 'Enregistrer les modifications' : "Créer l'enquête")}
-        </button>
+        <FormSaveBar
+          saving={saving} error={error} cancelTo="/admin/enquetes"
+          label={isEdit ? 'Enregistrer les modifications' : "Créer l'enquête"}
+        />
       </form>
     </div>
   );

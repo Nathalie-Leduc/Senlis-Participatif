@@ -71,6 +71,22 @@ export default function AdminSurveys() {
   // Distinct du statut ouvert/clos : une enquête peut être clôturée
   // sans que ses résultats soient déjà publics — l'admin choisit
   // séparément le moment où les rendre visibles à tous.
+  // Recette du 13/10 : clôturer (ou rouvrir) sans ouvrir tout le
+  // formulaire — on n'envoie que le statut, quelques octets
+  const handleStatus = async (survey, status) => {
+    const question = status === 'CLOSED'
+      ? `Clôturer « ${survey.title} » ? Plus personne ne pourra y répondre.`
+      : `Rouvrir « ${survey.title} » aux réponses ?`;
+    if (!window.confirm(question)) return;
+    try {
+      const data = await api.patch(`/surveys/${survey.id}`, { status });
+      setItems((prev) => prev.map((s) => (s.id === survey.id ? { ...s, status: data.survey.status } : s)));
+      showToast(status === 'CLOSED' ? `« ${survey.title} » est clôturée` : `« ${survey.title} » est rouverte`);
+    } catch (err) {
+      setError(err.message || 'La mise à jour a échoué');
+    }
+  };
+
   const handleToggleResults = async (survey) => {
     try {
       const data = await api.patch(`/surveys/${survey.id}`, { resultsPublished: !survey.resultsPublished });
@@ -142,7 +158,15 @@ export default function AdminSurveys() {
                   {meta.label}
                 </span>
 
-                <span style={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{s.title}</span>
+                <span style={{ flex: 1, minWidth: 200 }}>
+                  <span style={{ fontWeight: 600 }}>{s.title}</span>
+                  {/* Recette du 13/10 : deux enquêtes au même titre se
+                      distinguent par leur adresse et leur date */}
+                  <span style={{ display: 'block', fontSize: 13, color: '#6B6257' }}>
+                    /enquetes/{s.slug}
+                    {s.createdAt && ` · créée le ${new Date(s.createdAt).toLocaleDateString('fr-FR')}`}
+                  </span>
+                </span>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {/* S5R-12 : la page telle que les citoyens la voient */}
@@ -195,6 +219,15 @@ export default function AdminSurveys() {
                       >
                         {s.resultsPublished ? '✓ Résultats publiés' : 'Publier les résultats'}
                       </button>
+                      {(s.status === 'OPEN' || s.status === 'CLOSED') && (
+                        <button
+                          onClick={() => handleStatus(s, s.status === 'OPEN' ? 'CLOSED' : 'OPEN')}
+                          className="btn"
+                          style={{ background: '#EFEBE2', color: '#26333A', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                        >
+                          {s.status === 'OPEN' ? 'Clôturer' : 'Rouvrir'}
+                        </button>
+                      )}
                     </>
                   )}
                   {canEdit && (

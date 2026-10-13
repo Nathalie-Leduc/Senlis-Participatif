@@ -75,7 +75,17 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: '10kb' }));
+// Taille maximale d'un corps JSON. 10 ko suffisent partout (un vote, une
+// proposition, un profil) et bloquent les envois géants — SAUF pour une
+// enquête : le formulaire d'administration renvoie le questionnaire
+// COMPLET, et l'enquête stationnement (39 questions) pèse déjà ~12 ko.
+// Recette du 13/10 : « Requête trop volumineuse » en voulant la clôturer.
+// 100 ko = 8 fois la plus grande enquête actuelle, toujours raisonnable.
+// Analogie : la boîte aux lettres accepte les lettres ; le guichet des
+// enquêtes, lui, accepte aussi les colis — mais pas les déménagements.
+const jsonDefault = express.json({ limit: '10kb' });
+const jsonSurveys = express.json({ limit: '100kb' });
+app.use((req, res, next) => (req.path.startsWith('/api/v1/surveys') ? jsonSurveys : jsonDefault)(req, res, next));
 
 // ── Fichiers statiques (images uploadées) ────────────────────
 // Servi hors de /api/v1 : ce n'est pas une "ressource API" au sens

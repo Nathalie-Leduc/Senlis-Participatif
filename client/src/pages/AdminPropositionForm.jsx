@@ -18,6 +18,7 @@ import { api, assetUrl } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import FormSaveBar from '../components/FormSaveBar/FormSaveBar.jsx';
 import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
 import DraftRestorePrompt from '../components/DraftRestorePrompt/DraftRestorePrompt.jsx';
 import { useFormDraft } from '../hooks/useFormDraft.js';
@@ -342,11 +343,8 @@ export default function AdminPropositionForm() {
 
       <EditorBanner />
 
-      {error && (
-        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
-          {error}
-        </div>
-      )}
+      {/* Recette du 13/10 : l'erreur d'enregistrement s'affiche désormais
+          dans la barre du bas, à côté du bouton (FormSaveBar) */}
 
       {/* S5R2-11 : une proposition déjà publiée n'est plus modifiable par
           un Admin-test — on l'explique au lieu d'un formulaire qui
@@ -516,9 +514,10 @@ export default function AdminPropositionForm() {
           />
         </Field>
 
-        <button type="submit" disabled={saving} className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
-          {saving ? 'Enregistrement…' : (isEdit ? 'Enregistrer les modifications' : 'Créer la proposition')}
-        </button>
+        <FormSaveBar
+          saving={saving} error={error} cancelTo="/admin/propositions"
+          label={isEdit ? 'Enregistrer les modifications' : 'Créer la proposition'}
+        />
       </form>
       )}
     </div>
