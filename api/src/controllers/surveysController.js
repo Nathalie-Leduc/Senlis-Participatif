@@ -37,6 +37,9 @@ const LIST_SELECT = {
   audienceWorkTypes: true,
   status: true,
   resultsPublished: true,
+  // Recette du 13/10 : afficher la date de création dans la liste admin,
+  // pour distinguer deux enquêtes au même titre
+  createdAt: true,
   opensAt: true,
   closesAt: true,
 };

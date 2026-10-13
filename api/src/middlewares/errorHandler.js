@@ -116,7 +116,12 @@ function translateKnownError(err) {
     return { status: 400, code: 'INVALID_JSON', message: 'Corps de requête JSON mal formé' };
   }
   if (err.type === 'entity.too.large') {
-    return { status: 413, code: 'PAYLOAD_TOO_LARGE', message: 'Requête trop volumineuse' };
+    // Un message qui dit QUOI faire, pas seulement le nom technique de l'erreur
+    return {
+      status: 413,
+      code: 'PAYLOAD_TOO_LARGE',
+      message: 'Trop de contenu envoyé en une seule fois : réduisez la longueur des textes, ou contactez l’administratrice du site.',
+    };
   }
 
   return null;
