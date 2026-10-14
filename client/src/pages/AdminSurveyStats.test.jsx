@@ -36,11 +36,15 @@ function renderPage() {
 describe('Résultats détaillés', () => {
   beforeEach(() => { api.get.mockReset(); downloadText.mockReset(); });
 
-  it('affiche les résultats en barres, avec nombre et pourcentage en texte', async () => {
+  it('affiche les résultats en graphique (Chart.js), avec nombre et pourcentage en texte', async () => {
     api.get.mockResolvedValue(globalResults);
     renderPage();
     const card = (await screen.findByRole('heading', { name: /Satisfait/ })).closest('article');
-    expect(within(card).getByText('Oui').closest('li')).toHaveTextContent('Oui9 (75 %)');
+    // S5R2-04 : le graphique, décrit pour les lecteurs d'écran…
+    expect(within(card).getByRole('img', { name: /Diagramme en barres : Oui 75 %/ })).toBeInTheDocument();
+    expect(within(card).getByTestId('chart-bar')).toBeInTheDocument();
+    // … et les nombres en texte, dans un tableau
+    expect(within(card).getByRole('rowheader', { name: 'Oui' }).closest('tr')).toHaveTextContent('Oui975 %');
     expect(screen.getByText(/Posée si « Satisfait·e \? » = « Non »/)).toBeInTheDocument();
   });
 

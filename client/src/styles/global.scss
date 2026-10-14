@@ -66,3 +66,11 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus { outline: none; }
     }
   }
 }
+
+// ── Impression / export PDF (S5R2-04) ───────────────────────
+// Les boutons flottants (guide du cerf, réglages ♿) n'ont rien à faire
+// sur une page imprimée : ils se posaient PAR-DESSUS les résultats
+// dans l'export PDF des résultats détaillés.
+@media print {
+  .guide-widget, .a11y-toggle, .a11y-panel { display: none !important; }
+}

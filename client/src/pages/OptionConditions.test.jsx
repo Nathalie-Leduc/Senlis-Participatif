@@ -18,7 +18,7 @@ vi.mock('../services/api.js', () => ({ api: { get: vi.fn(), post: vi.fn().mockRe
 
 const { default: AdminSurveyForm } = await import('./AdminSurveyForm.jsx');
 const { default: EnqueteRepondre, keepOffered } = await import('./EnqueteRepondre.jsx');
-const { ResultBars } = await import('./AdminSurveyStats.jsx');
+const { default: ResultChart } = await import('../components/ResultChart/ResultChart.jsx');
 
 const change = (el, value) => fireEvent.change(el, { target: { value } });
 
@@ -170,10 +170,13 @@ describe('Questionnaire — options proposées', () => {
 // ── Résultats ────────────────────────────────────────────
 describe('Résultats — option conditionnelle', () => {
   it('précise à combien de personnes l’option a été proposée', () => {
-    render(<ResultBars options={[
-      { id: 'pied', label: 'À pied', count: 4, percentage: 66.7 },
-      { id: 'bus', label: 'Bus régional', count: 1, percentage: 16.7, offeredTo: 2 },
-    ]} />);
+    render(<ResultChart question={{
+      id: 'q1', label: 'Comment venez-vous ?', type: 'CHOIX_MULTIPLE', totalForQuestion: 6,
+      options: [
+        { id: 'pied', label: 'À pied', count: 4, percentage: 66.7 },
+        { id: 'bus', label: 'Bus régional', count: 1, percentage: 16.7, offeredTo: 2 },
+      ],
+    }} />);
     expect(screen.getByText(/proposée à 2 personnes/)).toBeInTheDocument();
     expect(screen.getAllByText(/proposée à/)).toHaveLength(1);
   });
