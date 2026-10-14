@@ -230,8 +230,11 @@ export const updateSurveySchema = z.object({
   audience: audience.optional(),
   status: surveyStatus.optional(),
   resultsPublished: z.boolean().optional(),
-  opensAt: z.coerce.date().optional(),
-  closesAt: z.coerce.date().optional(),
+  // null = effacer la date (ex. « Rouvrir » une enquête dont la date de
+  // clôture est passée). Sans le z.null() d'abord, z.coerce.date()
+  // transformerait null en… 1er janvier 1970.
+  opensAt: z.union([z.null(), z.coerce.date()]).optional(),
+  closesAt: z.union([z.null(), z.coerce.date()]).optional(),
   questions: z.array(questionSchema).min(1).optional(),
 });
 

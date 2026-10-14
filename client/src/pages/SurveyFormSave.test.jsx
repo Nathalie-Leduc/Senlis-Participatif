@@ -56,14 +56,14 @@ describe('Liste des enquêtes — clôturer d’un clic', () => {
     expect(screen.getByText(/\/enquetes\/stationnement-centre-historique · créée le 20\/09\/2026/)).toBeInTheDocument();
   });
 
-  it('« Clôturer » n’envoie que le statut (quelques octets), après confirmation', async () => {
+  it('« Clôturer… » → « Maintenant » n’envoie que le statut (quelques octets)', async () => {
     api.get.mockResolvedValue({ items });
     api.patch.mockResolvedValue({ survey: { status: 'CLOSED' } });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<MemoryRouter><AdminSurveys /></MemoryRouter>);
 
     const row = within((await screen.findByText(/stationnement-deplacements-centre-historique/)).closest('.card-joyful'));
-    fireEvent.click(row.getByRole('button', { name: 'Clôturer' }));
+    fireEvent.click(row.getByRole('button', { name: 'Clôturer…' }));
+    fireEvent.click(row.getByRole('button', { name: 'Clôturer maintenant' }));
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/surveys/s1', { status: 'CLOSED' }));
     expect(await row.findByRole('button', { name: 'Rouvrir' })).toBeInTheDocument();
 
