@@ -86,6 +86,19 @@ describe('Clôturer… : maintenant ou à une date précise', () => {
   });
 });
 
+describe('Erreurs affichées dans la ligne (recette du 14/10)', () => {
+  it('un refus de l’API à « Rouvrir » s’affiche dans la ligne de l’enquête, pas en haut', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    api.patch.mockRejectedValue({ status: 400, code: 'CLOSES_AT_PAST', message: 'La date de clôture est déjà passée' });
+    render(<MemoryRouter><AdminSurveys /></MemoryRouter>);
+    const row = await rowOf('enquete-close');
+    fireEvent.click(row.getByRole('button', { name: 'Rouvrir' }));
+    expect(await row.findByRole('alert')).toHaveTextContent('déjà passée');
+    // l'autre ligne n'affiche rien
+    expect((await rowOf('enquete-ouverte')).queryByRole('alert')).toBeNull();
+  });
+});
+
 describe('Supprimer une enquête qui a des réponses', () => {
   const conflict = (canForce) => ({
     status: 409, code: 'SURVEY_HAS_RESPONSES', message: 'Impossible… clôturez-la plutôt que de la supprimer.',
@@ -111,7 +124,7 @@ describe('Supprimer une enquête qui a des réponses', () => {
     api.delete.mockRejectedValueOnce(conflict(true));
     render(<MemoryRouter><AdminSurveys /></MemoryRouter>);
     fireEvent.click((await rowOf('enquete-ouverte')).getByRole('button', { name: 'Supprimer' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/il fallait taper SUPPRIMER/);
+    expect(await (await rowOf('enquete-ouverte')).findByRole('alert')).toHaveTextContent(/il fallait taper SUPPRIMER/);
     expect(api.delete).toHaveBeenCalledTimes(1);
   });
 
@@ -164,5 +177,27 @@ describe('Lien « ← Retour » des fiches', () => {
     );
     fireEvent.click((await rowOf('enquete-ouverte')).getByRole('link', { name: /Voir « Ouverte »/ }));
     expect(await screen.findByRole('link', { name: '← Administration — Enquêtes' })).toHaveAttribute('href', '/admin/enquetes');
+  });
+});
+
+describe('Formulaire : rouvrir avec une date passée (recette du 14/10)', () => {
+  it('prévient dès qu’on choisit « Ouverte » avec une date de clôture passée', async () => {
+    const { default: AdminSurveyForm } = await import('./AdminSurveyForm.jsx');
+    api.get.mockResolvedValue({
+      survey: {
+        id: 's2', slug: 'enquete-close', title: 'Close', description: 'Une description assez longue', status: 'CLOSED',
+        opensAt: null, closesAt: new Date(Date.now() - 2 * DAY).toISOString(), audience: {},
+        questions: [{ id: 'q1', label: 'Venez-vous en voiture ?', type: 'OUI_NON', required: true, order: 0, options: [], conditionOptionIds: [] }],
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={['/admin/enquetes/enquete-close/modifier']}>
+        <Routes><Route path="/admin/enquetes/:slug/modifier" element={<AdminSurveyForm />} /></Routes>
+      </MemoryRouter>,
+    );
+    const status = await screen.findByDisplayValue(/Clôturée/);
+    expect(screen.queryByText(/date de clôture est passée/)).toBeNull(); // close : pas de souci
+    fireEvent.change(status, { target: { name: 'status', value: 'OPEN' } });
+    expect(screen.getByText(/date de clôture est passée/)).toBeInTheDocument();
   });
 });
