@@ -317,6 +317,25 @@ export async function update(req, res, next) {
       }
     }
 
+    // Recette du 14/10 : rouvrir une enquête (statut OPEN) en gardant une
+    // date de clôture DÉJÀ PASSÉE la refermait aussitôt (clôture
+    // automatique à la lecture suivante), sans aucun message. On refuse
+    // clairement, pour que l'admin change ou efface la date.
+    // Analogie : rouvrir la boutique en laissant sur la porte « fermé
+    // depuis hier » — le premier passant retourne le panneau.
+    if ('status' in surveyFields || 'closesAt' in surveyFields) {
+      const finalStatus = surveyFields.status ?? existing.status;
+      const finalClosesAt = 'closesAt' in surveyFields ? surveyFields.closesAt : existing.closesAt;
+      if (finalStatus === 'OPEN' && finalClosesAt && finalClosesAt < new Date()) {
+        const error = new Error(
+          `La date de clôture (${finalClosesAt.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' })}) est déjà passée : l'enquête serait aussitôt refermée. Choisissez une date à venir, ou videz le champ « Clôture ».`,
+        );
+        error.status = 400;
+        error.code = 'CLOSES_AT_PAST';
+        throw error;
+      }
+    }
+
     // $transaction : "supprimer les anciennes questions" + "en créer
     // de nouvelles" doit réussir ENSEMBLE ou pas du tout — sinon un
     // crash au milieu laisserait l'enquête sans AUCUNE question.

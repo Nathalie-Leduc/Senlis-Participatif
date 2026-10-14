@@ -83,6 +83,48 @@ describe('Clôture programmée', () => {
   });
 });
 
+describe('Rouvrir avec une date de clôture passée (recette du 14/10)', () => {
+  it('statut OPEN + date passée : refusé avec un message clair, rien ne change', async () => {
+    const admin = await makeAdminUser();
+    const past = new Date(Date.now() - DAY);
+    const survey = await seedSurvey({ status: 'CLOSED', closesAt: past });
+    // Ce qu'envoyait le formulaire « Modifier » : le statut ET l'ancienne date
+    const res = await request(app).patch(`${API}/${survey.id}`).set(as(admin.token))
+      .send({ status: 'OPEN', closesAt: past.toISOString() });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('CLOSES_AT_PAST');
+    expect(res.body.error.message).toMatch(/déjà passée/);
+    expect((await prisma.survey.findUnique({ where: { id: survey.id } })).status).toBe('CLOSED');
+  });
+
+  it('statut OPEN seul, la date passée restant en base : refusé aussi', async () => {
+    const admin = await makeAdminUser();
+    const survey = await seedSurvey({ status: 'CLOSED', closesAt: new Date(Date.now() - DAY) });
+    const res = await request(app).patch(`${API}/${survey.id}`).set(as(admin.token)).send({ status: 'OPEN' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('CLOSES_AT_PAST');
+  });
+
+  it('statut OPEN + nouvelle date à venir : accepté, et reste ouverte', async () => {
+    const admin = await makeAdminUser();
+    const survey = await seedSurvey({ status: 'CLOSED', closesAt: new Date(Date.now() - DAY) });
+    const res = await request(app).patch(`${API}/${survey.id}`).set(as(admin.token))
+      .send({ status: 'OPEN', closesAt: new Date(Date.now() + DAY).toISOString() });
+    expect(res.status).toBe(200);
+    await request(app).get(`${API}/${survey.slug}`);
+    expect((await prisma.survey.findUnique({ where: { id: survey.id } })).status).toBe('OPEN');
+  });
+
+  it('une enquête CLÔTURÉE peut garder sa date passée (modifier autre chose)', async () => {
+    const admin = await makeAdminUser();
+    const past = new Date(Date.now() - DAY);
+    const survey = await seedSurvey({ status: 'CLOSED', closesAt: past });
+    const res = await request(app).patch(`${API}/${survey.id}`).set(as(admin.token))
+      .send({ status: 'CLOSED', closesAt: past.toISOString(), title: 'Nouveau titre de l’enquête' });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe('Suppression d’une enquête qui a des réponses', () => {
   const NODE_ENV = process.env.NODE_ENV;
   afterEach(() => { process.env.NODE_ENV = NODE_ENV; });

@@ -47,6 +47,11 @@ export default function AdminSurveys() {
   const [status, setStatus] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Recette du 14/10 : l'erreur d'une action (clôturer, rouvrir,
+  // supprimer…) s'affiche DANS la ligne de l'enquête concernée, là où
+  // l'on vient de cliquer — en haut de la page, elle passait inaperçue.
+  const [rowError, setRowErrorState] = useState(null); // { id, message }
+  const setRowError = (id, message) => setRowErrorState(message ? { id, message } : null);
   const { showToast } = useToast();
   const { isAdmin } = useAuth();
   // Enquête dont le panneau « Clôturer… » est ouvert (une à la fois)
@@ -71,6 +76,7 @@ export default function AdminSurveys() {
 
   const handleDelete = async (survey) => {
     if (!window.confirm(`Supprimer définitivement « ${survey.title} » ?`)) return;
+    setRowError(null);
 
     try {
       await api.delete(`/surveys/${survey.id}`);
@@ -85,7 +91,7 @@ export default function AdminSurveys() {
         return;
       }
       // Sinon (production…) : le message de l'API est déjà explicite
-      setError(err.message || 'La suppression a échoué');
+      setRowError(survey.id, err.message || 'La suppression a échoué');
     }
   };
 
@@ -97,7 +103,7 @@ export default function AdminSurveys() {
     );
     if (typed === null) return; // « Annuler »
     if (typed.trim().toUpperCase() !== FORCE_DELETE_WORD) {
-      setError(`Suppression annulée : il fallait taper ${FORCE_DELETE_WORD}.`);
+      setRowError(survey.id, `Suppression annulée : il fallait taper ${FORCE_DELETE_WORD}.`);
       return;
     }
     try {
@@ -105,7 +111,7 @@ export default function AdminSurveys() {
       setItems((prev) => prev.filter((s) => s.id !== survey.id));
       showToast(`« ${survey.title} » et ses ${responses} réponse(s) ont été supprimées`);
     } catch (err) {
-      setError(err.message || 'La suppression a échoué');
+      setRowError(survey.id, err.message || 'La suppression a échoué');
     }
   };
 
@@ -115,7 +121,7 @@ export default function AdminSurveys() {
   // Recette du 13/10 : clôturer (ou rouvrir) sans ouvrir tout le
   // formulaire — on n'envoie que ce qui change, quelques octets.
   const patchSurvey = async (survey, changes, message) => {
-    setError(null);
+    setRowError(null);
     try {
       const data = await api.patch(`/surveys/${survey.id}`, changes);
       setItems((prev) => prev.map((s) => (s.id === survey.id
@@ -124,7 +130,7 @@ export default function AdminSurveys() {
       showToast(message);
       return true;
     } catch (err) {
-      setError(err.message || 'La mise à jour a échoué');
+      setRowError(survey.id, err.message || 'La mise à jour a échoué');
       return false;
     }
   };
@@ -140,7 +146,7 @@ export default function AdminSurveys() {
     }
     // Fin programmée : l'enquête RESTE ouverte jusqu'au soir de ce jour
     if (!closing.day) {
-      setError('Choisissez la date de clôture.');
+      setRowError(survey.id, 'Choisissez la date de clôture.');
       return;
     }
     const closesAt = endOfDayIso(closing.day);
@@ -165,7 +171,7 @@ export default function AdminSurveys() {
       setItems((prev) => prev.map((s) => (s.id === survey.id ? { ...s, resultsPublished: data.survey.resultsPublished } : s)));
       showToast(data.survey.resultsPublished ? 'Résultats publiés' : 'Résultats dépubliés');
     } catch (err) {
-      setError(err.message || 'La mise à jour a échoué');
+      setRowError(survey.id, err.message || 'La mise à jour a échoué');
     }
   };
 
@@ -338,6 +344,12 @@ export default function AdminSurveys() {
                     </button>
                   )}
                 </div>
+
+                {rowError?.id === s.id && (
+                  <div role="alert" style={{ flexBasis: '100%', background: '#FCEAE6', color: '#A8442F', padding: '10px 14px', borderRadius: 10, fontSize: 14 }}>
+                    {rowError.message}
+                  </div>
+                )}
 
                 {closing?.id === s.id && (
                   <ClosingPanel

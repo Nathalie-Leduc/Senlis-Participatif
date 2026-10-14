@@ -31,7 +31,7 @@ import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
 import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
 import { SURVEY_TEMPLATES, PROFILE_QUESTIONS, instantiateQuestions } from '../constants/surveyTemplates.js';
 import { EMPTY_AUDIENCE } from '../utils/audience.js';
-import { endOfDayIso, startOfDayIso, toDateInput } from '../utils/surveyDates.js';
+import { endOfDayIso, startOfDayIso, toDateInput, todayInput } from '../utils/surveyDates.js';
 
 // Menu "cette question met à jour...", et la liste de valeurs
 // possibles pour CHAQUE option une fois un champ choisi — mêmes
@@ -744,6 +744,14 @@ export default function AdminSurveyForm() {
             />
           </Field>
         </div>
+        {/* Recette du 14/10 : une enquête OUVERTE avec une date passée serait
+            aussitôt refermée — on prévient avant même d'enregistrer.
+            Les dates « AAAA-MM-JJ » se comparent comme du texte. */}
+        {form.status === 'OPEN' && form.closesAt && form.closesAt < todayInput() && (
+          <p role="status" style={{ margin: '-4px 0 0', fontSize: 13, fontWeight: 600, color: '#A8442F' }}>
+            ⚠ Cette date de clôture est passée : l&apos;enquête serait aussitôt refermée. Choisissez une date à venir, ou videz le champ.
+          </p>
+        )}
 
         {/* ── Questions ─────────────────────────────────── */}
         <div style={{ marginTop: 10 }}>
