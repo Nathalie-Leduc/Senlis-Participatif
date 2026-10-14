@@ -31,6 +31,7 @@ import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
 import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
 import { SURVEY_TEMPLATES, PROFILE_QUESTIONS, instantiateQuestions } from '../constants/surveyTemplates.js';
 import { EMPTY_AUDIENCE } from '../utils/audience.js';
+import { endOfDayIso, startOfDayIso, toDateInput } from '../utils/surveyDates.js';
 
 // Menu "cette question met à jour...", et la liste de valeurs
 // possibles pour CHAQUE option une fois un champ choisi — mêmes
@@ -247,8 +248,8 @@ export default function AdminSurveyForm() {
           description: s.description,
           audience: { ...EMPTY_AUDIENCE, ...s.audience },
           status: s.status,
-          opensAt: s.opensAt ? s.opensAt.slice(0, 10) : '',
-          closesAt: s.closesAt ? s.closesAt.slice(0, 10) : '',
+          opensAt: toDateInput(s.opensAt),
+          closesAt: toDateInput(s.closesAt),
           questions: s.questions.map((q) => ({
             // q.id existe déjà en base : on le réutilise tel quel comme
             // clé React, pas besoin d'en fabriquer une nouvelle.
@@ -536,8 +537,11 @@ export default function AdminSurveyForm() {
       description: form.description.trim(),
       audience: form.audience,
       status: form.status,
-      opensAt: form.opensAt || undefined,
-      closesAt: form.closesAt || undefined,
+      // Recette du 13/10 : la clôture tombe le soir du jour choisi, pas à
+      // minuit la veille. En modification, un champ vidé EFFACE la date
+      // (null) ; à la création, il n'y a rien à effacer (undefined).
+      opensAt: form.opensAt ? startOfDayIso(form.opensAt) : (surveyId ? null : undefined),
+      closesAt: form.closesAt ? endOfDayIso(form.closesAt) : (surveyId ? null : undefined),
       questions: form.questions.map((q, questionIndex) => {
         const meta = QUESTION_TYPE_META[q.type];
         const options = effectiveOptions(q);
@@ -733,7 +737,7 @@ export default function AdminSurveyForm() {
               style={inputStyle}
             />
           </Field>
-          <Field label="Clôture (optionnel)">
+          <Field label="Clôture (optionnel)" hint="Fermeture automatique le soir de ce jour, à 23 h 59.">
             <input
               type="date" name="closesAt" value={form.closesAt} onChange={handleChange}
               style={inputStyle}

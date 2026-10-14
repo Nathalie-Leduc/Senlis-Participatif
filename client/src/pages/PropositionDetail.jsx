@@ -30,6 +30,7 @@ import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeZone, zoneFeatures } from '../constants/zones.js';
 import { loadIris } from '../utils/irisData.js';
 import DraftBanner from '../components/DraftBanner/DraftBanner.jsx';
+import BackLink from '../components/BackLink/BackLink.jsx';
 
 const PENDING_VOTE_KEY = 'senlis:pendingVote';
 
@@ -172,6 +173,12 @@ export default function PropositionDetail() {
   return (
     <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
       <Confetti trigger={burst} />
+
+      {/* Recette du 13/10 : revenir à la liste d'où l'on vient */}
+      <BackLink
+        publicList={{ to: '/propositions', label: 'Toutes les propositions' }}
+        staffList={{ to: '/admin/propositions', label: 'Administration — Propositions' }}
+      />
 
       {/* ── En-tête ──────────────────────────────────────── */}
       {proposal.status === 'PUBLISHED' ? (

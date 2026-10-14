@@ -97,9 +97,28 @@ function audienceToFields(audience) {
 // (conditions, limites de cases) : voir services/surveyBuilder.js,
 // partagé avec le seed de production (S5R-05).
 
+/**
+ * Clôture automatique (recette du 13/10) : une enquête OUVERTE dont la
+ * date de clôture est passée passe en CLOSED. Les réponses étaient déjà
+ * refusées après cette date (submitResponse) ; c'est maintenant aussi
+ * ce qu'affichent les listes et la page de l'enquête.
+ *
+ * Une seule requête, appelée au début des lectures : pas besoin d'une
+ * tâche planifiée pour une poignée d'enquêtes. Analogie : le panneau
+ * « Ouvert / Fermé » d'une boutique, retourné par le premier client
+ * qui passe après l'heure de fermeture.
+ */
+async function closeExpiredSurveys() {
+  await prisma.survey.updateMany({
+    where: { status: 'OPEN', closesAt: { lt: new Date() } },
+    data: { status: 'CLOSED' },
+  });
+}
+
 // ── GET /surveys/admin — liste ADMIN, tous statuts confondus ───
 export async function listAdmin(req, res, next) {
   try {
+    await closeExpiredSurveys();
     const { page, limit, status } = req.validatedQuery;
     const where = status ? { status } : {};
 
@@ -126,6 +145,7 @@ export async function listAdmin(req, res, next) {
 // ── GET /surveys — liste paginée, publique ──────────────
 export async function list(req, res, next) {
   try {
+    await closeExpiredSurveys();
     const { page, limit, status } = req.validatedQuery;
     const where = { status: status || { in: VISIBLE_STATUSES } };
 
@@ -152,6 +172,7 @@ export async function list(req, res, next) {
 // ── GET /surveys/:slug — détail avec questions + options ───
 export async function getBySlug(req, res, next) {
   try {
+    await closeExpiredSurveys();
     const { slug } = req.params;
 
     const survey = await prisma.survey.findUnique({
@@ -362,13 +383,24 @@ export async function remove(req, res, next) {
     // Même garde-fou qu'à l'édition : Survey a onDelete: Cascade vers
     // SurveyResponse (voir schema.prisma) — supprimer une enquête qui
     // a déjà des réponses effacerait les réponses des citoyens avec.
+    //
+    // Décision du 13/10 : EN DÉVELOPPEMENT seulement, un ADMIN peut
+    // supprimer une enquête de test AVEC ses réponses de test, en le
+    // demandant explicitement (?avecReponses=1) — plus besoin de Prisma
+    // Studio. En production : toujours refusé, on clôture.
     const responseCount = await prisma.surveyResponse.count({ where: { surveyId: id } });
-    if (responseCount > 0) {
+    const canForce = process.env.NODE_ENV !== 'production' && req.user.role === 'ADMIN';
+    const forced = canForce && req.query.avecReponses === '1';
+    if (responseCount > 0 && !forced) {
       const error = new Error(
-        "Impossible de supprimer une enquête ayant déjà reçu des réponses — clôturez-la (status CLOSED) plutôt que de la supprimer.",
+        canForce
+          ? `Cette enquête a ${responseCount} réponse(s). En développement, vous pouvez la supprimer AVEC ses réponses de test.`
+          : "Impossible de supprimer une enquête ayant déjà reçu des réponses — clôturez-la plutôt que de la supprimer.",
       );
       error.status = 409;
       error.code = 'SURVEY_HAS_RESPONSES';
+      // Le client s'en sert pour proposer (ou non) la suppression forcée
+      error.details = { responses: responseCount, canForce };
       throw error;
     }
 
@@ -379,7 +411,8 @@ export async function remove(req, res, next) {
       action: AUDIT_ACTIONS.SURVEY_DELETED,
       targetType: 'Survey',
       targetId: id,
-      details: { title: existing.title },
+      // Le nombre de réponses effacées est noté (0 hors suppression forcée)
+      details: { title: existing.title, responsesDeleted: responseCount },
     });
 
     res.status(204).end();

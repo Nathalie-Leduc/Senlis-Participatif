@@ -149,6 +149,7 @@ export default function AdminPropositions() {
                       brouillon s'y affiche aussi, signalé, pour l'admin) */}
                   <Link
                     to={`/propositions/${p.slug}`}
+                    state={{ from: '/admin/propositions', fromLabel: 'Administration — Propositions' }}
                     className="btn"
                     aria-label={`Voir « ${p.title} » comme les citoyens`}
                     style={{ background: '#fff', color: '#1E5F7C', border: '2px solid #E3F0F6', padding: '8px 16px', minHeight: 40, fontSize: 14 }}

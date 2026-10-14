@@ -27,6 +27,7 @@ import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeSurveyLength } from '../utils/surveyLength.js';
 import { describeAudience, isEveryone } from '../utils/audience.js';
 import DraftBanner from '../components/DraftBanner/DraftBanner.jsx';
+import BackLink from '../components/BackLink/BackLink.jsx';
 
 export default function EnqueteDetail() {
   const { slug } = useParams();
@@ -98,6 +99,11 @@ export default function EnqueteDetail() {
 
   return (
     <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
+      {/* Recette du 13/10 : revenir à la liste d'où l'on vient */}
+      <BackLink
+        publicList={{ to: '/enquetes', label: 'Toutes les enquêtes' }}
+        staffList={{ to: '/admin/enquetes', label: 'Administration — Enquêtes' }}
+      />
       <span style={{
         fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px',
         color: isOpen ? '#3A7A4D' : '#6B6257',
