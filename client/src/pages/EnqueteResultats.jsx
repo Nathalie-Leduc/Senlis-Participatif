@@ -2,7 +2,7 @@
 // Page résultats — /enquetes/:slug/resultats
 //
 // Consomme directement GET /surveys/:slug/results (S4-03) — la
-// forme de la réponse dicte l'affichage : "options" → barres,
+// forme de la réponse dicte l'affichage : "options" → graphique (S5R2-04),
 // "stats" → nombre, "totalAnswered" → juste un compte (voir le
 // contrôleur pour le détail de pourquoi le texte libre n'est pas
 // exposé ici).
@@ -11,7 +11,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
-import useScrollReveal from '../hooks/useScrollReveal.js';
+import ResultChart from '../components/ResultChart/ResultChart.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function EnqueteResultats() {
@@ -83,14 +83,9 @@ export default function EnqueteResultats() {
             )}
             {q.totalForQuestion === results.totalResponses && <div style={{ marginBottom: 14 }} />}
 
-            {/* CHOIX_UNIQUE / CHOIX_MULTIPLE / OUI_NON → une barre par option */}
-            {q.options && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {q.options.map((opt) => (
-                  <ResultBar key={opt.id} option={opt} />
-                ))}
-              </div>
-            )}
+            {/* CHOIX_UNIQUE / CHOIX_MULTIPLE / OUI_NON → graphique Chart.js
+                (S5R2-04) et, à côté, le tableau des nombres */}
+            {q.options && <ResultChart question={q} />}
 
             {/* NOMBRE → quelques statistiques */}
             {q.stats && (
@@ -112,33 +107,6 @@ export default function EnqueteResultats() {
             )}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Une barre de résultat, animée à l'entrée dans l'écran ────
-// Composant à part plutôt qu'un appel direct à useScrollReveal dans
-// le .map() ci-dessus : un Hook ne peut pas être appelé dans une
-// boucle — il faut un composant distinct, instancié une fois par
-// option, chacun avec son propre appel de Hook indépendant.
-function ResultBar({ option }) {
-  const ref = useScrollReveal('is-visible', { threshold: 0.3 });
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-        <span>
-          {option.label}
-          {/* S5R2-02 : option proposée à une partie des répondants seulement */}
-          {typeof option.offeredTo === 'number' && (
-            <span style={{ color: '#6B6257', fontSize: 13 }}> · proposée à {option.offeredTo} personne{option.offeredTo > 1 ? 's' : ''}</span>
-          )}
-        </span>
-        <span style={{ color: '#6B6257' }}>{option.count} — {option.percentage}%</span>
-      </div>
-      <div ref={ref} className="result-bar" style={{ '--w': `${option.percentage}%` }}>
-        <span />
       </div>
     </div>
   );

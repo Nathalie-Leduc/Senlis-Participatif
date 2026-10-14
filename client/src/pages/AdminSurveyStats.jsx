@@ -11,7 +11,8 @@
 //     l'enquête, ou des critères choisis (mêmes cases que le public visé,
 //     composant AudiencePicker) ;
 //  2. QUESTION : toutes, ou une seule ;
-//  3. RÉSULTATS en barres horizontales, puis EXPORT (CSV pour Excel,
+//  3. RÉSULTATS en graphiques (Chart.js, S5R2-04 : barres, ou secteurs
+//     quand ils ont un sens) avec les nombres en tableau, puis EXPORT (CSV pour Excel,
 //     JSON) de ce qui est affiché.
 //
 // Analogie : un tableur avec des filtres en tête de colonne — on choisit
@@ -34,6 +35,7 @@ import { describeAudience, isEveryone, EMPTY_AUDIENCE } from '../utils/audience.
 import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
 import { downloadText } from '../utils/download.js';
 import { toCsv, toJson } from '../utils/resultsExport.js';
+import ResultChart from '../components/ResultChart/ResultChart.jsx';
 
 /** Paramètres de requête du filtre « public analysé » */
 function filterQuery(scope, audience) {
@@ -270,45 +272,13 @@ function QuestionResult({ question: q, index, conditions, minGroupSize }) {
           <p style={{ fontSize: 13, color: '#6B6257', marginBottom: 10 }}>
             {q.totalForQuestion} personne{q.totalForQuestion > 1 ? 's' : ''} concernée{q.totalForQuestion > 1 ? 's' : ''}
           </p>
-          {q.options && <ResultBars options={q.options} />}
+          {/* S5R2-04 : graphique Chart.js + tableau des nombres */}
+          {q.options && <ResultChart question={q} />}
           {q.stats && <NumberStats stats={q.stats} />}
           {q.totalAnswered !== undefined && <FreeText question={q} />}
         </>
       )}
     </article>
-  );
-}
-
-/**
- * Graphique en barres horizontales. Les barres sont décoratives
- * (aria-hidden) : chaque ligne porte AUSSI le nombre et le pourcentage
- * en texte — un lecteur d'écran lit « Oui : 9 réponses, 75 % », et
- * l'information ne repose jamais sur la seule longueur d'une barre
- * (RGAA 3.1).
- */
-export function ResultBars({ options }) {
-  return (
-    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {options.map((o) => (
-        <li key={o.id ?? o.label}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14, marginBottom: 4 }}>
-            <span>
-              {o.label}
-              {/* S5R2-02 : option conditionnelle — proposée à une partie seulement */}
-              {typeof o.offeredTo === 'number' && (
-                <span style={{ color: '#6B6257', fontSize: 13 }}> · proposée à {o.offeredTo} personne{o.offeredTo > 1 ? 's' : ''}</span>
-              )}
-            </span>
-            <span style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>
-              {o.count} <span style={{ fontWeight: 400, color: '#6B6257' }}>({o.percentage} %)</span>
-            </span>
-          </div>
-          <div aria-hidden="true" style={{ height: 12, background: '#EFEBE2', borderRadius: 6, overflow: 'hidden' }}>
-            <div style={{ width: `${Math.min(100, o.percentage)}%`, height: '100%', background: '#1E5F7C', borderRadius: 6 }} />
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }
 
