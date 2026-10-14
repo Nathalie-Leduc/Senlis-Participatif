@@ -46,6 +46,7 @@ La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres
 | `npm start` | Serveur production |
 | `npm run seed` | Injecte les données de démo (`prisma/seed.js`) |
 | `npm run seed:prod` | Données réelles de production (admin, proposition, enquête) |
+| `npm run seed:demo` | **Développement seulement** : 20 citoyen·nes fictifs aux profils variés (centre, chaque quartier, autres villes, travail) répondent aux enquêtes ouvertes et votent — options `--enquete <slug>`, `--nombre N`, `--sans-votes`, `--supprimer` (efface tout ce qui est démo) |
 | `npm run purge` | Purge RGPD : comptes inactifs (3 ans, après avertissement) et jetons expirés — `-- --dry-run` pour simuler |
 | `npm test` | Tests d'intégration Vitest + Supertest (BDD de test jetable) |
 | `npm run lint` | ESLint |

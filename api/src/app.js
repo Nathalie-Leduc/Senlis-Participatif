@@ -107,6 +107,15 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: process.env.NODE_ENV === 'test' ? 10000 : 100,
+  // Seed de démonstration (npm run seed:demo, 14/10) : le script fait
+  // des centaines de requêtes en quelques secondes, toutes depuis la
+  // même adresse — il était bloqué au bout de 100. Il lève donc cet
+  // interrupteur, qui vit DANS le processus (app.locals) : aucune
+  // requête venue du réseau ne peut l'actionner, et le serveur lancé
+  // par « npm run dev » ou en production ne le lève jamais.
+  // Analogie : le videur laisse passer l'équipe de montage par la porte
+  // de service, qui ne donne pas sur la rue.
+  skip: (req) => req.app.locals.bypassRateLimit === true,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
