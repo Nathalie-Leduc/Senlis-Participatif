@@ -19,18 +19,18 @@
 //    - une seule réponse possible (Oui/Non, Choix unique) : les parts
 //      forment un tout (avec des choix multiples, la somme dépasse 100 %,
 //      et un « camembert » mentirait) ;
-//    - de 3 à 5 options : à 2 parts, les barres se lisent mieux ; au-delà
-//      de 5, les secteurs deviennent trop fins pour être comparés ;
-//    - aucune option conditionnelle (proposée à une partie seulement :
-//      les parts ne porteraient pas sur les mêmes personnes).
+//    - recette du 14/10 : sur TOUTES ces questions, quel que soit le
+//      nombre d'options (« Dans quel quartier ? » en a 7 ou 8). Au-delà
+//      de 8 parts, les plus petites sont regroupées en « Autres
+//      réponses » ; le tableau garde chaque option.
 //    Les personnes qui ont vu la question sans y répondre forment une
 //    part grise « Sans réponse » : le tout, c'est bien 100 % des
 //    personnes concernées, comme dans le tableau.
 //
 // 3. Les couleurs : barres d'une seule teinte (Bleu Nonette) ; secteurs
-//    en 5 couleurs proches de la charte, plus franches, dans un ordre
-//    FIXE vérifié pour les daltonismes (outil de validation de palette,
-//    voisins deux à deux, y compris le dernier secteur avec le premier).
+//    en 8 couleurs proches de la charte, plus franches, dans un ordre
+//    calculé pour chaque nombre de parts, vérifié pour les daltonismes
+//    (voir utils/resultChartRules.js).
 // ══════════════════════════════════════════════════════════
 
 import { useEffect, useId, useRef, useState } from 'react';
@@ -39,7 +39,7 @@ import {
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import {
-  SLICE_COLORS, NO_ANSWER_COLOR, canShowPie, noAnswerCount, wrapLabel,
+  canShowPie, pieSlices, wrapLabel,
 } from '../../utils/resultChartRules.js';
 
 // Chart.js est découpé en morceaux : on n'enregistre que ceux qui
@@ -59,10 +59,15 @@ const pct = (n) => n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
 /** Description courte du graphique, pour les lecteurs d'écran */
-function describe(question, kind) {
+function describe(question, pie) {
+  if (pie) {
+    // Les parts réellement dessinées (regroupement et « Sans réponse » compris)
+    const total = question.totalForQuestion || 1;
+    const parts = pie.slices.map((slice) => `${slice.label} ${pct(Math.round((slice.count / total) * 1000) / 10)} %`);
+    return `Diagramme en secteurs : ${parts.join(', ')}. Détail dans le tableau qui suit.`;
+  }
   const parts = question.options.map((o) => `${o.label} ${pct(o.percentage)} %`);
-  const shape = kind === 'pie' ? 'Diagramme en secteurs' : 'Diagramme en barres';
-  return `${shape} : ${parts.join(', ')}. Détail dans le tableau qui suit.`;
+  return `Diagramme en barres : ${parts.join(', ')}. Détail dans le tableau qui suit.`;
 }
 
 /**
@@ -94,7 +99,8 @@ export default function ResultChart({ question }) {
 
   if (options.length === 0) return null;
   const showPie = pieAllowed && kind === 'pie';
-  const noAnswer = showPie ? noAnswerCount(question) : 0;
+  // Les parts (couleur de chaque option, regroupement, « Sans réponse »)
+  const pie = showPie ? pieSlices(question) : null;
 
   return (
     <div className="result-chart">
@@ -119,19 +125,26 @@ export default function ResultChart({ question }) {
         </div>
       )}
 
-      {/* Le dessin : décrit en une phrase, le détail est dans le tableau */}
+      {/* Personne n'a (encore) répondu : un anneau vide ne dirait rien */}
+      {pie && pie.slices.length === 0 ? (
+        <p style={{ color: MUTED, fontSize: 14, textAlign: 'center', padding: '24px 0' }}>
+          Personne n&apos;a encore répondu à cette question.
+        </p>
+      ) : (
+      /* Le dessin : décrit en une phrase, le détail est dans le tableau */
       <div
         role="img"
-        aria-label={describe(question, showPie ? 'pie' : 'bar')}
+        aria-label={describe(question, pie)}
         aria-describedby={tableId}
         style={{ position: 'relative', height: showPie ? 240 : Math.max(90, options.length * (labelWidth() < 20 ? 52 : 44) + 30), maxWidth: showPie ? 320 : '100%', margin: showPie ? '0 auto' : 0 }}
       >
         {showPie
-          ? <Doughnut ref={chartRef} data={pieData(question, noAnswer)} options={pieOptions(question)} />
+          ? <Doughnut ref={chartRef} data={pieData(pie)} options={pieOptions(question)} />
           : <Bar ref={chartRef} data={barData(question)} options={barOptions(question)} />}
       </div>
+      )}
 
-      <ResultTable id={tableId} question={question} withSwatches={showPie} noAnswer={noAnswer} />
+      <ResultTable id={tableId} question={question} pie={pie} />
     </div>
   );
 }
@@ -186,20 +199,12 @@ function barOptions(question) {
 }
 
 // ── Secteurs (anneau) : les parts des personnes concernées ───────
-function pieData(question, noAnswer) {
-  const labels = question.options.map((o) => o.label);
-  const counts = question.options.map((o) => o.count);
-  const colors = SLICE_COLORS.slice(0, question.options.length);
-  if (noAnswer > 0) {
-    labels.push('Sans réponse');
-    counts.push(noAnswer);
-    colors.push(NO_ANSWER_COLOR);
-  }
+function pieData(pie) {
   return {
-    labels,
+    labels: pie.slices.map((slice) => slice.label),
     datasets: [{
-      data: counts,
-      backgroundColor: colors,
+      data: pie.slices.map((slice) => slice.count),
+      backgroundColor: pie.slices.map((slice) => slice.color),
       borderColor: '#fff', // 2 px de blanc entre deux parts : elles se distinguent même sans la couleur
       borderWidth: 2,
     }],
@@ -225,7 +230,11 @@ function pieOptions(question) {
 }
 
 // ── Le tableau des nombres (toujours affiché) ───────────────────
-function ResultTable({ id, question, withSwatches, noAnswer }) {
+function ResultTable({ id, question, pie }) {
+  // Lignes ajoutées par l'anneau : « Autres réponses » n'a pas de ligne
+  // (ses options ont chacune la leur, avec la pastille foncée) ; « Sans
+  // réponse », si.
+  const noAnswer = pie?.slices.find((slice) => slice.label === 'Sans réponse');
   const cell = { padding: '6px 8px', borderBottom: `1px solid ${GRID}`, fontSize: 14, verticalAlign: 'top' };
   const num = { ...cell, textAlign: 'right', whiteSpace: 'nowrap' };
   const total = question.totalForQuestion || 0;
@@ -240,10 +249,12 @@ function ResultTable({ id, question, withSwatches, noAnswer }) {
         </tr>
       </thead>
       <tbody>
-        {question.options.map((o, i) => (
+        {question.options.map((o) => (
           <tr key={o.id ?? o.label}>
             <th scope="row" style={{ ...cell, textAlign: 'left', fontWeight: 500 }}>
-              {withSwatches && <Swatch color={SLICE_COLORS[i]} />}
+              {/* Une option choisie par personne n'a pas de part : place vide,
+                  pour que les intitulés restent alignés */}
+              {pie && <Swatch color={pie.colorOf.get(o.id ?? o.label)} />}
               {o.label}
               {/* S5R2-02 : option proposée à une partie des personnes seulement */}
               {typeof o.offeredTo === 'number' && (
@@ -254,13 +265,13 @@ function ResultTable({ id, question, withSwatches, noAnswer }) {
             <td style={{ ...num, color: MUTED }}>{pct(o.percentage)} %</td>
           </tr>
         ))}
-        {withSwatches && noAnswer > 0 && (
+        {noAnswer && (
           <tr>
             <th scope="row" style={{ ...cell, textAlign: 'left', fontWeight: 500, color: MUTED }}>
-              <Swatch color={NO_ANSWER_COLOR} />Sans réponse
+              <Swatch color={noAnswer.color} />Sans réponse
             </th>
-            <td style={{ ...num, color: MUTED }}>{noAnswer}</td>
-            <td style={{ ...num, color: MUTED }}>{total ? pct(Math.round((noAnswer / total) * 1000) / 10) : 0} %</td>
+            <td style={{ ...num, color: MUTED }}>{noAnswer.count}</td>
+            <td style={{ ...num, color: MUTED }}>{total ? pct(Math.round((noAnswer.count / total) * 1000) / 10) : 0} %</td>
           </tr>
         )}
       </tbody>
@@ -273,7 +284,7 @@ function Swatch({ color }) {
   return (
     <span
       aria-hidden="true"
-      style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: color, marginRight: 8, verticalAlign: '-1px' }}
+      style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: color ?? 'transparent', marginRight: 8, verticalAlign: '-1px' }}
     />
   );
 }
