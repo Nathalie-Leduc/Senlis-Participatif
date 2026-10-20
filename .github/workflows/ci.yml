@@ -38,7 +38,7 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - run: npm ci
       - run: npx prisma migrate deploy
@@ -53,7 +53,7 @@ jobs:
         working-directory: client
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - run: npm ci
       - run: npm run lint
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
       # BLOQUANT : aucune faille « critique » dans ce qui part en
       # production (--omit=dev : les outils de test ne sont pas livrés).
