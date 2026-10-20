@@ -24,6 +24,7 @@
 // peine de dupliquer cette logique ici pour un script ponctuel.
 import prisma from '../src/lib/prisma.js';
 import argon2 from 'argon2';
+import { seedInitialParkings } from './data/parkings-initiaux.js';
 
 async function main() {
   // ── Un compte admin, réutilisable à volonté ──────────────
@@ -45,6 +46,9 @@ async function main() {
   });
 
   console.log(`✅ Admin : ${admin.email} / mot de passe : MotDePasse123!`);
+
+  // ── Les parkings (S5R2-05), SEULEMENT si la table est vide ──
+  await seedInitialParkings(prisma);
 
   // ── Plusieurs comptes citoyens, email déjà vérifié ───────
   // Même mot de passe que l'admin, réutilisé pour aller vite en

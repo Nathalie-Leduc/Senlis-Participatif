@@ -179,8 +179,8 @@ export default function Accueil() {
           </p>
 
           {/* S5R-11 : carte « Explorer » — propositions ET enquêtes par
-              quartier, vrais parkings (OpenStreetMap). Remplace la carte
-              qui ne montrait que les propositions localisées. */}
+              quartier, et les parkings (S5R2-05 : tenus par l'administration,
+              d'après le plan et le guide de la Ville). */}
           <ExploreMap height={380} />
           <p style={{ marginTop: 14 }}>
             <Link to="/carte">Ouvrir la carte en grand</Link>

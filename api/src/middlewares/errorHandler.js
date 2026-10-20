@@ -30,6 +30,8 @@ import multer from 'multer';
 const UNIQUE_FIELD_ERRORS = {
   email: { code: 'EMAIL_TAKEN', message: 'Cette adresse email est déjà utilisée' },
   pseudo: { code: 'PSEUDO_TAKEN', message: 'Ce pseudo est déjà pris — choisissez-en un autre' },
+  // S5R2-05 : seul « Parking » a un nom unique
+  name: { code: 'PARKING_NAME_TAKEN', message: 'Un parking porte déjà ce nom' },
 };
 
 // Nom d'index unique généré par Prisma : <Modèle>_<champ(s)>_key

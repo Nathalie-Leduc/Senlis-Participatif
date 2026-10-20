@@ -21,7 +21,7 @@
 // ══════════════════════════════════════════════════════════
 
 /** Date de dernière mise à jour des deux pages (à changer à chaque modification de fond). */
-export const LAST_UPDATED = '12 octobre 2026';
+export const LAST_UPDATED = '14 octobre 2026';
 
 export const SITE = {
   name: 'Senlis Participatif',

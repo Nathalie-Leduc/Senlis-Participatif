@@ -49,6 +49,7 @@ const AdminUsers = lazy(() => import('./pages/AdminUsers.jsx'));
 const AdminSurveyStats = lazy(() => import('./pages/AdminSurveyStats.jsx'));
 // S5R2-06 : outil de tracé de Saint-Vincent (admin seulement)
 const AdminQuartiers = lazy(() => import('./pages/AdminQuartiers.jsx'));
+const AdminParkings = lazy(() => import('./pages/AdminParkings.jsx')); // S5R2-05
 const AdminSurveyForm = lazy(() => import('./pages/AdminSurveyForm.jsx'));
 const Enquetes = lazy(() => import('./pages/Enquetes.jsx'));
 const EnqueteDetail = lazy(() => import('./pages/EnqueteDetail.jsx'));
@@ -168,6 +169,10 @@ export default function App() {
             } />
             <Route path="/admin/quartiers" element={
               <ProtectedRoute adminOnly><AdminQuartiers /></ProtectedRoute>
+            } />
+            {/* S5R2-05 : l'Admin-test consulte (lecture seule) */}
+            <Route path="/admin/parkings" element={
+              <ProtectedRoute staffOnly><AdminParkings /></ProtectedRoute>
             } />
             {/* adminOnly absent : n'importe quel citoyen CONNECTÉ peut
                 répondre — pas réservé aux admins. La vérification email

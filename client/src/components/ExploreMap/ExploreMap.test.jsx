@@ -18,12 +18,12 @@ vi.mock('../../utils/irisData.js', () => ({
     features: [{ type: 'Feature', properties: { code_iris: '606120101' }, geometry: { type: 'Polygon', coordinates: [[[2.58, 49.2], [2.59, 49.2], [2.59, 49.21], [2.58, 49.21]]] } }],
   }),
 }));
-vi.mock('../../utils/osmParkings.js', async (importOriginal) => ({
+// S5R2-05 : parkings gérés par l'administration (API)
+vi.mock('../../utils/parkings.js', async (importOriginal) => ({
   ...(await importOriginal()),
-  loadParkings: () => Promise.resolve({
-    type: 'FeatureCollection', source: '© contributeurs OpenStreetMap — licence ODbL',
-    features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [2.58, 49.2] }, properties: { osmId: 'node/1', name: 'Gare', capacity: 50, fee: true } }],
-  }),
+  loadParkings: () => Promise.resolve([
+    { id: 'k1', name: 'Parking de la Gare', places: 50, regime: 'GARE', charging: 'EXISTANTE', lat: 49.2, lng: 2.58 },
+  ]),
 }));
 vi.mock('../../services/api.js', () => ({
   api: {
@@ -81,14 +81,18 @@ describe('Carte « Explorer » v2', () => {
     expect(mapProps.selectedQuartiers).toEqual([]);
   });
 
-  it('parkings : couche décochée par défaut (320 repères surchargeaient la carte), source affichée une fois cochée', async () => {
+  it('parkings : couche décochée par défaut ; une fois cochée, repères de l’administration et légende des tarifs', async () => {
     await renderMap();
     const box = screen.getByRole('checkbox', { name: /Parkings \(1\)/ });
     expect(box).not.toBeChecked();
     expect(mapProps.parkings).toEqual([]);
+    expect(screen.queryByRole('heading', { name: 'Légende des parkings' })).toBeNull();
+
     fireEvent.click(box);
-    expect(mapProps.parkings[0].label).toBe('Gare — 50 places, payant');
-    expect(screen.getByText(/licence ODbL/)).toBeInTheDocument();
+    expect(mapProps.parkings[0]).toMatchObject({ label: 'Parking de la Gare', regime: 'GARE', charging: 'EXISTANTE' });
+    expect(mapProps.parkings[0].details).toContain('50 places');
+    expect(screen.getByRole('heading', { name: 'Légende des parkings' })).toBeInTheDocument();
+    expect(screen.getByText(/seuls les tarifs affichés sur place font foi/)).toBeInTheDocument();
   });
 
   it('propose le plein écran', async () => {
