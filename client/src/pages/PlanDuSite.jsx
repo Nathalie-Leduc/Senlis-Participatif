@@ -48,6 +48,8 @@ const ADMIN_LINKS = [
   { to: '/admin/comptes', label: 'Gérer les comptes', adminOnly: true },
   // S5R2-06 : outil de tracé des quartiers (Centre historique / Saint-Vincent)
   { to: '/admin/quartiers', label: 'Contours des quartiers', adminOnly: true },
+  // S5R2-05 : parkings de la carte (consultation pour l'Admin-test)
+  { to: '/admin/parkings', label: 'Parkings de la carte' },
 ];
 
 export default function PlanDuSite() {

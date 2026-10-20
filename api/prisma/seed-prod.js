@@ -28,6 +28,7 @@
 import prisma from '../src/lib/prisma.js';
 import { toNestedQuestionsCreate, resolveReferences } from '../src/services/surveyBuilder.js';
 import { PARKING_SURVEY } from './surveys/stationnement-v3.js';
+import { seedInitialParkings } from './data/parkings-initiaux.js';
 import argon2 from 'argon2';
 
 /**
@@ -103,6 +104,9 @@ async function main() {
   });
 
   console.log(`✅ Admin : ${admin.email} (mot de passe fourni par variable d'environnement, jamais affiché)`);
+
+  // ── Les parkings (S5R2-05), SEULEMENT si la table est vide ──
+  await seedInitialParkings(prisma);
 
   // ── La proposition réelle, SEULEMENT si la base est vide ─────
   const existingProposalCount = await prisma.proposal.count();

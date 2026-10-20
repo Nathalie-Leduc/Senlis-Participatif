@@ -31,6 +31,7 @@ import proposalsRouter from './routes/proposals.js';
 import surveysRouter from './routes/surveys.js';
 import statsRouter from './routes/stats.js';
 import usersRouter from './routes/users.js';
+import parkingsRouter from './routes/parkings.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
@@ -134,6 +135,7 @@ app.use('/api/v1/proposals', proposalsRouter);
 app.use('/api/v1/surveys', surveysRouter);
 app.use('/api/v1/stats', statsRouter);
 app.use('/api/v1/admin/users', usersRouter);
+app.use('/api/v1/parkings', parkingsRouter); // S5R2-05
 
 // Sprint 6 → app.use('/api/v1/comments', commentsRouter);
 

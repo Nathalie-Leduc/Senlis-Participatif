@@ -1,6 +1,13 @@
 // ══════════════════════════════════════════════════════════
 // Parkings réels de Senlis, depuis OpenStreetMap (S5R-11)
 //
+// ⚠️ S5R2-05 (recette du 08/10) : la carte n'utilise PLUS ce fichier.
+// Les parkings sont tenus par l'administration (table Parking, écran
+// /admin/parkings, utils/parkings.js) ; l'extraction et ses compléments
+// ont été retirés de public/data. Gardé, avec son script
+// (scripts/extract-parkings.mjs) et ses tests, s'il resservait un jour
+// — par exemple pour repérer un parking oublié.
+//
 // Recette du 30/09 : « ajouter les vrais emplacements des parkings ».
 // Ils remplacent les 3 points « d'exemple » inventés jusque-là.
 //

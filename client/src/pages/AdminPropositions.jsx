@@ -85,6 +85,8 @@ export default function AdminPropositions() {
           {isAdmin && (
             <Link to="/admin/quartiers" style={{ fontSize: 14, color: '#1E5F7C' }}>Contours des quartiers</Link>
           )}
+          {/* S5R2-05 : pas dans le menu (il passerait sur deux lignes) */}
+          <Link to="/admin/parkings" style={{ fontSize: 14, color: '#1E5F7C' }}>Parkings de la carte</Link>
           <Link to="/admin/propositions/nouvelle" className="btn btn-primary">
             + Nouvelle proposition
           </Link>

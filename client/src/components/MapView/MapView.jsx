@@ -20,6 +20,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Link } from 'react-router-dom';
 import { quartierOfFeature, ZONE_LABELS } from '../../constants/zones.js';
+import { regimeMeta } from '../../constants/parkings.js';
 
 // Icône personnalisée — un pin rond aux couleurs de la charte
 // graphique, avec le cerf en filigrane.
@@ -82,19 +83,36 @@ function irisStyle(feature, selectedQuartiers, neutral) {
 }
 
 // Icône parking — même principe que cerfIcon (DivIcon en CSS pur,
-// pas d'image externe à résoudre), mais couleur et symbole distincts
+// pas d'image externe à résoudre), mais carrée et marquée d'une lettre
 // pour qu'on ne confonde jamais un parking avec une proposition.
-const parkingIcon = L.divIcon({
-  className: '',
-  html: `<div style="
-    width: 30px; height: 30px; border-radius: 6px;
-    background: #1E5F7C; display: flex; align-items: center;
-    justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.3);
-    color: #fff; font-weight: 700; font-size: 14px;
-  ">P</div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
-});
+// S5R2-05 : la couleur et la lettre suivent le RÉGIME (bleu « P »
+// gratuit, rouge « R », vert « V »… comme sur le plan de la Ville),
+// et un petit éclair signale une borne de recharge.
+// Une icône par combinaison, créée une seule fois (mémoire).
+const parkingIcons = new Map();
+export function parkingIcon(regime, charging = 'AUCUNE') {
+  const key = `${regime}|${charging}`;
+  if (!parkingIcons.has(key)) {
+    const { letter, bg, fg } = regimeMeta(regime);
+    const bolt = charging === 'EXISTANTE' || charging === 'EN_PROJET'
+      ? `<span style="position:absolute;right:-7px;top:-7px;width:16px;height:16px;border-radius:50%;
+          background:${charging === 'EXISTANTE' ? '#2A8AB4' : '#7A5BB0'};color:#fff;font-size:10px;
+          display:flex;align-items:center;justify-content:center;border:1.5px solid #fff">⚡</span>`
+      : '';
+    parkingIcons.set(key, L.divIcon({
+      className: '',
+      html: `<div style="
+        position: relative; width: 28px; height: 28px; border-radius: 6px;
+        background: ${bg}; display: flex; align-items: center;
+        justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.3);
+        border: 2px solid #fff; color: ${fg}; font-weight: 700; font-size: 14px;
+      ">${letter}${bolt}</div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    }));
+  }
+  return parkingIcons.get(key);
+}
 
 // Icône enquête (S5R-11 v2) — doré, distinct du cerf des propositions
 // et du « P » des parkings : on ne confond jamais les trois
@@ -138,7 +156,8 @@ function ResizeWatcher() {
  *   de périmètre saisi (ça arrive avec S3-04, saisie admin).
  * @param {object} iris - FeatureCollection GeoJSON des 7 quartiers IRIS de
  *   Senlis (INSEE/IGN) — absent = couche non affichée.
- * @param {Array<{id, lat, lng, label}>} parkings - parkings de report (exemple)
+ * @param {Array<{id, lat, lng, label, regime?, charging?, details?: string[]}>} parkings -
+ *   parkings gérés par l'administration (S5R2-05, utils/parkings.js)
  * @param {number|string} height - hauteur du conteneur (la largeur suit son parent)
  */
 /**
@@ -223,8 +242,12 @@ export default function MapView({
       )}
 
       {parkings.map((p) => (
-        <Marker key={p.id} position={[p.lat, p.lng]} icon={parkingIcon}>
-          <Popup><strong>🅿️ {p.label}</strong></Popup>
+        <Marker key={p.id} position={[p.lat, p.lng]} icon={parkingIcon(p.regime, p.charging)} title={p.label}>
+          <Popup>
+            <strong>🅿️ {p.label}</strong>
+            {/* S5R2-05 : places, régime, PMR, recharge, remarque */}
+            {p.details?.map((line) => <div key={line} style={{ fontSize: 13 }}>{line}</div>)}
+          </Popup>
         </Marker>
       ))}
 

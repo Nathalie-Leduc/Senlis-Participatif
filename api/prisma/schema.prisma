@@ -613,3 +613,52 @@ model QuestionCondition {
 
   @@id([questionId, optionId])
 }
+
+// ══════════════════════════════════════════════════════════
+// S5R2-05 — Parkings gérés par l'administration (recette du 08/10)
+//
+// Remplace l'extraction OpenStreetMap (trop de corrections à faire) :
+// la mairie — ou l'administratrice — tient elle-même la liste, d'après
+// le plan des parkings du centre-ville (2023 : noms, places) et le
+// guide du stationnement 2025 (zones, tarifs, bornes de recharge).
+//
+// Presque tout est facultatif : un parking peut être créé avec son
+// seul nom, puis complété (places, régime…) et placé sur la carte plus
+// tard. Seuls les parkings PLACÉS (lat/lng renseignés) s'affichent sur
+// la carte publique.
+//
+// Analogie : les fiches d'un fichier de bibliothèque — on crée la
+// fiche avec le titre, on la complète au fil de l'eau, et le livre
+// n'apparaît en rayon qu'une fois qu'on lui a donné une place.
+// ══════════════════════════════════════════════════════════
+enum ParkingRegime {
+  GRATUIT        // parking public gratuit
+  ZONE_ROUGE     // payant, courte durée (centre)
+  ZONE_VERTE     // payant, durée moyenne
+  GARE           // parking de la gare (tarif et abonnements propres)
+  DUREE_LIMITEE  // gratuit avec disque, durée limitée
+  PARC_PAYANT    // parc payant à tarif propre (ex. « Brunehaut », ÉcoQuartier)
+}
+
+enum ParkingCharging {
+  AUCUNE
+  EXISTANTE  // bornes déjà installées
+  EN_PROJET  // bornes annoncées (guide 2025)
+}
+
+model Parking {
+  id             String          @id @default(uuid())
+  // Unique : deux fiches au même nom seraient un doublon (et le seed
+  // s'en sert pour ne jamais créer deux fois le même parking)
+  name           String          @unique
+  places         Int?
+  regime         ParkingRegime?  // null = « à préciser »
+  charging       ParkingCharging @default(AUCUNE)
+  chargingPoints Int?            // nombre de points de recharge, si connu
+  pmrPlaces      Int?            // places réservées aux personnes handicapées
+  note           String?         // remarque libre (ex. « disque 2 h », « souterrain »)
+  lat            Float?
+  lng            Float?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}

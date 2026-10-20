@@ -23,7 +23,9 @@ import { api } from '../../services/api.js';
 import LazyMapView from '../MapView/LazyMapView.jsx';
 import { ZONE_QUARTIERS } from '../../constants/zones.js';
 import { loadIris } from '../../utils/irisData.js';
-import { loadParkings, parkingMarkers } from '../../utils/osmParkings.js';
+// S5R2-05 : parkings gérés par l'administration (et non plus OpenStreetMap)
+import { loadParkings, parkingMarkers } from '../../utils/parkings.js';
+import ParkingLegend from '../ParkingLegend/ParkingLegend.jsx';
 import { itemsForSelection, irisCentroids, mapMarkers, unplacedProposals } from '../../utils/explore.js';
 
 const SENLIS_CENTER = [49.2058, 2.5847];
@@ -36,7 +38,7 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
   const [proposals, setProposals] = useState([]);
   const [surveys, setSurveys] = useState([]);
   const [iris, setIris] = useState(null);
-  const [parkings, setParkings] = useState(null);
+  const [parkings, setParkings] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   // [] = toute la ville (défaut) ; sinon les quartiers cochés
@@ -130,8 +132,8 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
         )}
         <p style={{ fontSize: 13, color: '#6B6257', marginTop: 6 }}>
           Cliquez sur un quartier pour l'ajouter ou le retirer de la sélection.
-          {layers.parkings && parkings?.source && ` Parkings : ${parkings.source}.`}
         </p>
+        {layers.parkings && <ParkingLegend />}
       </div>
 
       {/* ── Sélection et liste (alternative accessible à la carte) ── */}
