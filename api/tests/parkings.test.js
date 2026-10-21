@@ -15,14 +15,20 @@ import { INITIAL_PARKINGS, seedInitialParkings } from '../prisma/data/parkings-i
 
 const API = '/api/v1/parkings';
 const as = (token) => ({ Authorization: `Bearer ${token}` });
-const PLACE = { lat: 49.2069, lng: 2.5866 }; // près de la cathédrale
+// GeoJSON : [longitude, latitude]
+const point = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
+const collection = (...geometries) => ({ type: 'GeometryCollection', geometries });
+const PLACE = { geometry: collection(point(2.5866, 49.2069)) }; // près de la cathédrale
+// Recette du 20/10 : le stade a plusieurs aires ; la zone rouge, des places le long des rues
+const STADE = collection(point(2.5781, 49.2098), point(2.5795, 49.2104));
+const RUE = { type: 'LineString', coordinates: [[2.5862, 49.2061], [2.5871, 49.2058], [2.5880, 49.2054]] };
 
 describe('Parkings — lecture', () => {
   it('le public ne voit que les parkings placés sur la carte, par ordre alphabétique', async () => {
     await prisma.parking.createMany({
       data: [
         { name: 'Parking Saint-Rieul', places: 98, regime: 'GRATUIT', ...PLACE },
-        { name: 'Parking des Arènes', places: 37, regime: 'GRATUIT', lat: 49.205, lng: 2.58 },
+        { name: 'Parking des Arènes', places: 37, regime: 'GRATUIT', geometry: collection(point(2.58, 49.205)) },
         { name: 'Parking pas encore placé', places: 10 },
       ],
     });
@@ -49,7 +55,7 @@ describe('Parkings — écriture (ADMIN)', () => {
     const admin = await makeAdminUser();
     const created = await request(app).post(API).set(as(admin.token)).send({ name: '  Parking de la Poste  ' });
     expect(created.status).toBe(201);
-    expect(created.body.parking).toMatchObject({ name: 'Parking de la Poste', charging: 'AUCUNE', lat: null });
+    expect(created.body.parking).toMatchObject({ name: 'Parking de la Poste', charging: 'AUCUNE', geometry: null });
 
     const id = created.body.parking.id;
     const updated = await request(app).patch(`${API}/${id}`).set(as(admin.token)).send({
@@ -60,15 +66,30 @@ describe('Parkings — écriture (ADMIN)', () => {
 
     const logs = await prisma.adminAuditLog.findMany({ where: { targetId: id }, orderBy: { createdAt: 'asc' } });
     expect(logs.map((l) => l.action)).toEqual(['PARKING_CREATED', 'PARKING_UPDATED']);
-    expect(logs[1].details).toMatchObject({ name: 'Parking de la Poste', placed: true });
+    expect(logs[1].details).toMatchObject({ name: 'Parking de la Poste', locations: 1 });
   });
 
-  it('retirer de la carte : lat et lng à null ; le parking disparaît de la carte publique', async () => {
+  it('plusieurs emplacements ET des traits le long des rues (recette du 20/10)', async () => {
+    const admin = await makeAdminUser();
+    const res = await request(app).post(API).set(as(admin.token)).send({
+      name: 'Parking du Stade', places: 92, regime: 'GRATUIT', geometry: collection(...STADE.geometries, RUE),
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.parking.geometry.geometries.map((g) => g.type)).toEqual(['Point', 'Point', 'LineString']);
+    const pub = await request(app).get(API);
+    expect(pub.body.items[0].geometry.geometries).toHaveLength(3);
+  });
+
+  it('retirer de la carte : geometry null (ou collection vide) ; le parking disparaît de la carte publique', async () => {
     const admin = await makeAdminUser();
     const parking = await prisma.parking.create({ data: { name: 'Parking du Heaume', ...PLACE } });
-    const res = await request(app).patch(`${API}/${parking.id}`).set(as(admin.token)).send({ lat: null, lng: null });
+    const res = await request(app).patch(`${API}/${parking.id}`).set(as(admin.token)).send({ geometry: collection() });
     expect(res.status).toBe(200);
+    expect(res.body.parking.geometry).toBeNull();
     expect((await request(app).get(API)).body.items).toHaveLength(0);
+
+    await request(app).patch(`${API}/${parking.id}`).set(as(admin.token)).send(PLACE);
+    expect((await request(app).patch(`${API}/${parking.id}`).set(as(admin.token)).send({ geometry: null })).body.parking.geometry).toBeNull();
   });
 
   it('« aucune » recharge efface le nombre de points de recharge', async () => {
@@ -103,15 +124,17 @@ describe('Parkings — écriture (ADMIN)', () => {
 describe('Parkings — validation', () => {
   it('refuse un point hors de Senlis (latitude et longitude inversées, le plus souvent)', async () => {
     const admin = await makeAdminUser();
-    const res = await request(app).post(API).set(as(admin.token)).send({ name: 'Inversé', lat: 2.5866, lng: 49.2069 });
+    const res = await request(app).post(API).set(as(admin.token)).send({ name: 'Inversé', geometry: collection(point(49.2069, 2.5866)) });
     expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body.error)).toMatch(/inversées/);
   });
 
-  it('latitude et longitude vont ensemble', async () => {
+  it('refuse un trait d’un seul point et une forme inconnue', async () => {
     const admin = await makeAdminUser();
-    const res = await request(app).post(API).set(as(admin.token)).send({ name: 'À moitié placé', lat: 49.2 });
-    expect(res.status).toBe(400);
-    expect(JSON.stringify(res.body.error)).toMatch(/vont ensemble/);
+    const oneVertex = { type: 'LineString', coordinates: [[2.5862, 49.2061]] };
+    const polygon = { type: 'Polygon', coordinates: [[[2.58, 49.2], [2.59, 49.2], [2.59, 49.21], [2.58, 49.2]]] };
+    expect((await request(app).post(API).set(as(admin.token)).send({ name: 'Trait court', geometry: collection(oneVertex) })).status).toBe(400);
+    expect((await request(app).post(API).set(as(admin.token)).send({ name: 'Polygone', geometry: collection(polygon) })).status).toBe(400);
   });
 
   it('refuse un nombre de places négatif, un régime inconnu, un nom déjà pris', async () => {
@@ -133,6 +156,6 @@ describe('Parkings — données initiales (plan 2023 + guide 2025)', () => {
     expect(await seedInitialParkings(prisma)).toBe(0); // rien de plus au 2e lancement
     expect(await prisma.parking.count()).toBe(INITIAL_PARKINGS.length);
     // Aucun n'est placé : c'est le travail de l'écran d'administration
-    expect(await prisma.parking.count({ where: { lat: { not: null } } })).toBe(0);
+    expect((await prisma.parking.findMany()).every((p) => p.geometry === null)).toBe(true);
   });
 });

@@ -22,7 +22,13 @@ vi.mock('../../utils/irisData.js', () => ({
 vi.mock('../../utils/parkings.js', async (importOriginal) => ({
   ...(await importOriginal()),
   loadParkings: () => Promise.resolve([
-    { id: 'k1', name: 'Parking de la Gare', places: 50, regime: 'GARE', charging: 'EXISTANTE', lat: 49.2, lng: 2.58 },
+    {
+      id: 'k1', name: 'Parking de la Gare', places: 50, regime: 'GARE', charging: 'EXISTANTE',
+      geometry: { type: 'GeometryCollection', geometries: [
+        { type: 'Point', coordinates: [2.58, 49.2] },
+        { type: 'LineString', coordinates: [[2.581, 49.201], [2.582, 49.202]] },
+      ] },
+    },
   ]),
 }));
 vi.mock('../../services/api.js', () => ({
@@ -89,7 +95,9 @@ describe('Carte « Explorer » v2', () => {
     expect(screen.queryByRole('heading', { name: 'Légende des parkings' })).toBeNull();
 
     fireEvent.click(box);
-    expect(mapProps.parkings[0]).toMatchObject({ label: 'Parking de la Gare', regime: 'GARE', charging: 'EXISTANTE' });
+    expect(mapProps.parkings[0]).toMatchObject({ label: 'Parking de la Gare', regime: 'GARE', charging: 'EXISTANTE', lat: 49.2, lng: 2.58 });
+    // Recette du 20/10 : le trait le long de la rue, en [latitude, longitude] pour Leaflet
+    expect(mapProps.parkingLines[0].positions).toEqual([[49.201, 2.581], [49.202, 2.582]]);
     expect(mapProps.parkings[0].details).toContain('50 places');
     expect(screen.getByRole('heading', { name: 'Légende des parkings' })).toBeInTheDocument();
     expect(screen.getByText(/seuls les tarifs affichés sur place font foi/)).toBeInTheDocument();

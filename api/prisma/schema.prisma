@@ -624,8 +624,8 @@ model QuestionCondition {
 //
 // Presque tout est facultatif : un parking peut être créé avec son
 // seul nom, puis complété (places, régime…) et placé sur la carte plus
-// tard. Seuls les parkings PLACÉS (lat/lng renseignés) s'affichent sur
-// la carte publique.
+// tard. Seuls les parkings PLACÉS (au moins un point ou un trait)
+// s'affichent sur la carte publique.
 //
 // Analogie : les fiches d'un fichier de bibliothèque — on crée la
 // fiche avec le titre, on la complète au fil de l'eau, et le livre
@@ -657,8 +657,14 @@ model Parking {
   chargingPoints Int?            // nombre de points de recharge, si connu
   pmrPlaces      Int?            // places réservées aux personnes handicapées
   note           String?         // remarque libre (ex. « disque 2 h », « souterrain »)
-  lat            Float?
-  lng            Float?
+  // Recette du 20/10 : un parking peut avoir PLUSIEURS emplacements (le
+  // stade : plusieurs aires) et des TRAITS le long des rues (places en
+  // voirie de la zone rouge). Stocké en GeoJSON standard : une
+  // GeometryCollection de Point et de LineString, coordonnées
+  // [longitude, latitude]. null = pas encore placé (absent de la carte).
+  // Remplace lat / lng (un seul point), convertis par la migration
+  // parking_locations.
+  geometry       Json?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }

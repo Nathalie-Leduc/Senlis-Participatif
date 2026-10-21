@@ -4,20 +4,27 @@
 //   GET    /parkings          public : les parkings PLACÉS sur la carte
 //   GET    /parkings/admin    équipe : tous, placés ou non
 //   POST   /parkings          ADMIN : ajouter
-//   PATCH  /parkings/:id      ADMIN : modifier, placer ou retirer de la carte
+//   PATCH  /parkings/:id      ADMIN : modifier, placer (points, traits) ou retirer de la carte
 //   DELETE /parkings/:id      ADMIN : supprimer
 //
 // Chaque modification est notée au journal d'administration.
 // ══════════════════════════════════════════════════════════
 
 import prisma from '../lib/prisma.js';
+// Prisma (namespace) : pour Prisma.DbNull — même import que proposalsController.js
+import prismaPkg from '../generated/prisma/index.js';
+
+const { Prisma } = prismaPkg;
 import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 
 // Ce que voit le public : pas de dates internes
 const PUBLIC_SELECT = {
   id: true, name: true, places: true, regime: true, charging: true,
-  chargingPoints: true, pmrPlaces: true, note: true, lat: true, lng: true,
+  chargingPoints: true, pmrPlaces: true, note: true, geometry: true,
 };
+
+/** Nombre d'emplacements (points + traits) — 0 = pas placé */
+const locationCount = (geometry) => geometry?.geometries?.length ?? 0;
 
 function notFound() {
   const error = new Error('Parking introuvable');
@@ -37,17 +44,19 @@ function toData(body) {
   const data = { ...body };
   // « Aucune » recharge : plus de nombre de points de recharge
   if (data.charging === 'AUCUNE') data.chargingPoints = null;
+  // Une colonne Json se vide avec Prisma.DbNull (un simple null y
+  // écrirait la VALEUR JSON null, et non « pas de valeur »)
+  if (data.geometry === null) data.geometry = Prisma.DbNull;
   return data;
 }
 
 // ── GET /parkings — public ─────────────────────────────────
 export async function list(req, res, next) {
   try {
-    const items = await prisma.parking.findMany({
-      where: { lat: { not: null }, lng: { not: null } },
-      select: PUBLIC_SELECT,
-    });
-    res.json({ items: items.sort(byName) });
+    // Une petite table (quelques dizaines de lignes) : le filtre « placé »
+    // se fait ici, plus lisible qu'un filtre sur le contenu du JSON
+    const items = await prisma.parking.findMany({ select: PUBLIC_SELECT });
+    res.json({ items: items.filter((p) => locationCount(p.geometry) > 0).sort(byName) });
   } catch (err) {
     next(err);
   }
@@ -96,7 +105,7 @@ export async function update(req, res, next) {
       details: {
         name: parking.name,
         fields: Object.keys(req.body),
-        ...('lat' in req.body && { placed: req.body.lat !== null }),
+        ...('geometry' in req.body && { locations: locationCount(req.body.geometry) }),
       },
     });
     res.json({ parking });

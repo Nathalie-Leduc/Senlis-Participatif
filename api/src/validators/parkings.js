@@ -19,8 +19,34 @@ const count = (label) => z.union([
   z.number({ invalid_type_error: `${label} : un nombre est attendu` }).int(`${label} : un nombre entier est attendu`).min(0, `${label} : pas de nombre négatif`).max(5000, `${label} : nombre trop grand`),
 ]);
 
-const lat = z.union([z.null(), z.number().min(SENLIS_BOUNDS.minLat).max(SENLIS_BOUNDS.maxLat)]);
-const lng = z.union([z.null(), z.number().min(SENLIS_BOUNDS.minLng).max(SENLIS_BOUNDS.maxLng)]);
+// ── Emplacements (recette du 20/10) ──────────────────────────
+// GeoJSON standard : une GeometryCollection de points (une aire de
+// stationnement) et de traits (des places le long d'une rue). Chaque
+// coordonnée est [longitude, latitude] — l'ordre GeoJSON, inverse de
+// celui qu'on dit à l'oral.
+// Analogie : sur un plan papier, on colle des gommettes (points) et on
+// surligne des bouts de rue au feutre (traits).
+const OUT_OF_SENLIS = 'Un emplacement est hors de Senlis (latitude et longitude inversées ?)';
+const position = z.tuple([
+  z.number().min(SENLIS_BOUNDS.minLng, OUT_OF_SENLIS).max(SENLIS_BOUNDS.maxLng, OUT_OF_SENLIS),
+  z.number().min(SENLIS_BOUNDS.minLat, OUT_OF_SENLIS).max(SENLIS_BOUNDS.maxLat, OUT_OF_SENLIS),
+]);
+const pointGeometry = z.object({ type: z.literal('Point'), coordinates: position });
+const lineGeometry = z.object({
+  type: z.literal('LineString'),
+  coordinates: z.array(position).min(2, 'Un trait compte au moins 2 points').max(200, 'Trait trop long (200 points au plus)'),
+});
+export const MAX_LOCATIONS = 50;
+const geometry = z.union([
+  z.null(),
+  z.object({
+    type: z.literal('GeometryCollection'),
+    geometries: z.array(z.discriminatedUnion('type', [pointGeometry, lineGeometry]))
+      .max(MAX_LOCATIONS, `${MAX_LOCATIONS} emplacements au plus par parking`),
+  }),
+])
+  // Une collection vide = pas placé : on enregistre null
+  .transform((g) => (g && g.geometries.length === 0 ? null : g));
 
 const fields = {
   name: z.string({ required_error: 'Le nom est obligatoire' }).trim().min(2, 'Le nom doit contenir au moins 2 caractères').max(120),
@@ -32,21 +58,10 @@ const fields = {
   // Une remarque vide = pas de remarque
   note: z.union([z.null(), z.string().trim().max(300)]).optional()
     .transform((v) => (v === '' ? null : v)),
-  lat: lat.optional(),
-  lng: lng.optional(),
+  geometry: geometry.optional(),
 };
 
-/** Latitude et longitude vont ensemble : les deux, ou aucune */
-function samePlacement(data, ctx) {
-  const hasLat = data.lat !== undefined && data.lat !== null;
-  const hasLng = data.lng !== undefined && data.lng !== null;
-  if ('lat' in data !== 'lng' in data || hasLat !== hasLng) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['lat'],
-      message: 'Latitude et longitude vont ensemble : renseignez les deux, ou aucune',
-    });
-  }
+function consistency(data, ctx) {
   // Points de recharge sans recharge : incohérent
   if (data.charging === 'AUCUNE' && data.chargingPoints > 0) {
     ctx.addIssue({
@@ -57,7 +72,7 @@ function samePlacement(data, ctx) {
   }
 }
 
-export const createParkingSchema = z.object(fields).superRefine(samePlacement);
+export const createParkingSchema = z.object(fields).superRefine(consistency);
 
 // En modification, tout est facultatif (on n'envoie que ce qui change)
-export const updateParkingSchema = z.object({ ...fields, name: fields.name.optional() }).superRefine(samePlacement);
+export const updateParkingSchema = z.object({ ...fields, name: fields.name.optional() }).superRefine(consistency);

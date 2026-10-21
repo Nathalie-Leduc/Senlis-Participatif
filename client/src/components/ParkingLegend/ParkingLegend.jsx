@@ -36,6 +36,11 @@ export default function ParkingLegend() {
             <Marker regime={regime} />{PARKING_REGIMES[regime].label}
           </li>
         ))}
+        {/* Recette du 20/10 : les places en voirie sont tracées le long de la rue */}
+        <li style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span aria-hidden="true" style={{ width: 22, height: 5, borderRadius: 3, background: PARKING_REGIMES.ZONE_ROUGE.bg, flex: 'none' }} />
+          Trait de couleur : places le long de la rue (même couleur que le régime)
+        </li>
         <li style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span aria-hidden="true" style={{ width: 22, textAlign: 'center' }}>⚡</span>
           Borne de recharge (bleue : installée, violette : en projet)

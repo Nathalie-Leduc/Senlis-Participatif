@@ -24,7 +24,7 @@ import LazyMapView from '../MapView/LazyMapView.jsx';
 import { ZONE_QUARTIERS } from '../../constants/zones.js';
 import { loadIris } from '../../utils/irisData.js';
 // S5R2-05 : parkings gérés par l'administration (et non plus OpenStreetMap)
-import { loadParkings, parkingMarkers } from '../../utils/parkings.js';
+import { loadParkings, parkingShapes } from '../../utils/parkings.js';
 import ParkingLegend from '../ParkingLegend/ParkingLegend.jsx';
 import { itemsForSelection, irisCentroids, mapMarkers, unplacedProposals } from '../../utils/explore.js';
 
@@ -92,7 +92,8 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
     surveys: layers.surveys ? items.surveys : [],
     centroids, selected, cityCenter: SENLIS_CENTER,
   }), [items, layers, centroids, selected]);
-  const parkingList = useMemo(() => parkingMarkers(parkings), [parkings]);
+  // Recette du 20/10 : plusieurs points et des traits par parking
+  const parkingMap = useMemo(() => parkingShapes(parkings), [parkings]);
 
   const setLayer = (key) => (e) => setLayers((l) => ({ ...l, [key]: e.target.checked }));
   const selectionLabel = selected.length === 0
@@ -105,8 +106,8 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginBottom: 10 }}>
           <Toggle checked={layers.proposals} onChange={setLayer('proposals')} label="🦌 Propositions" />
           <Toggle checked={layers.surveys} onChange={setLayer('surveys')} label="❓ Enquêtes ouvertes" />
-          {parkingList.length > 0 && (
-            <Toggle checked={layers.parkings} onChange={setLayer('parkings')} label={`🅿️ Parkings (${parkingList.length})`} />
+          {parkings.length > 0 && (
+            <Toggle checked={layers.parkings} onChange={setLayer('parkings')} label={`🅿️ Parkings (${parkings.length})`} />
           )}
           <button type="button" onClick={toggleFullscreen} className="btn" style={{ marginLeft: 'auto', padding: '6px 14px', minHeight: 40 }}>
             {fullscreen ? '✕ Quitter le plein écran' : '⛶ Plein écran'}
@@ -121,7 +122,8 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
             selectedQuartiers={selected}
             onQuartierClick={handleQuartierClick}
             markers={markers}
-            parkings={layers.parkings ? parkingList : []}
+            parkings={layers.parkings ? parkingMap.points : []}
+            parkingLines={layers.parkings ? parkingMap.lines : []}
             // Plein écran : toute la hauteur de l'écran ; page /carte : la
             // hauteur de la fenêtre moins l'en-tête du site (dvh : tient
             // compte de la barre d'adresse mobile)

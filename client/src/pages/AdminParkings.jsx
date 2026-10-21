@@ -10,6 +10,8 @@
 // imprimé ne donne pas de coordonnées. Le travail ici : choisir un
 // parking « à placer », cliquer à son emplacement sur la carte,
 // enregistrer — une trentaine de secondes par parking.
+// Recette du 20/10 : un parking peut avoir PLUSIEURS points (le stade)
+// et des TRAITS le long des rues (zone rouge) — ParkingLocationsEditor.
 //
 // L'Admin-test (S5R2-11) voit la page en lecture seule : un parking
 // n'est pas un brouillon.
@@ -23,7 +25,8 @@ import { usePageTitle } from '../hooks/usePageTitle.js';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
 import ParkingPlaceMap from '../components/ParkingPlaceMap/ParkingPlaceMap.jsx';
 import { PARKING_REGIMES, PARKING_CHARGING, regimeMeta } from '../constants/parkings.js';
-import { EMPTY_PARKING_FORM, parkingToForm, parkingFormToPayload, formPosition } from '../utils/parkings.js';
+import ParkingLocationsEditor from '../components/ParkingLocationsEditor/ParkingLocationsEditor.jsx';
+import { EMPTY_PARKING_FORM, parkingToForm, parkingFormToPayload, locationsOf, describeLocations, toPosition } from '../utils/parkings.js';
 
 export default function AdminParkings() {
   usePageTitle('Administration — Parkings');
@@ -46,14 +49,20 @@ export default function AdminParkings() {
       .finally(() => setLoading(false));
   }, []);
 
-  const placedCount = items.filter((p) => p.lat !== null).length;
-  const shown = useMemo(() => (filter === 'unplaced' ? items.filter((p) => p.lat === null) : items), [items, filter]);
+  const isPlaced = (p) => locationsOf(p).length > 0;
+  const placedCount = items.filter(isPlaced).length;
+  const shown = useMemo(() => (filter === 'unplaced' ? items.filter((p) => !isPlaced(p)) : items), [items, filter]);
+  // Recette du 20/10 : outil de placement (points ou trait) et trait en cours
+  const [mode, setMode] = useState('Point');
+  const [draft, setDraft] = useState([]);
 
   const startEdit = (parking) => {
     if (!isAdmin) return;
     setEditing({ id: parking?.id ?? null });
     setForm(parking ? parkingToForm(parking) : EMPTY_PARKING_FORM);
     setFormError(null);
+    setMode('Point');
+    setDraft([]);
   };
 
   // Le formulaire s'ouvre en haut de la liste : on y emmène le regard ET
@@ -64,27 +73,31 @@ export default function AdminParkings() {
     formTitleRef.current?.focus();
     formTitleRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
   }, [editing]);
-  const stopEdit = () => { setEditing(null); setFormError(null); };
+  const stopEdit = () => { setEditing(null); setFormError(null); setDraft([]); };
 
   const change = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-  // Clic sur la carte → coordonnées (gardées en TEXTE dans le formulaire,
-  // comme si on les avait tapées : un seul format à gérer)
-  const place = ({ lat, lng }) => setForm((f) => ({ ...f, lat: lat === null ? '' : String(lat), lng: lng === null ? '' : String(lng) }));
-  const position = formPosition(form); // { lat, lng } en nombres, ou null
+  // Clic sur la carte : un point de plus, ou un sommet de plus au trait en cours
+  const onMapClick = (latlng) => {
+    if (mode === 'Point') setForm((f) => ({ ...f, locations: [...f.locations, { type: 'Point', coordinates: toPosition(latlng) }] }));
+    else setDraft((d) => [...d, toPosition(latlng)]);
+  };
+  const setLocations = (locations) => setForm((f) => ({ ...f, locations }));
 
   const save = async (e) => {
     e.preventDefault();
-    // Une coordonnée tapée mais illisible (« 49,2a ») deviendrait null à
-    // l'envoi (JSON ne connaît pas NaN) : la position serait effacée sans
-    // prévenir. On arrête avant.
-    if ((form.lat.trim() || form.lng.trim()) && !position) {
-      setFormError('Coordonnées illisibles : saisissez deux nombres (ex. 49.2066 et 2.5866), ou cliquez sur la carte.');
+    // Un trait commencé mais pas terminé : on le termine (2 points ou
+    // plus) — avec un seul point, ce n'est pas encore un trait
+    if (draft.length === 1) {
+      setFormError('Le trait en cours n’a qu’un point : ajoutez-en un autre, ou abandonnez-le.');
       return;
     }
+    const finalForm = draft.length > 1
+      ? { ...form, locations: [...form.locations, { type: 'LineString', coordinates: draft }] }
+      : form;
     setSaving(true);
     setFormError(null);
     try {
-      const payload = parkingFormToPayload(form);
+      const payload = parkingFormToPayload(finalForm);
       const data = editing.id
         ? await api.patch(`/parkings/${editing.id}`, payload)
         : await api.post('/parkings', payload);
@@ -92,7 +105,7 @@ export default function AdminParkings() {
         const others = list.filter((p) => p.id !== data.parking.id);
         return [...others, data.parking].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
       });
-      showToast(`« ${data.parking.name} » enregistré${data.parking.lat !== null ? '' : ' (pas encore placé sur la carte)'}`);
+      showToast(`« ${data.parking.name} » enregistré${isPlaced(data.parking) ? '' : ' (pas encore placé sur la carte)'}`);
       stopEdit();
     } catch (err) {
       // Détail Zod (champ par champ) s'il y en a, sinon le message général
@@ -115,9 +128,9 @@ export default function AdminParkings() {
     }
   };
 
-  // Ce que montre la carte pour le parking en cours (position non enregistrée comprise)
+  // Ce que montre la carte pour le parking en cours (emplacements non enregistrés compris)
   const editingOnMap = editing
-    ? { ...form, id: editing.id, regime: form.regime || null, lat: position?.lat ?? null, lng: position?.lng ?? null }
+    ? { id: editing.id, name: form.name, regime: form.regime || null, charging: form.charging, locations: form.locations, draft }
     : null;
 
   return (
@@ -145,12 +158,14 @@ export default function AdminParkings() {
           <ParkingPlaceMap
             parkings={items}
             editing={editingOnMap}
-            onPlace={isAdmin ? place : undefined}
+            onMapClick={isAdmin ? onMapClick : undefined}
             onSelect={isAdmin ? startEdit : undefined}
           />
           <p style={{ fontSize: 13, color: '#6B6257', marginTop: 6 }}>
             {editing
-              ? '📍 Cliquez sur la carte à l’emplacement du parking (zoomez pour plus de précision), puis enregistrez.'
+              ? (mode === 'Point'
+                ? '📍 Chaque clic sur la carte ajoute un emplacement (zoomez pour plus de précision), puis enregistrez.'
+                : '〰️ Cliquez le long de la rue pour tracer les places, puis « Terminer le trait » et enregistrez.')
               : 'Choisissez un parking dans la liste (ou cliquez sur son repère) pour le modifier ou le placer.'}
           </p>
         </div>
@@ -191,25 +206,15 @@ export default function AdminParkings() {
                 </Field>
               </div>
 
-              <fieldset style={{ border: '2px solid #EFEBE2', borderRadius: 12, padding: '10px 12px', marginTop: 12 }}>
-                <legend style={{ fontWeight: 600, fontSize: 14, padding: '0 6px' }}>Position sur la carte</legend>
-                <p style={{ fontSize: 13, color: '#6B6257', margin: '0 0 8px' }}>
-                  {position ? '📍 Placé — cliquez ailleurs sur la carte pour le déplacer.' : 'Pas encore placé : cliquez sur la carte. (Ou saisissez les coordonnées.)'}
-                </p>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                  <Field label="Latitude">
-                    <input name="lat" inputMode="decimal" value={form.lat} onChange={change} placeholder="49.2066" style={input} />
-                  </Field>
-                  <Field label="Longitude">
-                    <input name="lng" inputMode="decimal" value={form.lng} onChange={change} placeholder="2.5866" style={input} />
-                  </Field>
-                  {(form.lat !== '' || form.lng !== '') && (
-                    <button type="button" className="btn" onClick={() => place({ lat: null, lng: null })} style={{ background: '#EFEBE2', color: '#26333A', minHeight: 40 }}>
-                      Retirer de la carte
-                    </button>
-                  )}
-                </div>
-              </fieldset>
+              {/* Recette du 20/10 : plusieurs points, et des traits le long des rues */}
+              <ParkingLocationsEditor
+                locations={form.locations}
+                mode={mode}
+                draft={draft}
+                onModeChange={(next) => { setMode(next); setDraft([]); }}
+                onLocationsChange={setLocations}
+                onDraftChange={setDraft}
+              />
 
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 14 }}>
                 <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
@@ -255,14 +260,14 @@ export default function AdminParkings() {
                         {p.charging !== 'AUCUNE' && ` · ⚡ ${PARKING_CHARGING[p.charging].toLowerCase()}`}
                       </span>
                     </span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: p.lat !== null ? '#3A7A4D' : '#8A5A00' }}>
-                      {p.lat !== null ? '📍 placé' : 'à placer'}
+                    <span style={{ fontSize: 13, fontWeight: 600, color: isPlaced(p) ? '#3A7A4D' : '#8A5A00' }}>
+                      {isPlaced(p) ? `📍 ${describeLocations(locationsOf(p))}` : 'à placer'}
                     </span>
                     {isAdmin && (
                       <span style={{ display: 'flex', gap: 6 }}>
                         <button type="button" className="btn" onClick={() => startEdit(p)} aria-label={`Modifier ou placer « ${p.name} »`}
                           style={{ background: '#E3EEF3', color: '#1E5F7C', padding: '6px 12px', minHeight: 36, fontSize: 13 }}>
-                          {p.lat !== null ? 'Modifier' : 'Placer'}
+                          {isPlaced(p) ? 'Modifier' : 'Placer'}
                         </button>
                         <button type="button" className="btn" onClick={() => remove(p)} aria-label={`Supprimer « ${p.name} »`}
                           style={{ background: '#FCEAE6', color: '#A8442F', padding: '6px 12px', minHeight: 36, fontSize: 13 }}>

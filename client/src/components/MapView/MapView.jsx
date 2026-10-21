@@ -15,7 +15,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Link } from 'react-router-dom';
@@ -157,7 +157,9 @@ function ResizeWatcher() {
  * @param {object} iris - FeatureCollection GeoJSON des 7 quartiers IRIS de
  *   Senlis (INSEE/IGN) — absent = couche non affichée.
  * @param {Array<{id, lat, lng, label, regime?, charging?, details?: string[]}>} parkings -
- *   parkings gérés par l'administration (S5R2-05, utils/parkings.js)
+ *   parkings gérés par l'administration (S5R2-05, utils/parkings.js) : un repère par point
+ * @param {Array<{id, positions: Array<[number, number]>, label, regime?, details?: string[]}>} parkingLines -
+ *   places le long d'une rue (recette du 20/10), dessinées comme un trait
  * @param {number|string} height - hauteur du conteneur (la largeur suit son parent)
  */
 /**
@@ -179,6 +181,7 @@ export default function MapView({
   perimeters = [],
   iris = null,
   parkings = [],
+  parkingLines = [],
   // S5R-11 : clic sur un quartier et quartier(s) mis en valeur — S5R2-06 :
   // par nom de quartier (ex. 'SAINT_VINCENT'), plus par code IRIS
   onQuartierClick = null,
@@ -240,6 +243,22 @@ export default function MapView({
           }}
         />
       )}
+
+      {/* Recette du 20/10 : places le long d'une rue (zone rouge…) — un
+          trait de la couleur du régime, bordé de blanc pour rester
+          visible sur n'importe quel fond de carte */}
+      {parkingLines.map((line) => (
+        <Polyline key={`${line.id}-casing`} positions={line.positions} pathOptions={{ color: '#FFFFFF', weight: 9, opacity: 0.9 }} interactive={false} />
+      ))}
+      {parkingLines.map((line) => (
+        <Polyline key={line.id} positions={line.positions} pathOptions={{ color: regimeMeta(line.regime).bg, weight: 5, opacity: 1 }}>
+          <Popup>
+            <strong>🅿️ {line.label}</strong>
+            <div style={{ fontSize: 13 }}>Places le long de la rue</div>
+            {line.details?.map((detail) => <div key={detail} style={{ fontSize: 13 }}>{detail}</div>)}
+          </Popup>
+        </Polyline>
+      ))}
 
       {parkings.map((p) => (
         <Marker key={p.id} position={[p.lat, p.lng]} icon={parkingIcon(p.regime, p.charging)} title={p.label}>
