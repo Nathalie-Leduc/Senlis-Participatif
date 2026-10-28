@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { splitCentre, centreGeometry, planarArea, CENTRE_IRIS } from './quartierSplit.js';
+import { splitCentre, splitWithShape, centreGeometry, planarArea, CENTRE_IRIS } from './quartierSplit.js';
 import { quartierOfFeature } from '../constants/zones.js';
 
 const iris = JSON.parse(readFileSync(path.join(process.cwd(), 'public/data/iris-senlis.geojson'), 'utf8'));
@@ -65,3 +65,25 @@ describe('splitCentre — tracés impossibles', () => {
     expect(() => splitCentre(iris, [[49.25, 2.55], [49.25, 2.65], [49.15, 2.65], [49.15, 2.55]])).toThrow(/il ne resterait rien/);
   });
 });
+
+// ── S5R-13 : mise à jour des contours INSEE (scripts/update-iris.mjs) ──
+describe('splitWithShape — redécouper un centre tout neuf avec la forme actuelle de Saint-Vincent', () => {
+  // Le fichier « comme l'IGN le fournit » : le centre d'un seul tenant
+  const ign = {
+    type: 'FeatureCollection',
+    features: [
+      ...iris.features.filter((f) => f.properties.code_iris !== CENTRE_IRIS),
+      { type: 'Feature', properties: { code_iris: CENTRE_IRIS, nom_iris: 'Centre Ville' }, geometry: { type: 'MultiPolygon', coordinates: centreGeometry(iris) } },
+    ],
+  };
+  const sv = iris.features.find((f) => f.properties.quartier === 'SAINT_VINCENT');
+  const { file, saintVincent, outsideShare } = splitWithShape(ign, sv.geometry.coordinates, 'mise à jour de test');
+
+  it('retrouve exactement les mêmes 8 quartiers (même surface de Saint-Vincent, rien ne déborde)', () => {
+    expect(file.features.map(quartierOfFeature).sort()).toEqual(iris.features.map(quartierOfFeature).sort());
+    expect(planarArea(saintVincent.geometry.coordinates)).toBeCloseTo(planarArea(sv.geometry.coordinates), 10);
+    expect(outsideShare).toBeLessThan(0.001);
+    expect(saintVincent.properties.source).toBe('mise à jour de test');
+  });
+});
+

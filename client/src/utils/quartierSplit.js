@@ -86,23 +86,39 @@ export function centreGeometry(iris) {
  */
 export function splitCentre(iris, points, date = new Date()) {
   if (!points || points.length < 3) throw new Error('Tracez au moins 3 points autour de Saint-Vincent.');
-  const centre = centreGeometry(iris);
-  if (!centre) throw new Error('Le contour du « Centre Ville » INSEE est introuvable dans le fichier des quartiers.');
-
   // Leaflet donne [lat, lng] ; GeoJSON veut [lng, lat], anneau FERMÉ
   const ring = points.map(([lat, lng]) => [lng, lat]);
   const drawn = [[[...ring, ring[0]]]];
+  const source = `IRIS INSEE « Centre Ville » découpé d'après le plan municipal de 2018 (tracé du ${date.toLocaleDateString('fr-FR')})`;
+  return splitWithShape(iris, drawn, source);
+}
 
-  const saintVincent = polygonClipping.intersection(centre, drawn);
-  const historique = polygonClipping.difference(centre, drawn);
+/**
+ * Le découpage lui-même, à partir d'une FORME de Saint-Vincent (liste de
+ * polygones, format polygon-clipping) plutôt que d'un tracé au clic.
+ *
+ * S5R-13 : sert aussi à la mise à jour des contours INSEE
+ * (scripts/update-iris.mjs) — on redécoupe le NOUVEAU centre avec la
+ * forme de Saint-Vincent déjà validée, sans rien retracer.
+ * Analogie : le même emporte-pièce, posé sur un gâteau tout frais.
+ *
+ * @param {object} iris - le fichier des quartiers (FeatureCollection)
+ * @param {Array} shape - la forme de Saint-Vincent (MultiPolygon, [lng, lat])
+ * @param {string} source - texte noté dans les propriétés des deux quartiers
+ */
+export function splitWithShape(iris, shape, source) {
+  const centre = centreGeometry(iris);
+  if (!centre) throw new Error('Le contour du « Centre Ville » INSEE est introuvable dans le fichier des quartiers.');
+
+  const saintVincent = polygonClipping.intersection(centre, shape);
+  const historique = polygonClipping.difference(centre, shape);
   if (!saintVincent.length) throw new Error('Le tracé ne touche pas le centre : Saint-Vincent serait vide.');
   if (!historique.length) throw new Error('Le tracé couvre tout le centre : il ne resterait rien au Centre historique.');
 
-  const drawnArea = planarArea(drawn);
-  const outside = polygonClipping.difference(drawn, centre);
-  const outsideShare = drawnArea > 0 ? planarArea(outside) / drawnArea : 0;
+  const shapeArea = planarArea(shape);
+  const outside = polygonClipping.difference(shape, centre);
+  const outsideShare = shapeArea > 0 ? planarArea(outside) / shapeArea : 0;
 
-  const source = `IRIS INSEE « Centre Ville » découpé d'après le plan municipal de 2018 (tracé du ${date.toLocaleDateString('fr-FR')})`;
   const feature = (quartier, nom, geometry) => ({
     type: 'Feature',
     properties: { code_iris: CENTRE_IRIS, nom_iris: 'Centre Ville', quartier, nom, source },
