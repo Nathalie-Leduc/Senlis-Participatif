@@ -53,7 +53,7 @@ describe('Inscription', () => {
 
   it('mots de passe différents : erreur reliée au SEUL champ de confirmation', async () => {
     renderPage(Inscription);
-    fill({ 'Mot de passe': 'MotDePasse123!', 'Confirmer le mot de passe': 'Autre123456!' });
+    fill({ 'Mot de passe': 'lanterne remparts tilleul', 'Confirmer le mot de passe': 'Autre123456!' });
     fireEvent.submit(screen.getByLabelText('Pseudo').closest('form'));
 
     await screen.findByRole('alert');
@@ -67,7 +67,7 @@ describe('Inscription', () => {
     renderPage(Inscription);
     fill({
       Pseudo: 'nath', Email: 'a@b.fr',
-      'Mot de passe': 'MotDePasse123!', 'Confirmer le mot de passe': 'MotDePasse123!',
+      'Mot de passe': 'lanterne remparts tilleul', 'Confirmer le mot de passe': 'lanterne remparts tilleul',
     });
     fireEvent.change(screen.getByLabelText(/Votre situation/), { target: { name: 'situation', value: 'CENTRE_RESIDENT' } });
     fireEvent.click(screen.getByRole('checkbox', { name: /pris connaissance/ }));
@@ -79,5 +79,36 @@ describe('Inscription', () => {
     await waitFor(() => expect(pseudo).toHaveAttribute('aria-invalid', 'true'));
     expect(pseudo).toHaveAccessibleDescription('Ce pseudo est déjà pris');
     await waitFor(() => expect(document.activeElement).toBe(pseudo));
+  });
+
+  it('S5R-13b : un mot de passe courant refusé par l’API s’affiche sous le champ Mot de passe', async () => {
+    const message = 'Ce mot de passe fait partie des plus utilisés : choisissez-en un autre, par exemple quelques mots pris au hasard';
+    register.mockRejectedValueOnce({ status: 400, code: 'VALIDATION_ERROR', details: { password: message } });
+    renderPage(Inscription);
+    fill({
+      Pseudo: 'nath', Email: 'a@b.fr',
+      'Mot de passe': 'iloveyouforever', 'Confirmer le mot de passe': 'iloveyouforever',
+    });
+    fireEvent.change(screen.getByLabelText(/Votre situation/), { target: { name: 'situation', value: 'CENTRE_RESIDENT' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /pris connaissance/ }));
+    fireEvent.submit(screen.getByLabelText('Pseudo').closest('form'));
+
+    const password = screen.getByLabelText('Mot de passe');
+    await waitFor(() => expect(password).toHaveAttribute('aria-invalid', 'true'));
+    expect(password).toHaveAccessibleDescription(message);
+  });
+
+  it('S5R-13b : 15 caractères en minuscules suffisent (plus de majuscule ni de chiffre exigés)', async () => {
+    register.mockResolvedValueOnce({ message: 'Compte créé !' });
+    renderPage(Inscription);
+    fill({
+      Pseudo: 'nath', Email: 'a@b.fr',
+      'Mot de passe': 'lanterne remparts tilleul', 'Confirmer le mot de passe': 'lanterne remparts tilleul',
+    });
+    fireEvent.change(screen.getByLabelText(/Votre situation/), { target: { name: 'situation', value: 'CENTRE_RESIDENT' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /pris connaissance/ }));
+    fireEvent.submit(screen.getByLabelText('Pseudo').closest('form'));
+
+    await waitFor(() => expect(register).toHaveBeenCalledWith(expect.objectContaining({ password: 'lanterne remparts tilleul' })));
   });
 });

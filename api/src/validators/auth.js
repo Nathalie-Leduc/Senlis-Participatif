@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 import { QUARTIERS, QUARTIERS_RESIDENCE } from '../lib/quartiers.js';
+import { normalizePassword, passwordProblem } from '../lib/passwordPolicy.js';
 
 // ── Champs réutilisables ────────────────────────────────
 
@@ -21,25 +22,24 @@ const email = z
   .toLowerCase()
   .email('Adresse email invalide');
 
-// Recommandations CNIL (délibération n° 2022-100, référentiel mots
-// de passe) : 12 caractères minimum si le mot de passe est la SEULE
-// mesure de sécurité (pas de 2FA en complément), avec au moins 3 des
-// 4 catégories de caractères — ici on demande les 4, plus strict
-// mais plus simple à expliquer côté UI qu'une règle "au moins 3 sur 4".
+// S5R-13b — politique CNIL + NIST combinée (document 21, § 8.5) :
+// 15 caractères minimum, AUCUNE règle de composition, refus des mots
+// de passe courants ou prévisibles. Toute la règle vit dans
+// lib/passwordPolicy.js ; ici, on la branche sur Zod.
 //
-// .regex() plutôt que 4 .refine() séparés : Zod s'arrêterait à la
-// première règle échouée avec .refine(), masquant les autres —
-// .regex() avec lookaheads (?=...) vérifie les 4 conditions dans la
-// MÊME passe, donc le message d'erreur ci-dessous reste correct quel
-// que soit ce qui manque exactement.
+// Avant (S5A) : 12 caractères et les 4 familles imposées (majuscule,
+// minuscule, chiffre, caractère spécial). Les comptes existants ne
+// sont pas touchés : la nouvelle règle s'applique au prochain choix.
+//
+// .transform(normalizePassword) : c'est le texte NORMALISÉ (NFC) qui
+// arrive dans le contrôleur, donc qui est haché — voir passwordPolicy.js.
 const password = z
-  .string()
-  .min(12, 'Le mot de passe doit contenir au moins 12 caractères')
-  .max(128, 'Le mot de passe ne peut pas dépasser 128 caractères')
-  .regex(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/,
-    'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un caractère spécial',
-  );
+  .string({ required_error: 'Le mot de passe est requis' })
+  .transform(normalizePassword)
+  .superRefine((value, ctx) => {
+    const problem = passwordProblem(value);
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+  });
 
 const pseudo = z
   .string()
@@ -114,7 +114,17 @@ export const registerSchema = z.object({
   travailType: travailType.optional(),
   // S5R-05 : la case « Je travaille à Senlis », dite explicitement
   travailleASenlis: z.boolean().optional(),
-}).superRefine(requireQuartierIfAutreQuartier);
+}).superRefine((data, ctx) => {
+  requireQuartierIfAutreQuartier(data, ctx);
+  // S5R-13b : à l'inscription, l'adresse et le pseudo sont dans la même
+  // requête — on refuse un mot de passe qui les reprend (NIST : « mots
+  // propres au contexte »). Seulement si le mot de passe a passé les
+  // autres contrôles, pour ne pas afficher deux messages à la fois.
+  if (!passwordProblem(data.password)) {
+    const problem = passwordProblem(data.password, { email: data.email, pseudo: data.pseudo });
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: problem });
+  }
+});
 
 export const loginSchema = z.object({
   email,

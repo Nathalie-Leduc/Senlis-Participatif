@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   validateEmail, validatePseudo, validateNewPassword, validatePasswordConfirm, suggestEmail, levenshtein,
+  passwordLength,
 } from './formValidation.js';
 
 describe('validateEmail', () => {
@@ -25,10 +26,16 @@ describe('autres règles (identiques à celles de l’API)', () => {
     expect(validatePseudo('x'.repeat(31))).toMatch(/30 caractères/);
   });
 
-  it('mot de passe : 12 caractères et 4 familles', () => {
-    expect(validateNewPassword('Court1!')).toMatch(/12 caractères/);
-    expect(validateNewPassword('toutenminuscules123!')).toMatch(/majuscule/);
-    expect(validateNewPassword('MotDePasse123!')).toBeNull();
+  it('mot de passe (S5R-13b) : 15 caractères, sans règle de composition', () => {
+    expect(validateNewPassword('MotDePasse123!')).toMatch(/15 caractères/); // 14 : refusé malgré les 4 familles
+    expect(validateNewPassword('toutenminuscules')).toBeNull(); // minuscules seules : accepté
+    expect(validateNewPassword('lanterne remparts tilleul')).toBeNull(); // espaces permis
+    expect(validateNewPassword('x'.repeat(129))).toMatch(/128 caractères/);
+  });
+
+  it('mot de passe : compte les caractères comme l’API (un emoji = 1)', () => {
+    expect(passwordLength('🦌')).toBe(1);
+    expect(validateNewPassword('tilleul orag 🦌')).toMatch(/15 caractères/); // 14 visibles
   });
 
   it('confirmation : vide ou différente', () => {

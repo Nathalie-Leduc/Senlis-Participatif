@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { validateAdminCredentials, surveySeedAction } from '../prisma/seed-prod.js';
 
 describe('validateAdminCredentials', () => {
-  it('accepte un email et un mot de passe valides (12+ caractères)', () => {
+  it('accepte un email et un mot de passe valides (15+ caractères, S5R-13b)', () => {
     expect(validateAdminCredentials('mairie@senlis.fr', 'MotDePasseSolide2026!')).toEqual([]);
   });
 
@@ -30,13 +30,18 @@ describe('validateAdminCredentials', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
-  it('refuse un mot de passe de moins de 12 caractères', () => {
-    const errors = validateAdminCredentials('mairie@senlis.fr', 'court1234!');
-    expect(errors.some((e) => e.includes('12 caractères'))).toBe(true);
+  it('refuse un mot de passe de moins de 15 caractères (S5R-13b)', () => {
+    const errors = validateAdminCredentials('mairie@senlis.fr', 'A1b2C3d4E5f!');
+    expect(errors.some((e) => e.includes('15 caractères'))).toBe(true);
   });
 
-  it('accepte un mot de passe de exactement 12 caractères (limite incluse)', () => {
-    expect(validateAdminCredentials('mairie@senlis.fr', 'A1b2C3d4E5f!')).toEqual([]);
+  it('accepte exactement 15 caractères, sans règle de composition (limite incluse)', () => {
+    expect(validateAdminCredentials('mairie@senlis.fr', 'quinzecaractere')).toEqual([]);
+  });
+
+  it('refuse un mot de passe courant ou qui reprend le nom du site', () => {
+    expect(validateAdminCredentials('mairie@senlis.fr', 'iloveyouforever')).toHaveLength(1);
+    expect(validateAdminCredentials('mairie@senlis.fr', 'Senlis2026!!!!!!')).toHaveLength(1);
   });
 });
 

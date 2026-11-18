@@ -22,6 +22,7 @@ import { STATUS_META } from '../constants/proposalStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import PasswordRenewalBanner from '../components/PasswordRenewalBanner/PasswordRenewalBanner.jsx';
 
 const FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -94,6 +95,7 @@ export default function AdminPropositions() {
       </div>
 
       <EditorBanner />
+      <PasswordRenewalBanner />
 
       {/* ── Filtres par statut ───────────────────────────── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>

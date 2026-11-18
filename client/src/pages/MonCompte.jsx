@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
@@ -10,11 +10,22 @@ import { downloadJson, exportFilename } from '../utils/download.js';
 import { errorProps } from '../components/FormError/FormError.jsx';
 import ResendVerification from '../components/ResendVerification/ResendVerification.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { validateNewPassword } from '../utils/formValidation.js';
 
 export default function MonCompte() {
   usePageTitle('Mon compte');
   const { user, logout, refreshUser, replaceToken } = useAuth();
   const navigate = useNavigate();
+  const { hash } = useLocation();
+  // S5R-13b : arrivée par le lien du rappel annuel (« /mon-compte#mot-de-passe ») —
+  // le routeur ne descend pas tout seul jusqu'à une ancre : on y va, et on
+  // y place le focus pour que les lecteurs d'écran l'annoncent.
+  useEffect(() => {
+    if (hash !== '#mot-de-passe') return;
+    const heading = document.getElementById('mot-de-passe');
+    heading?.scrollIntoView?.({ block: 'start' });
+    heading?.focus();
+  }, [hash]);
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
   const [situation, setSituation] = useState(user?.situation || '');
   const [quartier, setQuartier] = useState(user?.quartier || '');
@@ -88,6 +99,14 @@ export default function MonCompte() {
     // la sécurité, "changer" son mot de passe pour le même ne sert à
     // rien et pourrait laisser croire, à tort, qu'une compromission a
     // été traitée.
+    // S5R-13b : même règle de longueur que l'inscription, vérifiée avant
+    // l'envoi (l'API refuse en plus les mots de passe courants)
+    const lengthProblem = validateNewPassword(pwForm.newPassword);
+    if (lengthProblem) {
+      setPasswordError(lengthProblem);
+      setPasswordErrorField('new');
+      return;
+    }
     if (pwForm.newPassword === pwForm.currentPassword) {
       setPasswordError('Le nouveau mot de passe doit être différent de l\'actuel');
       setPasswordErrorField('new');
@@ -103,6 +122,8 @@ export default function MonCompte() {
       // S5A-06 : l'ancien jeton vient d'être révoqué par l'API (comme
       // ceux de tous les autres appareils) — on garde le nouveau.
       if (res?.token) replaceToken(res.token);
+      // S5R-13b : le rappel annuel de l'équipe disparaît aussitôt
+      refreshUser().catch(() => {});
       setPasswordJustChanged(true);
       setPwForm({ currentPassword: '', newPassword: '', newPasswordConfirm: '' });
       setPasswordErrorField(null);
@@ -286,7 +307,8 @@ export default function MonCompte() {
 
       {/* Changement de mot de passe */}
       <div style={{ background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 2px 8px rgba(38,51,58,.06)', marginBottom: 20 }}>
-        <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 16 }}>Changer le mot de passe</h2>
+        {/* id : cible du lien du rappel annuel de l'équipe (PasswordRenewalBanner, S5R-13b) */}
+        <h2 id="mot-de-passe" tabIndex={-1} style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 16 }}>Changer le mot de passe</h2>
         <label style={{ display: 'block', marginBottom: 12 }}>
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe actuel</span>
           <PasswordInput value={pwForm.currentPassword} onChange={(e) => { setPwForm({ ...pwForm, currentPassword: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); setPasswordErrorField(null); }}
@@ -297,9 +319,7 @@ export default function MonCompte() {
           <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Nouveau mot de passe</span>
           <PasswordInput value={pwForm.newPassword} onChange={(e) => { setPwForm({ ...pwForm, newPassword: e.target.value }); setPasswordJustChanged(false); setPasswordError(null); setPasswordErrorField(null); }}
             {...errorProps(passwordErrorField === 'new', 'password-error')}
-            autoComplete="new-password" minLength={12}
-            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
-            title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
+            autoComplete="new-password" minLength={15} maxLength={128} placeholder="15 caractères minimum"
             style={{ width: '100%', padding: '12px 16px', fontSize: 17, border: '2px solid #e3dcce', borderRadius: 12, fontFamily: "'Public Sans', system-ui" }} />
         </label>
         <PasswordStrengthMeter password={pwForm.newPassword} />

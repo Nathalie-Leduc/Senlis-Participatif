@@ -90,8 +90,8 @@ export default function ResetPassword() {
           <label style={{ display: 'block' }}>
             <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Nouveau mot de passe</span>
             <PasswordInput name="password" value={password} onChange={(e) => updatePassword(e.target.value)}
-              autoComplete="new-password" required minLength={12}
-              placeholder="12 caractères minimum"
+              autoComplete="new-password" required minLength={15} maxLength={128}
+              placeholder="15 caractères minimum"
               {...validation.fieldProps('password', values)}
               style={fieldStyle} />
           </label>

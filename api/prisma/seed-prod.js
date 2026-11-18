@@ -30,6 +30,9 @@ import { toNestedQuestionsCreate, resolveReferences } from '../src/services/surv
 import { PARKING_SURVEY } from './surveys/stationnement-v3.js';
 import { seedInitialParkings } from './data/parkings-initiaux.js';
 import argon2 from 'argon2';
+import { passwordProblem, normalizePassword } from '../src/lib/passwordPolicy.js';
+
+const ADMIN_PSEUDO = 'Mairie de Senlis';
 
 /**
  * Fonction PURE (aucun accès à process.env à l'intérieur) — exportée
@@ -45,12 +48,12 @@ export function validateAdminCredentials(email, password) {
     return errors; // pas la peine de vérifier la longueur d'un mot de passe qui n'existe pas
   }
 
-  // Même règle que le formulaire d'inscription (12 caractères min) —
-  // pas question qu'un compte admin réel parte avec un mot de passe
-  // plus faible que ce qu'on exige déjà d'un simple citoyen.
-  if (password.length < 12) {
-    errors.push('ADMIN_PASSWORD doit contenir au moins 12 caractères (même règle qu\'à l\'inscription)');
-  }
+  // Même règle que le formulaire d'inscription (S5R-13b : 15 caractères,
+  // pas un mot de passe courant ni reprenant l'adresse) — pas question
+  // qu'un compte admin réel parte avec un mot de passe plus faible que
+  // ce qu'on exige déjà d'un simple citoyen.
+  const problem = passwordProblem(password, { email, pseudo: ADMIN_PSEUDO });
+  if (problem) errors.push(`ADMIN_PASSWORD : ${problem}`);
 
   return errors;
 }
@@ -89,14 +92,16 @@ async function main() {
     process.exit(1);
   }
 
-  const passwordHash = await argon2.hash(adminPassword);
+  // Normalisé comme à l'inscription (S5R-13b), sinon un mot de passe
+  // accentué pourrait ne pas s'ouvrir depuis le formulaire de connexion
+  const passwordHash = await argon2.hash(normalizePassword(adminPassword));
 
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
     create: {
       email: adminEmail,
-      pseudo: 'Mairie de Senlis',
+      pseudo: ADMIN_PSEUDO,
       passwordHash,
       role: 'ADMIN',
       emailVerified: true,

@@ -42,7 +42,8 @@ export function buildUser(overrides = {}) {
   counter += 1;
   return {
     email: `test${counter}@senlis-test.fr`,
-    password: 'MotDePasse123!',
+    // S5R-13b : 15 caractères minimum, sans règle de composition
+    password: 'lanterne remparts tilleul',
     pseudo: `testeur${counter}`,
     // Obligatoire depuis S5-12 (situation citoyen) — CENTRE_RESIDENT
     // par défaut, sans conséquence sur ce que les tests vérifient

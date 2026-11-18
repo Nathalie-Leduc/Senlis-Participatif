@@ -21,8 +21,22 @@
 // confirmation (une adresse qui ne reçoit rien ne sera jamais vérifiée).
 const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-export const PASSWORD_RULE_MESSAGE =
-  'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un caractère spécial';
+// S5R-13b — politique CNIL + NIST (document 21, § 8.5) : 15 caractères
+// minimum, AUCUNE règle de composition. Les mots de passe courants ou
+// prévisibles sont refusés par l'API seule (sa liste de blocage n'est
+// pas envoyée au navigateur) ; son message s'affiche sous le champ.
+export const PASSWORD_MIN_LENGTH = 15;
+export const PASSWORD_MAX_LENGTH = 128;
+export const PASSWORD_MESSAGES = {
+  tooShort: `Le mot de passe doit contenir au moins ${PASSWORD_MIN_LENGTH} caractères — une phrase de passe de 4 ou 5 mots est idéale`,
+  tooLong: `Le mot de passe ne peut pas dépasser ${PASSWORD_MAX_LENGTH} caractères`,
+};
+
+/**
+ * Nombre de caractères tels qu'on les voit, comme l'API : un « é »
+ * ou un emoji compte pour 1 (`texte.length` compterait 2 pour un emoji).
+ */
+export const passwordLength = (value) => [...String(value ?? '').normalize('NFC')].length;
 
 export function validateEmail(value) {
   const email = (value ?? '').trim();
@@ -39,10 +53,9 @@ export function validatePseudo(value) {
 }
 
 export function validateNewPassword(value) {
-  const password = value ?? '';
-  if (password.length < 12) return 'Le mot de passe doit contenir au moins 12 caractères';
-  if (password.length > 128) return 'Le mot de passe ne peut pas dépasser 128 caractères';
-  if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/.test(password)) return PASSWORD_RULE_MESSAGE;
+  const length = passwordLength(value);
+  if (length < PASSWORD_MIN_LENGTH) return PASSWORD_MESSAGES.tooShort;
+  if (length > PASSWORD_MAX_LENGTH) return PASSWORD_MESSAGES.tooLong;
   return null;
 }
 

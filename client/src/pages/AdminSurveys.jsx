@@ -28,6 +28,7 @@ import { STATUS_META } from '../constants/surveyStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import PasswordRenewalBanner from '../components/PasswordRenewalBanner/PasswordRenewalBanner.jsx';
 import { endOfDayIso, todayInput, isPast, formatDay } from '../utils/surveyDates.js';
 
 // Le mot à taper pour supprimer une enquête AVEC ses réponses : un
@@ -187,6 +188,7 @@ export default function AdminSurveys() {
       </div>
 
       <EditorBanner />
+      <PasswordRenewalBanner />
 
       {/* ── Filtres par statut ───────────────────────────── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>

@@ -1,72 +1,78 @@
 // ══════════════════════════════════════════════════════════
-// Jauge de robustesse du mot de passe — recommandations CNIL
+// Jauge de solidité du mot de passe — fondée sur la LONGUEUR (S5R-13b)
 //
-// Les 5 critères correspondent EXACTEMENT à la règle Zod côté API
-// (validators/auth.js) : les dupliquer ici n'est pas idéal en
-// théorie, mais un vrai partage de code entre client et API
-// demanderait un package commun — hors de portée pour ce projet.
-// Ce qui compte : les deux doivent rester synchronisés si la règle
-// change un jour.
+// Avant : 5 critères (12 caractères, minuscule, majuscule, chiffre,
+// caractère spécial). Depuis la politique CNIL + NIST (document 21,
+// § 8.5), seule la longueur est exigée : 15 caractères minimum, et
+// plus c'est long, mieux c'est. La jauge suit donc la longueur, et
+// l'astuce de la phrase de passe est affichée dès l'arrivée sur le
+// champ (avant même la première lettre).
 //
-// Analogie : une jauge de carburant qui se remplit de rouge à vert
-// au fur et à mesure que le mot de passe remplit les critères —
-// sans jamais dire au conducteur "vous n'irez nulle part" (aucun
-// blocage ici, juste une indication ; le formulaire refuse la
-// soumission via minLength/pattern natifs, pas via ce composant).
+// Analogie : la CNIL et le NIST ont remplacé « une clé avec des dents
+// de quatre formes » par « une clé longue ». La jauge mesure la
+// longueur de la clé, plus la forme de ses dents.
+//
+// Elle ne bloque rien : le formulaire refuse un mot de passe trop
+// court (validateNewPassword), l'API refuse les mots de passe courants.
 // ══════════════════════════════════════════════════════════
 
-const CRITERIA = [
-  { test: (p) => p.length >= 12, label: 'Au moins 12 caractères' },
-  { test: (p) => /[a-z]/.test(p), label: 'Une minuscule' },
-  { test: (p) => /[A-Z]/.test(p), label: 'Une majuscule' },
-  { test: (p) => /\d/.test(p), label: 'Un chiffre' },
-  { test: (p) => /[^A-Za-z0-9]/.test(p), label: 'Un caractère spécial' },
-];
+import { PASSWORD_MIN_LENGTH, passwordLength } from '../../utils/formValidation.js';
 
-// Index = nombre de critères validés (0 à 5). Le rouge et le vert
-// aux deux extrémités sont ceux qu'on veut voir en premier coup
-// d'œil ; les teintes intermédiaires n'ont pas besoin d'être
-// précises, juste de graduer visiblement entre les deux.
-const LEVELS = [
-  { color: '#A8442F', label: 'Trop faible' },
-  { color: '#A8442F', label: 'Trop faible' },
-  { color: '#C97A2E', label: 'Faible' },
-  { color: '#D4A72C', label: 'Moyen' },
-  { color: '#8AA84A', label: 'Bon' },
-  { color: '#3A7A4D', label: 'Excellent' },
-];
+const COLORS = { weak: '#A8442F', fair: '#C97A2E', good: '#8AA84A', strong: '#3A7A4D' };
+
+/**
+ * Le niveau affiché — fonction pure, testée.
+ * @returns {{ label: string, color: string, percent: number }}
+ */
+export function strengthLevel(password) {
+  const length = passwordLength(password);
+  // « aaaaaaaaaaaaaaaa » est long… et refusé par l'API : on ne le
+  // présente pas comme solide (moins de 5 caractères différents)
+  const distinct = new Set([...String(password).toLowerCase()]).size;
+
+  if (length < PASSWORD_MIN_LENGTH) {
+    const missing = PASSWORD_MIN_LENGTH - length;
+    return {
+      label: `Trop court — encore ${missing} caractère${missing > 1 ? 's' : ''}`,
+      color: COLORS.weak,
+      percent: 8 + (length / PASSWORD_MIN_LENGTH) * 40,
+    };
+  }
+  if (distinct < 5) return { label: 'Trop prévisible — variez les caractères', color: COLORS.weak, percent: 48 };
+  if (length < 20) return { label: 'Correct', color: COLORS.fair, percent: 60 };
+  if (length < 30) return { label: 'Bon', color: COLORS.good, percent: 80 };
+  return { label: 'Excellent', color: COLORS.strong, percent: 100 };
+}
 
 /**
  * @param {{ password: string }} props
  */
 export default function PasswordStrengthMeter({ password }) {
-  if (!password) return null;
-
-  const passedCount = CRITERIA.filter((c) => c.test(password)).length;
-  const level = LEVELS[passedCount];
-  // 8% de "socle" visible même à 0 critère rempli — une barre
-  // totalement vide se confond avec l'absence de composant.
-  const percentage = 8 + (passedCount / CRITERIA.length) * 92;
-  const missing = CRITERIA.filter((c) => !c.test(password));
+  const level = password ? strengthLevel(password) : null;
 
   return (
-    <div style={{ marginTop: 8 }} aria-live="polite">
-      <div style={{ height: 6, borderRadius: 999, background: '#EFEBE2', overflow: 'hidden' }}>
-        <div
-          style={{
-            height: '100%', borderRadius: 999, background: level.color,
-            width: `${percentage}%`, transition: 'width .2s ease, background-color .2s ease',
-          }}
-        />
-      </div>
-      <p style={{ fontSize: 12, fontWeight: 700, color: level.color, margin: '4px 0 0' }}>
-        {level.label}
-      </p>
-      {missing.length > 0 && (
-        <ul style={{ fontSize: 12, color: '#6B6257', margin: '4px 0 0', paddingLeft: 18 }}>
-          {missing.map((c) => <li key={c.label}>{c.label}</li>)}
-        </ul>
+    <div style={{ marginTop: 8 }}>
+      {level && (
+        <div aria-live="polite">
+          <div style={{ height: 6, borderRadius: 999, background: '#EFEBE2', overflow: 'hidden' }}>
+            <div
+              style={{
+                height: '100%', borderRadius: 999, background: level.color,
+                width: `${level.percent}%`, transition: 'width .2s ease, background-color .2s ease',
+              }}
+            />
+          </div>
+          <p style={{ fontSize: 12, fontWeight: 700, color: level.color, margin: '4px 0 0' }}>
+            {level.label}
+          </p>
+        </div>
       )}
+      <p style={{ fontSize: 13, color: '#6B6257', margin: '6px 0 0', lineHeight: 1.5 }}>
+        <span aria-hidden="true">💡 </span>
+        Astuce : une <strong>phrase de passe</strong>, par exemple 4 ou 5 mots pris au hasard
+        (« pivoine lanterne orage remparts »). Les espaces sont permis ; majuscules, chiffres
+        et symboles aussi, mais rien n’est obligatoire : c’est la longueur qui compte.
+      </p>
     </div>
   );
 }

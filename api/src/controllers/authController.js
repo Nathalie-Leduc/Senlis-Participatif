@@ -16,9 +16,15 @@ import {
 import {
   createToken, verifyAndConsumeToken, findConsumedToken, createTwoFactorCode, verifyTwoFactorCode,
 } from '../services/token.js';
-import { sendVerificationEmail, sendResetPasswordEmail, sendTwoFactorCode } from '../services/email.js';
+import {
+  sendVerificationEmail, sendResetPasswordEmail, sendTwoFactorCode, sendLoginAlertEmail,
+} from '../services/email.js';
 import { logAdminAction, AUDIT_ACTIONS } from '../services/audit.js';
 import { assertEmailDomainCanReceive } from '../lib/emailDomain.js';
+import { passwordProblem, normalizePassword } from '../lib/passwordPolicy.js';
+import {
+  assertLoginAllowed, recordLoginFailure, clearLoginFailures, MAX_FAILURES, WINDOW_MS,
+} from '../services/loginThrottle.js';
 
 // ── Outils communs (S5A-06) ─────────────────────────────
 
@@ -40,6 +46,45 @@ function getDummyHash() {
 }
 
 /**
+ * Compare un mot de passe saisi à l'empreinte enregistrée (S5R-13b).
+ *
+ * Les nouveaux mots de passe sont hachés APRÈS normalisation Unicode
+ * (NFC, voir lib/passwordPolicy.js). On compare donc d'abord la forme
+ * normalisée ; si elle diffère de la saisie brute (lettres accentuées
+ * composées autrement), on essaie aussi la forme brute, pour qu'un
+ * compte créé AVANT cette règle continue de s'ouvrir.
+ * Analogie : une serrure changée, mais l'ancienne clé fonctionne encore.
+ */
+async function verifyPassword(hash, password) {
+  const normalized = normalizePassword(password);
+  if (await argon2.verify(hash, normalized)) return true;
+  return normalized !== password ? argon2.verify(hash, password) : false;
+}
+
+/** 400 « champ par champ », même forme que le middleware validate() */
+function passwordRejected(field, message) {
+  const error = new Error('Données invalides');
+  error.status = 400;
+  error.code = 'VALIDATION_ERROR';
+  error.details = { [field]: message };
+  return error;
+}
+
+/**
+ * Rappel annuel de changer de mot de passe — comptes de l'équipe
+ * SEULEMENT (S5R-13b). La CNIL le recommande pour les comptes
+ * d'administration ; le NIST le déconseille pour tout le monde, et
+ * c'est le NIST qu'on suit pour les citoyens (document 21, § 8.5).
+ * Un rappel, jamais un blocage : l'admin reste libre de le faire.
+ */
+export const PASSWORD_RENEWAL_DAYS = 365;
+export function passwordRenewalDue(user, now = Date.now()) {
+  if (!isStaffRole(user.role)) return false;
+  const since = user.passwordChangedAt ?? user.createdAt;
+  return Boolean(since) && now - new Date(since).getTime() > PASSWORD_RENEWAL_DAYS * 24 * 3600 * 1000;
+}
+
+/**
  * Vérifie le mot de passe ACTUEL avant une action sensible
  * (changer d'email, supprimer son compte). Recommandation OWASP :
  * une session volée — ordinateur resté ouvert, jeton dérobé — ne
@@ -48,7 +93,7 @@ function getDummyHash() {
  * @throws {Error} 401 INVALID_CREDENTIALS si le mot de passe est faux ou absent
  */
 async function assertCurrentPassword(user, password) {
-  const valid = password ? await argon2.verify(user.passwordHash, password) : false;
+  const valid = password ? await verifyPassword(user.passwordHash, password) : false;
   if (!valid) {
     const error = new Error('Mot de passe actuel incorrect');
     error.status = 401;
@@ -229,6 +274,11 @@ export async function login(req, res, next) {
   try {
     const { email, password, trustedDeviceToken } = req.body;
 
+    // S5R-13b : 10 mots de passe faux en une heure pour cette adresse →
+    // connexion suspendue jusqu'à la fin de l'heure, AVANT même de
+    // regarder le mot de passe (sinon le bon finirait par passer).
+    await assertLoginAllowed(email);
+
     // Cherche l'utilisateur — on n'indique PAS si c'est
     // l'email ou le mot de passe qui est faux (anti-bruteforce :
     // ne pas révéler si un email est inscrit ou non).
@@ -241,14 +291,27 @@ export async function login(req, res, next) {
     };
 
     if (!user) {
-      // Même travail que pour un vrai compte, puis même refus
+      // Même travail que pour un vrai compte, puis même refus — et le
+      // même décompte d'échecs (sinon le blocage trahirait les adresses inscrites)
       await argon2.verify(await getDummyHash(), password);
+      await recordLoginFailure(email);
       throw genericError();
     }
 
     // Vérifie le mot de passe avec Argon2
-    const valid = await argon2.verify(user.passwordHash, password);
-    if (!valid) throw genericError();
+    const valid = await verifyPassword(user.passwordHash, password);
+    if (!valid) {
+      const failures = await recordLoginFailure(email);
+      // Au 10e échec exactement : une alerte au titulaire, une seule
+      // par heure. Pas d'await : la réponse ne doit pas attendre l'envoi
+      // (ni durer plus longtemps qu'un échec ordinaire).
+      if (failures === MAX_FAILURES) {
+        void sendLoginAlertEmail(user.email, { failures, minutes: WINDOW_MS / 60000 });
+      }
+      throw genericError();
+    }
+    // Bon mot de passe : le compteur d'échecs repart de zéro
+    await clearLoginFailures(email);
 
     // Vérifie que l'email a été confirmé
     if (!user.emailVerified) {
@@ -314,6 +377,7 @@ export async function login(req, res, next) {
         travailleQuartier: user.travailleQuartier,
         travailType: user.travailType,
         travailleASenlis: user.travailleASenlis,
+        passwordRenewalDue: passwordRenewalDue(user),
       },
     });
   } catch (err) {
@@ -375,6 +439,7 @@ export async function verifyTwoFactor(req, res, next) {
         travailleQuartier: user.travailleQuartier,
         travailType: user.travailType,
         travailleASenlis: user.travailleASenlis,
+        passwordRenewalDue: passwordRenewalDue(user),
       },
     });
   } catch (err) {
@@ -401,6 +466,7 @@ export async function me(req, res, next) {
         notifyNewProposal: true,
         notifySurveyClosed: true,
         createdAt: true,
+        passwordChangedAt: true,
       },
     });
 
@@ -411,7 +477,10 @@ export async function me(req, res, next) {
       throw error;
     }
 
-    res.json({ user });
+    // La date elle-même reste interne : seul le rappel est utile au client
+    const { passwordChangedAt, ...publicUser } = user;
+    void passwordChangedAt;
+    res.json({ user: { ...publicUser, passwordRenewalDue: passwordRenewalDue(user) } });
   } catch (err) {
     next(err);
   }
@@ -610,7 +679,7 @@ export async function changePassword(req, res, next) {
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
-    const valid = await argon2.verify(user.passwordHash, currentPassword);
+    const valid = await verifyPassword(user.passwordHash, currentPassword);
     if (!valid) {
       const error = new Error('Mot de passe actuel incorrect');
       error.status = 401;
@@ -631,6 +700,11 @@ export async function changePassword(req, res, next) {
       throw error;
     }
 
+    // S5R-13b : pas un mot de passe qui reprend l'adresse ou le pseudo
+    // (le validateur Zod a déjà vérifié la longueur et la liste de blocage)
+    const problem = passwordProblem(newPassword, user);
+    if (problem) throw passwordRejected('newPassword', problem);
+
     const passwordHash = await argon2.hash(newPassword);
     // S5A-06 : tokenVersion + 1 = toutes les sessions ouvertes
     // AILLEURS sont révoquées (si on change son mot de passe, c'est
@@ -639,7 +713,8 @@ export async function changePassword(req, res, next) {
     // session actuelle, elle, continue sans reconnexion.
     const updated = await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash, tokenVersion: { increment: 1 } },
+      // passwordChangedAt : remet à zéro le rappel annuel de l'équipe (S5R-13b)
+      data: { passwordHash, tokenVersion: { increment: 1 }, passwordChangedAt: new Date() },
     });
 
     res.json({
@@ -679,16 +754,31 @@ export async function resetPassword(req, res, next) {
   try {
     const { token, password } = req.body;
 
-    const authToken = await verifyAndConsumeToken(token, 'RESET_PASSWORD');
-
+    // Hachage AVANT la transaction : Argon2 prend ~100 ms, inutile de
+    // garder la transaction ouverte pendant ce temps.
     const passwordHash = await argon2.hash(password);
-    // S5A-06 : réinitialiser = toutes les sessions existantes sont
-    // révoquées, sans exception (la personne n'est connectée nulle
-    // part de légitime : elle avait perdu son mot de passe).
-    await prisma.user.update({
-      where: { id: authToken.userId },
-      data: { passwordHash, tokenVersion: { increment: 1 } },
+
+    // Transaction (S5R-13b) : si le mot de passe est refusé parce qu'il
+    // reprend l'adresse ou le pseudo, tout est annulé — le lien reçu par
+    // email reste valable, la personne en choisit simplement un autre.
+    // Sans elle, le lien serait « consommé » par un essai refusé.
+    const user = await prisma.$transaction(async (tx) => {
+      const authToken = await verifyAndConsumeToken(token, 'RESET_PASSWORD', tx);
+      const owner = await tx.user.findUnique({ where: { id: authToken.userId } });
+      const problem = passwordProblem(password, owner);
+      if (problem) throw passwordRejected('password', problem);
+
+      // S5A-06 : réinitialiser = toutes les sessions existantes sont
+      // révoquées, sans exception (la personne n'est connectée nulle
+      // part de légitime : elle avait perdu son mot de passe).
+      return tx.user.update({
+        where: { id: owner.id },
+        data: { passwordHash, tokenVersion: { increment: 1 }, passwordChangedAt: new Date() },
+      });
     });
+    // Nouveau mot de passe = la suspension après 10 essais est levée :
+    // c'est le moyen de déblocage que la CNIL demande (§ 43)
+    await clearLoginFailures(user.email);
 
     res.json({ message: 'Mot de passe réinitialisé avec succès ! Vous pouvez vous connecter.' });
   } catch (err) {

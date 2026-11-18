@@ -84,7 +84,8 @@ src/
 **Durées de conservation** — `npm run purge` (une fois par jour en production) :
 - jetons email et codes 2FA : effacés 24 h après expiration ou utilisation ;
 - comptes citoyens sans connexion depuis 3 ans : email d'avertissement, puis suppression 30 jours plus tard si toujours aucune connexion. Jamais de suppression sans avertissement effectivement envoyé ; jamais de suppression automatique d'un compte admin ;
-- journal des actions d'administration (`AdminAuditLog`) : 6 mois.
+- journal des actions d'administration (`AdminAuditLog`) : 6 mois ;
+- compteurs d'essais de connexion (`LoginThrottle`, S5R-13b) : une heure.
 
 ## Sécurité de l'authentification (S5A-06)
 
@@ -92,6 +93,9 @@ src/
 - **Sessions révocables** : `User.tokenVersion`, recopié dans le JWT (`tv`) ; changer ou réinitialiser son mot de passe l'incrémente → toutes les autres sessions tombent (`401 SESSION_REVOKED`). `PUT /auth/me/password` renvoie un nouveau jeton pour la session courante.
 - **Domaine de l'email vérifié par DNS** (S5R-02b, `src/lib/emailDomain.js`) à l'inscription, au changement d'email et au renvoi du lien : refus seulement si c'est certain, acceptation en cas de panne DNS. Dans les tests, le DNS est simulé (`dnsMock` dans `tests/setup.js`).
 - **Mot de passe exigé** pour changer d'email (`currentPassword`) et pour supprimer son compte (`DELETE /auth/me`, corps `{ password }`).
+- **Politique des mots de passe CNIL + NIST** (S5R-13b, document 21 § 8.5, `src/lib/passwordPolicy.js`) : 15 à 128 caractères comptés en caractères Unicode après normalisation NFC, **aucune règle de composition** ; refus motivé des mots de passe courants (liste locale `src/lib/data/mots-de-passe-courants.txt`, ~5 500 mots de passe de 15 caractères et plus tirés des listes publiques SecLists, licence MIT — à régénérer une fois par an avec `node scripts/build-password-blocklist.mjs`), des suites de touches et répétitions, et des mots de passe qui reprennent le nom du site, l'adresse email ou le pseudo. Appliquée à l'inscription, au changement et à la réinitialisation ; les comptes existants gardent leur mot de passe.
+- **10 essais par heure et par compte** (S5R-13b, `src/services/loginThrottle.js`) : au 10e mot de passe faux, connexion suspendue jusqu'à la fin de l'heure (`429 ACCOUNT_THROTTLED`), même avec le bon mot de passe ; email d'alerte au titulaire (sans lien) ; « Mot de passe oublié » lève le blocage. Les adresses inconnues sont comptées pareil (anti-énumération). Table `LoginThrottle` : empreinte HMAC de l'adresse, jamais l'adresse en clair. S'ajoute à la limite par adresse IP.
+- **Rappel annuel pour l'équipe** (S5R-13b) : `passwordRenewalDue` dans `/auth/login`, `/auth/2fa/verify` et `/auth/me`, vrai pour un compte ADMIN ou EDITOR dont le mot de passe a plus d'un an (`User.passwordChangedAt`, à défaut `createdAt`). Un rappel, jamais un blocage ; jamais pour les citoyens.
 - **Journal d'administration** : connexions admin, changements de rôle, création/modification/suppression de propositions et d'enquêtes (`src/services/audit.js`), consultable dans Prisma Studio.
 
 Logique : `src/services/retention.js` · tests : `tests/retention.test.js`.
