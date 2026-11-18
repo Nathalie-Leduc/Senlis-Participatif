@@ -7,7 +7,7 @@ describe('brouillon d’inscription', () => {
   it('conserve la saisie, mais JAMAIS les mots de passe ni la case de confirmation', () => {
     saveRegisterDraft({
       pseudo: 'nath', email: 'nath@exemple.fr', situation: 'CENTRE_RESIDENT',
-      password: 'MotDePasse123!', passwordConfirm: 'MotDePasse123!', consent: true,
+      password: 'lanterne remparts tilleul', passwordConfirm: 'lanterne remparts tilleul', consent: true,
     });
     const draft = loadRegisterDraft();
     expect(draft).toMatchObject({ pseudo: 'nath', email: 'nath@exemple.fr', situation: 'CENTRE_RESIDENT' });

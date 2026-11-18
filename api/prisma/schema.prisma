@@ -214,6 +214,14 @@ model User {
   // clés cessent d'ouvrir d'un coup, sans avoir à les récupérer.
   tokenVersion Int @default(0)
 
+  // ── Renouvellement des mots de passe d'administration (S5R-13b) ──
+  // Date du dernier choix de mot de passe (changement, réinitialisation).
+  // Null pour les comptes antérieurs : on compte alors depuis createdAt.
+  // Sert UNIQUEMENT au rappel annuel des comptes de l'équipe (la CNIL
+  // le recommande pour les comptes d'administration ; jamais imposé aux
+  // citoyens — document 21, § 8.5).
+  passwordChangedAt DateTime?
+
   proposals Proposal[]
   votes     Vote[]
   responses SurveyResponse[]
@@ -667,4 +675,31 @@ model Parking {
   geometry       Json?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+}
+
+// ══════════════════════════════════════════════════════════
+// Limite d'essais de connexion PAR COMPTE (S5R-13b)
+//
+// 10 mots de passe faux par heure pour une même adresse, puis attente
+// (CNIL, recommandation 2022-100, § 43 ; NIST : 100 échecs au plus).
+// Complète la limite par adresse IP (middlewares/rateLimiters.js) :
+// un attaquant qui change d'adresse IP à chaque essai reste freiné.
+//
+// Une ligne par adresse email ESSAYÉE, inscrite ou non (sinon, la
+// limite trahirait quelles adresses ont un compte). L'adresse n'est
+// pas stockée en clair : `key` est son empreinte HMAC (clé secrète du
+// serveur). Les lignes de plus d'une heure ne servent plus à rien et
+// sont effacées chaque nuit (services/retention.js).
+//
+// Analogie : le distributeur de billets qui avale la carte après trois
+// codes faux — sauf qu'ici, la carte est rendue au bout d'une heure.
+// ══════════════════════════════════════════════════════════
+model LoginThrottle {
+  key         String   @id
+  // Échecs depuis le début de la fenêtre
+  failures    Int      @default(0)
+  // Début de la fenêtre d'une heure (premier échec)
+  windowStart DateTime @default(now())
+
+  @@index([windowStart])
 }

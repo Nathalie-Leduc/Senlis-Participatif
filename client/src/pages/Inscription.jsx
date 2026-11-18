@@ -233,10 +233,10 @@ export default function Inscription() {
             <span style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 15 }}>Mot de passe</span>
             <PasswordInput
               name="password" value={form.password} onChange={handleChange}
-              autoComplete="new-password" required minLength={12}
-              pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}"
-              title="Au moins 12 caractères, avec majuscule, minuscule, chiffre et caractère spécial"
-              placeholder="12 caractères minimum"
+              /* S5R-13b : 15 caractères, plus aucune règle de composition
+                 (l'ancien attribut pattern exigeait les 4 familles) */
+              autoComplete="new-password" required minLength={15} maxLength={128}
+              placeholder="15 caractères minimum"
               {...fieldProps('password', form)}
               style={inputStyle}
             />

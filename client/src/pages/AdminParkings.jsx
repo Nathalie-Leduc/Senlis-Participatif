@@ -23,6 +23,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import PasswordRenewalBanner from '../components/PasswordRenewalBanner/PasswordRenewalBanner.jsx';
 import ParkingPlaceMap from '../components/ParkingPlaceMap/ParkingPlaceMap.jsx';
 import { PARKING_REGIMES, PARKING_CHARGING, regimeMeta } from '../constants/parkings.js';
 import ParkingLocationsEditor from '../components/ParkingLocationsEditor/ParkingLocationsEditor.jsx';
@@ -147,6 +148,7 @@ export default function AdminParkings() {
       </p>
 
       <EditorBanner />
+      <PasswordRenewalBanner />
       {!isAdmin && (
         <p role="note" style={{ fontSize: 14, color: '#6B6257', marginBottom: 16 }}>Consultation seule : les parkings sont modifiés par l'administration.</p>
       )}

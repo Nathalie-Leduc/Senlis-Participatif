@@ -21,7 +21,7 @@
 // ══════════════════════════════════════════════════════════
 
 /** Date de dernière mise à jour des deux pages (à changer à chaque modification de fond). */
-export const LAST_UPDATED = '14 octobre 2026';
+export const LAST_UPDATED = '5 novembre 2026';
 
 export const SITE = {
   name: 'Senlis Participatif',
@@ -156,6 +156,8 @@ export const RETENTION = [
   { data: 'Réponses aux enquêtes', duration: 'Détachées du compte à sa suppression, puis conservées de façon anonyme pour ne pas fausser les résultats' },
   { data: 'Liens reçus par email (vérification, mot de passe)', duration: 'Valables 1 heure, à usage unique, puis effacés sous 24 heures' },
   { data: 'Code de connexion administrateur', duration: 'Valable 10 minutes, à usage unique, puis effacé sous 24 heures' },
+  // S5R-13b : limite de 10 essais par heure et par compte
+  { data: 'Nombre d’essais de connexion manqués (sans l’adresse en clair)', duration: '1 heure, pour bloquer les tentatives d’intrusion, puis effacé chaque nuit' },
   { data: 'Journaux techniques du serveur (adresse IP, page demandée)', duration: '1 an au plus, pour la sécurité du service' },
   { data: 'Journal des actions d’administration (comptes administrateurs uniquement)', duration: '6 mois' },
 ];

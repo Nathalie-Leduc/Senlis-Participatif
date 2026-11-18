@@ -251,3 +251,50 @@ export async function sendInactivityWarning(email, deletionDate) {
     `,
   });
 }
+
+/**
+ * Alerte au titulaire : 10 mots de passe faux en une heure (S5R-13b).
+ *
+ * Envoyée UNE fois par heure au plus (au 10e échec exactement), et
+ * seulement pour un compte qui existe. Elle ne contient aucun lien de
+ * connexion : un email d'alerte qui demande de « cliquer ici pour
+ * vous connecter » ressemblerait trait pour trait à un hameçonnage.
+ * La personne va d'elle-même sur le site si elle veut changer son
+ * mot de passe.
+ */
+export async function sendLoginAlertEmail(email, { failures, minutes }) {
+  return sendEmail({
+    to: email,
+    subject: 'Essais de connexion à votre compte — Senlis Participatif',
+    html: `
+      <div style="font-family: 'Public Sans', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px;">
+        <h1 style="font-family: Georgia, serif; color: #26333A; font-size: 24px;">
+          Essais de connexion à votre compte 🔒
+        </h1>
+        <p style="color: #6B6257; font-size: 16px; line-height: 1.6;">
+          Un mot de passe faux a été saisi <strong>${failures} fois</strong> en moins
+          d'une heure pour votre compte. Par sécurité, la connexion à votre compte
+          est suspendue pendant ${minutes} minute${minutes > 1 ? 's' : ''}.
+        </p>
+        <p style="color: #6B6257; font-size: 16px; line-height: 1.6;">
+          <strong>C'était vous ?</strong> Attendez la fin de ce délai, ou choisissez un
+          nouveau mot de passe avec « Mot de passe oublié » sur la page de connexion.
+        </p>
+        <p style="color: #6B6257; font-size: 16px; line-height: 1.6;">
+          <strong>Ce n'était pas vous ?</strong> Votre compte n'a pas été ouvert : le
+          blocage l'a protégé. Par précaution, changez votre mot de passe dans
+          « Mon compte » — et s'il vous sert aussi sur d'autres sites, changez-le
+          là-bas également.
+        </p>
+        <p style="color: #6B6257; font-size: 14px;">
+          Cet email ne contient volontairement aucun lien : rendez-vous vous-même
+          sur le site, depuis vos favoris ou en tapant son adresse.
+        </p>
+        <hr style="border: none; border-top: 1px solid #e3dcce; margin: 24px 0;" />
+        <p style="color: #B9B2A4; font-size: 12px;">
+          Senlis Participatif — Plateforme citoyenne indépendante
+        </p>
+      </div>
+    `,
+  });
+}

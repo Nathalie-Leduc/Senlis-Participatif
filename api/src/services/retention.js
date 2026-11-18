@@ -12,6 +12,8 @@
 //     personne ne s'est toujours pas reconnectée.
 //  3. Journal des actions d'administration (S5A-06) : 6 mois, durée
 //     recommandée par la CNIL pour des journaux de traçabilité.
+//  4. Compteurs d'essais de connexion (S5R-13b) : une heure ; ceux
+//     dont l'heure est passée sont effacés à chaque passage.
 //
 // Analogie : la bibliothèque qui envoie « votre carte d'adhérent
 // expire, passez nous voir » avant de radier le lecteur — jamais
@@ -36,6 +38,7 @@
 
 import prisma from '../lib/prisma.js';
 import { sendInactivityWarning } from './email.js';
+import { WINDOW_MS } from './loginThrottle.js';
 
 export const INACTIVITY_YEARS = 3;
 export const WARNING_NOTICE_DAYS = 30;
@@ -141,6 +144,18 @@ export async function purgeOldAuditLogs({ now = new Date(), dryRun = false } = {
 }
 
 /**
+ * Efface les compteurs d'essais de connexion dont l'heure est passée
+ * (S5R-13b) : ils ne bloquent plus rien et ne servent plus à rien.
+ * @returns {Promise<number>} nombre de lignes supprimées
+ */
+export async function purgeExpiredThrottles({ now = new Date(), dryRun = false } = {}) {
+  const where = { windowStart: { lte: new Date(now.getTime() - WINDOW_MS) } };
+  if (dryRun) return prisma.loginThrottle.count({ where });
+  const { count } = await prisma.loginThrottle.deleteMany({ where });
+  return count;
+}
+
+/**
  * Passe complète, dans l'ordre : suppressions d'abord (elles
  * concernent des comptes prévenus lors d'un passage PRÉCÉDENT), puis
  * nouveaux avertissements, puis jetons.
@@ -150,7 +165,9 @@ export async function runRetention({ now = new Date(), dryRun = false } = {}) {
   const { warned, failed } = await warnInactiveAccounts({ now, dryRun });
   const deletedTokens = await purgeExpiredTokens({ now, dryRun });
   const deletedAuditLogs = await purgeOldAuditLogs({ now, dryRun });
+  const deletedThrottles = await purgeExpiredThrottles({ now, dryRun });
   return {
     dryRun, deletedAccounts, warnedAccounts: warned, failedWarnings: failed, deletedTokens, deletedAuditLogs,
+    deletedThrottles,
   };
 }
