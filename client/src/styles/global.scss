@@ -6,6 +6,7 @@
 @use 'mascot';
 @use 'joy-layer';
 @use 'accessibility';
+@use 'not-found'; // S5R2-10 : page 404
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 // S5R-12 (noté en S5R-09) : par défaut, les champs et les boutons
