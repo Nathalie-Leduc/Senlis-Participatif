@@ -15,33 +15,24 @@
 // lui donne pas.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../services/api.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import { PROFILE_DIMENSIONS } from '../constants/situation.js';
 import { votePercentages, segmentLabel } from '../utils/voteStats.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function AdminPropositionStats() {
   const { id } = useParams();
-  const [stats, setStats] = useState(null);
+  const [segmentBy, setSegmentBy] = useState('');
+  // Recharge à chaque changement d'axe : c'est l'API qui calcule
+  // (et masque) les segments, pas le navigateur. Pendant le rechargement,
+  // les résultats précédents restent affichés (S5R2-08 : useApiQuery).
+  const query = segmentBy ? `?segmentBy=${encodeURIComponent(segmentBy)}` : '';
+  const { data: stats, error: loadError, loading } = useApiQuery(`/proposals/${id}/stats${query}`);
+  const error = loadError ? (loadError.message || 'Impossible de charger les résultats') : null;
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(stats ? `Résultats — ${stats.proposal.title}` : 'Résultats de la proposition');
-  const [segmentBy, setSegmentBy] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Recharge à chaque changement d'axe : c'est l'API qui calcule
-  // (et masque) les segments, pas le navigateur.
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    const query = segmentBy ? `?segmentBy=${encodeURIComponent(segmentBy)}` : '';
-    api.get(`/proposals/${id}/stats${query}`)
-      .then(setStats)
-      .catch((err) => setError(err.message || 'Impossible de charger les résultats'))
-      .finally(() => setLoading(false));
-  }, [id, segmentBy]);
 
   if (loading && !stats) {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;

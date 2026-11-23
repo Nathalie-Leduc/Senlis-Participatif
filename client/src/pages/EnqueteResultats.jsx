@@ -8,37 +8,25 @@
 // exposé ici).
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../services/api.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import ResultChart from '../components/ResultChart/ResultChart.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function EnqueteResultats() {
   const { slug } = useParams();
-  const [results, setResults] = useState(null);
+  // S5R2-08 : chargement commun (useApiQuery), message d'erreur selon le cas
+  const { data: results, error: loadError, loading } = useApiQuery(`/surveys/${slug}/results`);
+  let error = null;
+  if (loadError?.status === 404) {
+    error = "Cette enquête n'existe pas ou plus.";
+  } else if (loadError?.code === 'RESULTS_NOT_PUBLISHED') {
+    error = "Les résultats de cette enquête n'ont pas encore été publiés par l'administration — revenez un peu plus tard !";
+  } else if (loadError) {
+    error = loadError.message || 'Impossible de charger les résultats';
+  }
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(results ? `Résultats — ${results.survey.title}` : 'Résultats de l’enquête');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    api.get(`/surveys/${slug}/results`)
-      .then(setResults)
-      .catch((err) => {
-        if (err.status === 404) {
-          setError("Cette enquête n'existe pas ou plus.");
-        } else if (err.code === 'RESULTS_NOT_PUBLISHED') {
-          setError("Les résultats de cette enquête n'ont pas encore été publiés par l'administration — revenez un peu plus tard !");
-        } else {
-          setError(err.message || 'Impossible de charger les résultats');
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [slug]);
 
   if (loading) {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;

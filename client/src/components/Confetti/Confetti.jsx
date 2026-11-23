@@ -42,10 +42,15 @@ export default function Confetti({ trigger }) {
       delay: Math.random() * 0.3,
       duration: 1.2 + Math.random() * 0.6,
     }));
-    setPieces(newPieces);
-
+    // S5R2-08 : affichés à la prochaine image (requestAnimationFrame),
+    // pas au début de l'effet — un setState synchrone dans un effet
+    // force un second rendu immédiat (règle react-hooks/set-state-in-effect)
+    const frame = requestAnimationFrame(() => setPieces(newPieces));
     const timeout = setTimeout(() => setPieces([]), DURATION_MS);
-    return () => clearTimeout(timeout);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timeout);
+    };
   }, [trigger]);
 
   if (pieces.length === 0) return null;

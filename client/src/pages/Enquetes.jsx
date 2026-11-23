@@ -7,9 +7,9 @@
 // pas entré dedans.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../services/api.js';
+import { usePagedApiQuery } from '../hooks/useApiQuery.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeAudience, isEveryone } from '../utils/audience.js';
@@ -22,50 +22,20 @@ const STATUS_FILTERS = [
 
 export default function Enquetes() {
   usePageTitle('Enquêtes');
-  const [items, setItems] = useState([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [status, setStatus] = useState(undefined);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  const buildQuery = useCallback((pageToFetch) => {
+  // S5R2-08 : liste paginée commune (usePagedApiQuery). Quand le statut
+  // ou le tri change, la liste repart de la page 1 — continuer à empiler
+  // des résultats « page 3 » sur un NOUVEAU filtre mélangerait deux listes.
+  const list = usePagedApiQuery((pageToFetch) => {
     const params = new URLSearchParams({ page: pageToFetch, limit: 10 });
     if (status) params.set('status', status);
     return `/surveys?${params.toString()}`;
-  }, [status]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    api.get(buildQuery(1))
-      .then((data) => {
-        if (cancelled) return;
-        setItems(data.items);
-        setPage(1);
-        setTotalPages(data.pagination.totalPages);
-      })
-      .catch((err) => !cancelled && setError(err.message || 'Impossible de charger les enquêtes'))
-      .finally(() => !cancelled && setLoading(false));
-
-    return () => { cancelled = true; };
-  }, [buildQuery]);
-
-  const loadMore = async () => {
-    setLoading(true);
-    try {
-      const nextPage = page + 1;
-      const data = await api.get(buildQuery(nextPage));
-      setItems((prev) => [...prev, ...data.items]);
-      setPage(nextPage);
-    } catch (err) {
-      setError(err.message || 'Impossible de charger la suite');
-    } finally {
-      setLoading(false);
-    }
-  };
+  });
+  const { items, page, totalPages, loading, loadMore } = list;
+  let error = null;
+  if (list.error) error = list.error.message || 'Impossible de charger les enquêtes';
+  else if (list.moreError) error = list.moreError.message || 'Impossible de charger la suite';
 
   return (
     <div>

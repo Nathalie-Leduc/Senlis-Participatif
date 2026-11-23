@@ -18,10 +18,9 @@
 // anonyme (on ne SAIT pas s'il a déjà répondu, différent de "non").
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { api } from '../services/api.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeSurveyLength } from '../utils/surveyLength.js';
@@ -34,32 +33,20 @@ export default function EnqueteDetail() {
   const navigate = useNavigate();
   const { isLogged, isStaff } = useAuth();
 
-  const [survey, setSurvey] = useState(null);
+  // S5R2-08 : chargement commun (useApiQuery)
+  const { data, error: loadError, loading } = useApiQuery(`/surveys/${slug}`);
+  const survey = data?.survey ?? null;
+  const hasResponded = data?.hasResponded ?? null;
+  // S5R-07 : true / false / null (on ne sait pas — visiteur anonyme ou profil incomplet)
+  const inAudience = data?.inAudience ?? null;
+  let error = null;
+  if (loadError) {
+    error = loadError.status === 404
+      ? "Cette enquête n'existe pas ou plus."
+      : (loadError.message || 'Impossible de charger cette enquête');
+  }
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(survey?.title ?? 'Enquête');
-  const [hasResponded, setHasResponded] = useState(null);
-  // S5R-07 : true / false / null (on ne sait pas — visiteur anonyme ou profil incomplet)
-  const [inAudience, setInAudience] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    api.get(`/surveys/${slug}`)
-      .then((data) => {
-        setSurvey(data.survey);
-        setHasResponded(data.hasResponded);
-        setInAudience(data.inAudience ?? null);
-      })
-      .catch((err) => setError(
-        err.status === 404
-          ? "Cette enquête n'existe pas ou plus."
-          : (err.message || 'Impossible de charger cette enquête'),
-      ))
-      .finally(() => setLoading(false));
-  }, [slug]);
 
   if (loading) {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;

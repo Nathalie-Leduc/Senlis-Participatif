@@ -14,9 +14,10 @@
 // et « Résultats » jamais (l'API refuserait de toute façon : 403).
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/proposalStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
@@ -36,29 +37,22 @@ const FILTERS = [
 
 export default function AdminPropositions() {
   usePageTitle('Administration — Propositions');
-  const [items, setItems] = useState([]);
   const [status, setStatus] = useState(undefined);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const { showToast } = useToast();
   const { isAdmin } = useAuth();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ limit: 50 });
-      if (status) params.set('status', status);
-      const data = await api.get(`/proposals/admin?${params.toString()}`);
-      setItems(data.items);
-    } catch (err) {
-      setError(err.message || 'Impossible de charger les propositions');
-    } finally {
-      setLoading(false);
-    }
-  }, [status]);
-
-  useEffect(() => { load(); }, [load]);
+  // S5R2-08 : chargement commun (useApiQuery) ; recharge quand le filtre change
+  const params = new URLSearchParams({ limit: 50 });
+  if (status) params.set('status', status);
+  const { data, error: loadError, loading, setData } = useApiQuery(`/proposals/admin?${params.toString()}`);
+  const items = data?.items ?? [];
+  // Erreur d'une ACTION (suppression) : effacée quand on change de filtre
+  const [actionError, setActionError] = useState(null);
+  const error = actionError ?? (loadError ? (loadError.message || 'Impossible de charger les propositions') : null);
+  const changeStatus = (value) => {
+    setStatus(value);
+    setActionError(null);
+  };
 
   const handleDelete = async (proposal) => {
     // window.confirm : suffisant pour un outil d'administration
@@ -68,10 +62,10 @@ export default function AdminPropositions() {
 
     try {
       await api.delete(`/proposals/${proposal.id}`);
-      setItems((prev) => prev.filter((p) => p.id !== proposal.id));
+      setData((prev) => ({ ...prev, items: prev.items.filter((p) => p.id !== proposal.id) }));
       showToast(`« ${proposal.title} » a été supprimée`);
     } catch (err) {
-      setError(err.message || 'La suppression a échoué');
+      setActionError(err.message || 'La suppression a échoué');
     }
   };
 
@@ -102,7 +96,7 @@ export default function AdminPropositions() {
         {FILTERS.map((f) => (
           <button
             key={f.label}
-            onClick={() => setStatus(f.value)}
+            onClick={() => changeStatus(f.value)}
             aria-pressed={status === f.value}
             style={{
               padding: '7px 14px', borderRadius: 999, fontSize: 13, fontWeight: 600,

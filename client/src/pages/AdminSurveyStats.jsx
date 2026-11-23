@@ -26,9 +26,9 @@
 // résultats sous CHAQUE question sans rien filtrer.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../services/api.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import { SITUATION_SHORT_LABELS } from '../constants/situation.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeAudience, isEveryone, EMPTY_AUDIENCE } from '../utils/audience.js';
@@ -46,11 +46,19 @@ function filterQuery(scope, audience) {
   return `?${params}`;
 }
 
+// Donne le focus à un élément dès son apparition (une seule fois : React
+// n'appelle une ref « fonction » stable qu'au montage et au démontage)
+function focusOnMount(el) {
+  el?.focus();
+}
+
 export default function AdminSurveyStats() {
   const { id } = useParams();
 
   // Résultats GLOBAUX (en-tête, répartition des profils) — chargés une fois
-  const [global, setGlobal] = useState(null);
+  // (S5R2-08 : chargement commun, useApiQuery)
+  const globalQuery = useApiQuery(`/surveys/${id}/stats`);
+  const global = globalQuery.data;
   usePageTitle(global ? `Résultats détaillés — ${global.survey.title}` : 'Résultats détaillés');
 
   // ① Public analysé
@@ -59,34 +67,35 @@ export default function AdminSurveyStats() {
   // Le filtre personnalisé ne part vers l'API qu'au clic sur « Appliquer »
   // (sinon, une requête à chaque case cochée)
   const [appliedCustom, setAppliedCustom] = useState(EMPTY_AUDIENCE);
-  const [view, setView] = useState(null); // résultats du public analysé
+  // Le panneau des profils se replie une fois le filtre appliqué :
+  // il ne reste que l'entête (« Des profils choisis… » coché) et un résumé.
+  // 🎓 Comme un tiroir : on le referme une fois rangé, l'étiquette dit ce qu'il contient.
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const chooseScope = (value) => {
+    setScope(value);
+    // Choisir « Des profils choisis… » ouvre le tiroir pour cocher les profils
+    if (value === 'custom') setPickerOpen(true);
+  };
+  const applyCustom = () => {
+    setAppliedCustom(customAudience);
+    setPickerOpen(false);
+  };
 
   // ② Question affichée ('' = toutes)
   const [questionId, setQuestionId] = useState('');
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Résultats du public analysé : nouvelle requête quand le public change
+  // (sauf « tous » : ce sont les résultats globaux, déjà chargés)
+  const everyone = scope === 'all' || (scope === 'custom' && isEveryone(appliedCustom));
+  const viewQuery = useApiQuery(global && !everyone ? `/surveys/${id}/stats${filterQuery(scope, appliedCustom)}` : null);
+  // Pendant un nouveau filtrage, les résultats précédents restent affichés
+  const view = everyone ? global : (viewQuery.data ?? global);
 
-  useEffect(() => {
-    api.get(`/surveys/${id}/stats`)
-      .then((data) => { setGlobal(data); setView(data); })
-      .catch((err) => setError(err.message || 'Impossible de charger les résultats'))
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  // Nouveau public analysé → nouvelle requête (sauf « tous » : déjà chargé)
-  useEffect(() => {
-    if (!global) return;
-    if (scope === 'all' || (scope === 'custom' && isEveryone(appliedCustom))) {
-      setView(global);
-      return;
-    }
-    setLoading(true);
-    api.get(`/surveys/${id}/stats${filterQuery(scope, appliedCustom)}`)
-      .then(setView)
-      .catch((err) => setError(err.message || 'Impossible de filtrer les résultats'))
-      .finally(() => setLoading(false));
-  }, [id, scope, appliedCustom, global]);
+  const loading = globalQuery.loading || viewQuery.loading;
+  let error = null;
+  if (globalQuery.error) error = globalQuery.error.message || 'Impossible de charger les résultats';
+  else if (viewQuery.error) error = viewQuery.error.message || 'Impossible de filtrer les résultats';
 
   // « Affichée si … » : libellé de l'option-condition, à partir des résultats globaux
   const optionLookup = useMemo(() => {
@@ -151,18 +160,39 @@ export default function AdminSurveyStats() {
             { value: 'custom', label: 'Des profils choisis…' },
           ].map((option) => (
             <label key={option.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, padding: '6px 12px', border: '2px solid #e3dcce', borderRadius: 999, cursor: 'pointer', background: scope === option.value ? '#E3EEF3' : '#fff' }}>
-              <input type="radio" name="scope" value={option.value} checked={scope === option.value} onChange={() => setScope(option.value)} />
+              <input
+                type="radio" name="scope" value={option.value} checked={scope === option.value}
+                onChange={() => chooseScope(option.value)}
+                // Un clic sur « Des profils choisis… » déjà coché rouvre aussi le tiroir
+                // (onChange ne se déclenche pas sur un bouton radio déjà coché)
+                onClick={option.value === 'custom' && scope === 'custom' ? () => setPickerOpen(true) : undefined}
+              />
               {option.label}
             </label>
           ))}
         </div>
-        {scope === 'custom' && (
+        {scope === 'custom' && pickerOpen && (
           <>
             <AudiencePicker value={customAudience} onChange={setCustomAudience} />
-            <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={() => setAppliedCustom(customAudience)}>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={applyCustom}>
               Appliquer ce filtre
             </button>
           </>
+        )}
+        {scope === 'custom' && !pickerOpen && (
+          // Tiroir refermé : le filtre appliqué, en une ligne, et de quoi le rouvrir
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 15 }}>
+            <p style={{ margin: 0, flex: '1 1 260px' }}>
+              <strong>Filtre appliqué :</strong> {describeAudience(appliedCustom)}
+            </p>
+            <button
+              type="button" className="btn" aria-expanded="false" onClick={() => setPickerOpen(true)}
+              // Le focus suit le bouton « Appliquer » qui vient de disparaître (clavier, lecteur d'écran)
+              ref={focusOnMount}
+            >
+              Modifier le filtre
+            </button>
+          </div>
         )}
       </section>
 

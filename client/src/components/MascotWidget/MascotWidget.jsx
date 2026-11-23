@@ -65,11 +65,17 @@ export default function MascotWidget() {
   const tip = PAGE_TIPS.find((t) => t.match(pathname))?.text ?? DEFAULT_TIP;
 
   // Nouvelle page : le panneau se referme et la conversation repart
-  // de zéro (l'astuce d'accueil change avec la page)
-  useEffect(() => {
+  // de zéro (l'astuce d'accueil change avec la page).
+  // S5R2-08 : ajusté PENDANT le rendu, en comparant à la page précédente
+  // (motif recommandé par React, « You might not need an effect ») —
+  // et non plus dans un effet, qui affichait d'abord l'ancien fil sur la
+  // nouvelle page, puis refaisait un rendu pour l'effacer.
+  const [shownPath, setShownPath] = useState(pathname);
+  if (shownPath !== pathname) {
+    setShownPath(pathname);
     setOpen(false);
     setThread([]);
-  }, [pathname]);
+  }
 
   // Focus : dans le panneau à l'ouverture, rendu au bouton à la fermeture
   useEffect(() => {
