@@ -14,9 +14,16 @@
 // actif retire le vote (PUT devient DELETE), un peu comme
 // rallumer un interrupteur déjà allumé pour l'éteindre — un seul
 // geste, un seul bouton, pas un bouton "annuler" séparé à chercher.
+//
+// Changer d'avis (recette S5R2-08) : si un vote existe déjà et qu'on
+// clique sur un AUTRE bouton, on demande d'abord confirmation
+// (« Vous avez déjà voté Pour, voulez-vous changer votre vote ? »).
+// Comme au bureau de vote : on ne remplace pas son bulletin par
+// mégarde — on le reprend, on le regarde, puis on décide.
 // ══════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
@@ -34,63 +41,64 @@ import BackLink from '../components/BackLink/BackLink.jsx';
 
 const PENDING_VOTE_KEY = 'senlis:pendingVote';
 
+// Libellés affichés dans le rappel et la demande de confirmation
+const VOTE_LABELS = { POUR: 'Pour', NEUTRE: 'Neutre', CONTRE: 'Contre' };
+
+// Donne le focus à un élément dès son apparition (clavier, lecteur
+// d'écran) : React appelle une ref « fonction » stable au montage
+function focusOnMount(el) {
+  el?.focus();
+}
+
 export default function PropositionDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { user, isLogged, isStaff } = useAuth();
 
-  const [proposal, setProposal] = useState(null);
+  // ── Charger la proposition (S5R2-08 : chargement commun, useApiQuery) ──
+  const { data, error: loadError, loading, setData } = useApiQuery(`/proposals/${slug}`);
+  const proposal = data?.proposal ?? null;
+  const votes = data?.votes ?? null;
+  const myVote = data?.myVote ?? null;
+  let error = null;
+  if (loadError) {
+    error = loadError.status === 404
+      ? 'Cette proposition n\'existe pas ou plus.'
+      : (loadError.message || 'Impossible de charger cette proposition');
+  }
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(proposal?.title ?? 'Proposition');
-  const [votes, setVotes] = useState(null);
-  const [myVote, setMyVote] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // S5R2-08 : l'erreur d'un VOTE n'était jamais affichée (elle ne
+  // s'affichait que si la proposition manquait) — désormais sous les boutons
+  const [voteError, setVoteError] = useState(null);
+  // Changement de vote en attente de confirmation : la NOUVELLE valeur
+  // choisie (null = aucune question posée)
+  const [pendingChange, setPendingChange] = useState(null);
   const { showToast } = useToast();
   const [burst, setBurst] = useState(0); // incrémenté à chaque vote réussi → relance les confettis
   const voteBarRef = useScrollReveal('is-visible', { threshold: 0.3 });
 
-  // ── Charger la proposition ──────────────────────────────
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.get(`/proposals/${slug}`);
-      setProposal(data.proposal);
-      setVotes(data.votes);
-      setMyVote(data.myVote);
-    } catch (err) {
-      setError(
-        err.status === 404
-          ? 'Cette proposition n\'existe pas ou plus.'
-          : (err.message || 'Impossible de charger cette proposition')
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [slug]);
-
-  useEffect(() => { load(); }, [load]);
 
   // ── Envoyer le vote à l'API ──────────────────────────────
   // showConfetti : false pour un retrait de vote (rien à fêter),
   // true pour un vote posé ou changé.
   const submitVote = useCallback(async (value, { showConfetti }) => {
     if (!proposal) return;
+    setVoteError(null);
+    setPendingChange(null);
     try {
       const isRetrait = value === null;
-      const data = isRetrait
+      const result = isRetrait
         ? await api.delete(`/proposals/${proposal.id}/vote`)
         : await api.put(`/proposals/${proposal.id}/vote`, { value });
 
-      setVotes(data.votes);
-      setMyVote(isRetrait ? null : value);
+      setData((prev) => ({ ...prev, votes: result.votes, myVote: isRetrait ? null : value }));
       showToast(isRetrait ? 'Vote retiré' : 'Merci pour votre participation !');
       if (showConfetti) setBurst((b) => b + 1);
     } catch (err) {
-      setError(err.message || 'Le vote n\'a pas pu être enregistré');
+      setVoteError(err.message || 'Le vote n\'a pas pu être enregistré');
     }
-  }, [proposal, showToast]);
+  }, [proposal, showToast, setData]);
 
   // ── Rejouer un vote laissé en attente avant une connexion ──
   // Si on arrive sur cette page (après /connexion) et qu'un vote
@@ -106,13 +114,21 @@ export default function PropositionDetail() {
     sessionStorage.removeItem(PENDING_VOTE_KEY); // usage unique, qu'il réussisse ou non
     try {
       const pending = JSON.parse(raw);
-      if (pending.proposalId === proposal.id) {
-        submitVote(pending.value, { showConfetti: true });
+      if (pending.proposalId === proposal.id && pending.value !== myVote) {
+        // S5R2-08 : lancé juste après l'effet (microtâche), pas pendant —
+        // le vote met à jour l'état de la page, ce qu'un effet ne doit pas
+        // faire de façon synchrone (règle react-hooks/set-state-in-effect).
+        // Déjà un AUTRE vote enregistré (fait avant, sur un autre appareil) ?
+        // On demande confirmation au lieu de l'écraser en silence.
+        // Même vote → rien à faire.
+        queueMicrotask(() => (myVote
+          ? setPendingChange(pending.value)
+          : submitVote(pending.value, { showConfetti: true })));
       }
     } catch {
       // JSON corrompu — on ignore silencieusement, pas grave
     }
-  }, [proposal, isLogged, user, isStaff, submitVote]);
+  }, [proposal, isLogged, user, isStaff, submitVote, myVote]);
 
   // ── Réagir à un clic sur un bouton de vote ──────────────
   const handleSelect = (value) => {
@@ -128,9 +144,18 @@ export default function PropositionDetail() {
     if (isStaff) return; // S5R2-11 : idem, message affiché au-dessus des boutons
 
     // Cliquer sur le bouton déjà actif = retirer son vote.
-    // Cliquer sur un autre = voter ou changer d'avis.
-    const isRetrait = myVote === value;
-    submitVote(isRetrait ? null : value, { showConfetti: !isRetrait });
+    if (myVote === value) {
+      submitVote(null, { showConfetti: false });
+      return;
+    }
+    // Déjà voté autrement → on demande confirmation avant de changer
+    if (myVote) {
+      setVoteError(null);
+      setPendingChange(value);
+      return;
+    }
+    // Premier vote sur cette proposition
+    submitVote(value, { showConfetti: true });
   };
 
   // S5R-10 : contours des quartiers concernés (chargés une fois par visite)
@@ -297,11 +322,46 @@ export default function PropositionDetail() {
           </p>
         )}
 
+        {/* Rappel du vote déjà enregistré (on revient sur la page plus tard) */}
+        {myVote && !votesClosed && (
+          <p style={{ fontSize: 15, marginBottom: 14 }}>
+            <strong>Vous avez voté « {VOTE_LABELS[myVote]} ».</strong>{' '}
+            Un clic sur ce même bouton retire votre vote.
+          </p>
+        )}
+
         <VoteButtons
           myVote={myVote}
-          disabled={votesClosed || isStaff || (isLogged && !user.emailVerified)}
+          disabled={votesClosed || isStaff || (isLogged && !user.emailVerified) || pendingChange !== null}
           onSelect={handleSelect}
         />
+
+        {/* Confirmation avant de changer un vote déjà enregistré */}
+        {pendingChange && myVote && (
+          <div
+            role="group" aria-labelledby="vote-change-question"
+            style={{ background: '#FFF4DB', borderRadius: 12, padding: '14px 16px', marginTop: 14 }}
+          >
+            <p id="vote-change-question" style={{ margin: '0 0 12px', fontSize: 15, color: '#26333A' }}>
+              Vous avez déjà voté « {VOTE_LABELS[myVote]} ».
+              Voulez-vous changer votre vote pour « {VOTE_LABELS[pendingChange]} » ?
+            </p>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button" className="btn btn-primary" ref={focusOnMount}
+                onClick={() => submitVote(pendingChange, { showConfetti: true })}
+              >
+                Oui, changer mon vote
+              </button>
+              <button type="button" className="btn" onClick={() => setPendingChange(null)}>
+                Non, garder « {VOTE_LABELS[myVote]} »
+              </button>
+            </div>
+          </div>
+        )}
+        {voteError && (
+          <p role="alert" style={{ color: '#A8442F', fontWeight: 600, marginTop: 12 }}>{voteError}</p>
+        )}
       </div>
     </div>
   );

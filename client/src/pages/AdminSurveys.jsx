@@ -20,9 +20,10 @@
 //    SUPPRIMER — pour nettoyer les enquêtes de test sans Prisma Studio.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/surveyStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
@@ -44,10 +45,7 @@ const FILTERS = [
 
 export default function AdminSurveys() {
   usePageTitle('Administration — Enquêtes');
-  const [items, setItems] = useState([]);
   const [status, setStatus] = useState(undefined);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   // Recette du 14/10 : l'erreur d'une action (clôturer, rouvrir,
   // supprimer…) s'affiche DANS la ligne de l'enquête concernée, là où
   // l'on vient de cliquer — en haut de la page, elle passait inaperçue.
@@ -58,22 +56,14 @@ export default function AdminSurveys() {
   // Enquête dont le panneau « Clôturer… » est ouvert (une à la fois)
   const [closing, setClosing] = useState(null); // { id, mode: 'now' | 'date', day }
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ limit: 50 });
-      if (status) params.set('status', status);
-      const data = await api.get(`/surveys/admin?${params.toString()}`);
-      setItems(data.items);
-    } catch (err) {
-      setError(err.message || 'Impossible de charger les enquêtes');
-    } finally {
-      setLoading(false);
-    }
-  }, [status]);
-
-  useEffect(() => { load(); }, [load]);
+  // S5R2-08 : chargement commun (useApiQuery) ; recharge quand le filtre change
+  const params = new URLSearchParams({ limit: 50 });
+  if (status) params.set('status', status);
+  const { data, error: loadError, loading, setData } = useApiQuery(`/surveys/admin?${params.toString()}`);
+  const items = data?.items ?? [];
+  const error = loadError ? (loadError.message || 'Impossible de charger les enquêtes') : null;
+  // Corrige la liste sur place après une action (supprimer, rouvrir…), sans tout recharger
+  const setItems = (update) => setData((prev) => ({ ...prev, items: update(prev.items) }));
 
   const handleDelete = async (survey) => {
     if (!window.confirm(`Supprimer définitivement « ${survey.title} » ?`)) return;

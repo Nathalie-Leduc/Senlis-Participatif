@@ -14,18 +14,21 @@ export default function VerificationEmail() {
   usePageTitle('Vérification de l’adresse email');
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
-  const [status, setStatus] = useState('loading'); // loading | success | error
-  const [message, setMessage] = useState('');
+  // Réponse de l'API : loading | success | error
+  const [result, setResult] = useState({ status: 'loading', message: '' });
+  // S5R2-08 : un lien sans jeton est une erreur DÉDUITE au rendu, pas
+  // un état posé au début de l'effet (second rendu inutile)
+  const { status, message } = token ? result : { status: 'error', message: 'Jeton manquant dans le lien.' };
 
   useEffect(() => {
-    if (!token) { setStatus('error'); setMessage('Jeton manquant dans le lien.'); return; }
+    if (!token) return undefined;
     // `cancelled` : si le composant est démonté entre-temps (StrictMode
     // le fait volontairement en développement), on n'écrit plus dans
     // son état — c'est le montage suivant qui affichera la réponse.
     let cancelled = false;
     verifyEmailOnce(token)
-      .then((data) => { if (!cancelled) { setStatus('success'); setMessage(data.message); } })
-      .catch((err) => { if (!cancelled) { setStatus('error'); setMessage(err.message || 'Jeton invalide ou expiré.'); } });
+      .then((data) => { if (!cancelled) setResult({ status: 'success', message: data.message }); })
+      .catch((err) => { if (!cancelled) setResult({ status: 'error', message: err.message || 'Jeton invalide ou expiré.' }); });
     return () => { cancelled = true; };
   }, [token]);
 

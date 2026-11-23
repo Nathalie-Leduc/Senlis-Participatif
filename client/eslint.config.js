@@ -43,20 +43,17 @@ export default [
       // pas que <Mascot /> UTILISE l'import Mascot, et signale à tort
       // « 'Mascot' is defined but never used » sur chaque composant.
       'react/jsx-uses-vars': 'error',
-      // ── eslint-plugin-react-hooks 7 (mise à jour Dependabot, 10/2026) ──
-      // La version 7 ajoute les règles du « React Compiler », dont
-      // set-state-in-effect : elle signale tout setState appelé
-      // directement dans un useEffect. Le motif le plus courant du projet
-      // (« setLoading(true) puis appel à l'API » au chargement d'une page)
-      // en fait partie : 18 occurrences, toutes fonctionnelles et testées.
-      // Les réécrire (hook de chargement commun, ou React Query) est un
-      // vrai chantier — issue dédiée au backlog — pas une correction à
-      // glisser dans une PR qui n'a rien à voir.
-      // En attendant : AVERTISSEMENT (visible au lint, ne bloque pas la CI)
-      // plutôt que règle désactivée — on garde la liste sous les yeux.
-      // Analogie : le voyant « révision bientôt » du tableau de bord —
-      // on ne le débranche pas, on prend rendez-vous.
-      'react-hooks/set-state-in-effect': 'warn',
+      // ── eslint-plugin-react-hooks 7 : set-state-in-effect ──
+      // Signale tout setState appelé directement dans un useEffect (un
+      // second rendu inutile à chaque fois). Les 18 occurrences, surtout
+      // « setLoading(true) puis appel à l'API », ont été réécrites en
+      // S5R2-08 (BACKLOG-03) : hook commun hooks/useApiQuery.js, état
+      // « chargement » DÉDUIT plutôt que stocké, ou ajustement pendant le
+      // rendu. La règle repasse donc en ERREUR : la CI refuse toute
+      // nouvelle occurrence.
+      // Analogie : le voyant « révision » s'est éteint après le passage
+      // au garage — s'il se rallume, on s'arrête.
+      'react-hooks/set-state-in-effect': 'error',
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   },

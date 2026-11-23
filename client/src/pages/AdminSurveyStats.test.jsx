@@ -64,6 +64,34 @@ describe('Résultats détaillés', () => {
     expect(screen.getByRole('button', { name: 'Exporter (Excel, CSV)' })).toBeDisabled();
   });
 
+  it('une fois le filtre appliqué, le panneau se replie ; « Modifier le filtre » le rouvre', async () => {
+    api.get.mockResolvedValue(globalResults);
+    renderPage();
+    await screen.findByRole('heading', { name: /Satisfait/ });
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Des profils choisis…' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Personnes qui résident hors de Senlis' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Appliquer ce filtre' }));
+
+    // Replié : plus de cases, le choix reste coché, le filtre est résumé
+    expect(screen.queryByRole('checkbox', { name: 'Personnes qui résident hors de Senlis' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Appliquer ce filtre' })).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Des profils choisis…' })).toBeChecked();
+    expect(screen.getByText('Filtre appliqué :').parentElement).toHaveTextContent(/hors de Senlis/);
+    // Le focus passe au bouton qui remplace « Appliquer »
+    const modify = screen.getByRole('button', { name: 'Modifier le filtre' });
+    expect(modify).toHaveFocus();
+
+    // Rouvert : les cases cochées sont conservées
+    fireEvent.click(modify);
+    expect(screen.getByRole('checkbox', { name: 'Personnes qui résident hors de Senlis' })).toBeChecked();
+
+    // Un clic sur le bouton radio déjà coché rouvre aussi le panneau
+    fireEvent.click(screen.getByRole('button', { name: 'Appliquer ce filtre' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Des profils choisis…' }));
+    expect(screen.getByRole('button', { name: 'Appliquer ce filtre' })).toBeInTheDocument();
+  });
+
   it("« le public visé de l'enquête » en un clic", async () => {
     api.get.mockResolvedValue(globalResults);
     renderPage();

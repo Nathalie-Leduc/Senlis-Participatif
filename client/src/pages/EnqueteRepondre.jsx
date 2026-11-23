@@ -208,7 +208,14 @@ export default function EnqueteRepondre() {
   // Remis à false à chaque question pour ne pas rester "ouvert" en
   // avançant dans le parcours.
   const [overrideCurrentQuestion, setOverrideCurrentQuestion] = useState(false);
-  useEffect(() => setOverrideCurrentQuestion(false), [step]);
+  // S5R2-08 : remis à false PENDANT le rendu quand la question change
+  // (motif recommandé par React), plutôt que dans un effet qui affichait
+  // d'abord la nouvelle question « ouverte », puis refaisait un rendu
+  const [overrideStep, setOverrideStep] = useState(step);
+  if (overrideStep !== step) {
+    setOverrideStep(step);
+    setOverrideCurrentQuestion(false);
+  }
 
   // S5A-07 : passer à la question suivante ne change pas de page, mais
   // pour un lecteur d'écran, rien ne se passerait. On place donc le
@@ -226,11 +233,15 @@ export default function EnqueteRepondre() {
   }, [step]);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-
+    // S5R2-08 : plus de setLoading(true) / setError(null) synchrones ici
+    // (l'état initial est déjà « chargement ») ; l'erreur précédente est
+    // effacée à l'arrivée de la réponse. `cancelled` : une réponse arrivée
+    // après un changement d'enquête ou de compte est ignorée.
+    let cancelled = false;
     api.get(`/surveys/${slug}`)
       .then((data) => {
+        if (cancelled) return;
+        setError(null);
         // On vérifie ICI, pas seulement au moment du POST final :
         // pas la peine de laisser quelqu'un remplir 8 questions pour
         // découvrir à la fin qu'il avait déjà répondu, ou que
@@ -275,8 +286,9 @@ export default function EnqueteRepondre() {
         }
         if (Object.keys(prefilled).length) setAnswers(prefilled);
       })
-      .catch((err) => setError(err.message || 'Impossible de charger cette enquête'))
-      .finally(() => setLoading(false));
+      .catch((err) => { if (!cancelled) setError(err.message || 'Impossible de charger cette enquête'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [slug, user, testMode]);
 
   const setAnswer = (questionId, value) => {
@@ -785,29 +797,31 @@ function QuestionInput({ question, answer, onChange, labelledBy, maxChoices, ran
 // si l'API est indisponible ou que la ville cherchée n'apparaît pas
 // dans les suggestions, la personne peut toujours taper librement,
 // rien ne bloque la saisie.
-function VilleAutocompleteInput({ value, onChange, a11y }) {
-  const [suggestions, setSuggestions] = useState([]);
+// Exporté pour les tests (S5R2-08)
+export function VilleAutocompleteInput({ value, onChange, a11y }) {
+  const [fetched, setFetched] = useState([]);
   const [open, setOpen] = useState(false);
+  // Moins de 2 caractères : pas la peine d'interroger l'API pour une
+  // lettre isolée, trop de résultats pour être utiles — et pas de
+  // suggestions affichées. S5R2-08 : DÉDUIT au rendu, plutôt que de
+  // vider la liste au début de l'effet (setState synchrone).
+  const tooShort = value.trim().length < 2;
+  const suggestions = tooShort ? [] : fetched;
 
   useEffect(() => {
-    // Moins de 2 caractères : pas la peine d'interroger l'API pour
-    // une lettre isolée, trop de résultats pour être utiles.
-    if (value.trim().length < 2) {
-      setSuggestions([]);
-      return undefined;
-    }
+    if (tooShort) return undefined;
 
     // Anti-rebond : une seule requête une fois que la personne s'est
     // arrêtée de taper depuis 300ms, pas une par lettre tapée.
     const timeout = setTimeout(() => {
       fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(value.trim())}&boost=population&limit=8&fields=nom,codesPostaux`)
         .then((res) => (res.ok ? res.json() : []))
-        .then(setSuggestions)
-        .catch(() => setSuggestions([])); // API indisponible : la saisie libre reste toujours possible
+        .then(setFetched)
+        .catch(() => setFetched([])); // API indisponible : la saisie libre reste toujours possible
     }, 300);
 
     return () => clearTimeout(timeout);
-  }, [value]);
+  }, [value, tooShort]);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -838,7 +852,7 @@ function VilleAutocompleteInput({ value, onChange, a11y }) {
                 type="button"
                 onClick={() => {
                   onChange(`${commune.nom} (${commune.codesPostaux?.[0] || ''})`);
-                  setSuggestions([]);
+                  setFetched([]);
                   setOpen(false);
                 }}
                 style={{
