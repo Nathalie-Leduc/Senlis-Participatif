@@ -128,8 +128,36 @@ async function apiUpload(path, formData) {
   return response.json();
 }
 
+// ── Audio (S5R2-07 : voix naturelles) ────────────────────
+//
+// La réponse est un fichier MP3, pas du JSON : on la lit en « Blob »
+// (un fichier en mémoire), que le lecteur audio peut jouer.
+//
+// Volontairement SANS le jeton de connexion : la lecture au survol est
+// la même pour tout le monde, et le serveur n'a pas à savoir QUI fait
+// lire quel texte (le texte part ensuite chez Microsoft, sous-traitant).
+// Analogie : on demande l'heure à l'horloge parlante sans se présenter.
+async function apiAudio(path, body) {
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw { status: 0, code: 'NETWORK_ERROR', message: 'Impossible de joindre le serveur.' };
+  }
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: {} }));
+    throw { status: response.status, ...error.error };
+  }
+  return response.blob();
+}
+
 // ── Raccourcis ──────────────────────────────────────────
 export const api = {
+  audio: apiAudio,
   get: (path) => apiFetch(path),
   post: (path, body) => apiFetch(path, { method: 'POST', body: JSON.stringify(body) }),
   patch: (path, body) => apiFetch(path, { method: 'PATCH', body: JSON.stringify(body) }),

@@ -139,7 +139,10 @@ export function errorHandler(err, _req, res, _next) {
   // stack n'a d'intérêt que pour les vraies erreurs inattendues :
   // inutile de noyer la console sous un « pseudo déjà pris ».
   console.error(`[ERROR] ${status} ${err.message}`);
-  if (status >= 500 && process.env.NODE_ENV !== 'production') {
+  // err.expose (S5R2-07) : une erreur 5xx ATTENDUE, levée exprès par
+  // notre code (ex. 503 TTS_UNAVAILABLE : voix naturelles indisponibles)
+  // — ni pile d'appels dans la console, ni code masqué au client.
+  if (status >= 500 && !err.expose && process.env.NODE_ENV !== 'production') {
     console.error(err.stack);
   }
 
@@ -150,7 +153,7 @@ export function errorHandler(err, _req, res, _next) {
       // Une erreur 500 ne renvoie jamais le code interne d'une
       // bibliothèque (ex. « P2003 » de Prisma) : il ne sert à rien au
       // client et renseigne un attaquant sur notre pile technique.
-      code: known?.code || (status < 500 && err.code) || 'INTERNAL_ERROR',
+      code: known?.code || ((status < 500 || err.expose) && err.code) || 'INTERNAL_ERROR',
       message:
         known?.message
         || (status === 500 && process.env.NODE_ENV === 'production'

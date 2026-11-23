@@ -21,7 +21,7 @@
 // ══════════════════════════════════════════════════════════
 
 /** Date de dernière mise à jour des deux pages (à changer à chaque modification de fond). */
-export const LAST_UPDATED = '5 novembre 2026';
+export const LAST_UPDATED = '18 novembre 2026';
 
 export const SITE = {
   name: 'Senlis Participatif',
@@ -81,6 +81,13 @@ export const RECIPIENTS = [
     data: 'Votre adresse email et le contenu du message (lien de vérification, code de connexion…)',
   },
   {
+    // S5R2-07 : seulement si la lecture au survol est activée ET qu'une
+    // voix naturelle est choisie. Groupe américain : on le dit.
+    name: 'Microsoft Ireland Operations Ltd — Azure AI Speech (centre de données en France)',
+    role: 'Voix naturelles de la lecture au survol, si vous l’activez et choisissez une voix « naturelle » (sous-traitant)',
+    data: 'Uniquement le texte public lu à voix haute (titres, paragraphes, boutons) — jamais les pages de compte ou d’administration, ni ce que vous tapez dans un champ, ni votre identité : la demande passe par notre serveur. Selon Microsoft, ni le texte ni l’audio produit ne sont conservés dans ses journaux. Microsoft étant un groupe américain, un accès depuis les États-Unis ne peut être exclu ; il est encadré par le cadre de protection des données UE–États-Unis. Pour l’éviter, choisissez une « voix de cet appareil » : rien ne sort alors de votre navigateur',
+  },
+  {
     name: 'Fondation OpenStreetMap (Royaume-Uni)',
     role: 'Fonds de carte affichés par votre navigateur',
     data: 'Votre adresse IP et les zones de carte consultées — le Royaume-Uni bénéficie d’une décision d’adéquation de la Commission européenne',
@@ -122,6 +129,13 @@ export const BROWSER_STORAGE = [
     storage: 'localStorage',
     purpose: 'Mémoriser vos réglages d’accessibilité (taille du texte, contraste…)',
     duration: 'Jusqu’à ce que vous les réinitialisiez',
+  },
+  {
+    // S5R2-07
+    key: 'senlis:lecture',
+    storage: 'localStorage',
+    purpose: 'Mémoriser la voix et la vitesse choisies pour la lecture au survol',
+    duration: 'Jusqu’à ce que vous effaciez les données du site',
   },
   {
     key: 'senlis:registerDraft',
