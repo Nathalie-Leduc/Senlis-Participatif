@@ -17,8 +17,7 @@ import AccessibilityWidget from './components/AccessibilityWidget/AccessibilityW
 import MascotWidget from './components/MascotWidget/MascotWidget.jsx';
 import Header from './components/Header/Header.jsx';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute.jsx';
-import Mascot from './components/Mascot/Mascot.jsx';
-import { usePageTitle } from './hooks/usePageTitle.js';
+import NotFound from './pages/NotFound.jsx'; // S5R2-10 : page 404 (pas en chargement différé : elle doit s'afficher même si le réseau flanche)
 import { ANNOUNCER_ID } from './utils/routeAnnouncer.js';
 import { ACCESSIBILITY } from './constants/legal.js';
 
@@ -69,25 +68,6 @@ function RouteFallback() {
   return (
     <div className="wrap" style={{ padding: '80px 20px', textAlign: 'center', color: '#6B6257' }}>
       Chargement…
-    </div>
-  );
-}
-
-// Page 404 avec mascotte perdue 🦌
-function NotFound() {
-  usePageTitle('Page introuvable');
-  return (
-    <div className="wrap" style={{ padding: '80px 20px', textAlign: 'center' }}>
-      <Mascot size="section" speech="Je me suis perdu dans la forêt… 🌲" />
-      <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 32, margin: '20px 0 8px' }}>
-        Page introuvable
-      </h1>
-      <p style={{ color: '#6B6257', fontSize: 17 }}>
-        Cette page n'existe pas — retournons à l'accueil !
-      </p>
-      <a href="/" className="btn btn-primary" style={{ marginTop: 24 }}>
-        Retour à l'accueil
-      </a>
     </div>
   );
 }

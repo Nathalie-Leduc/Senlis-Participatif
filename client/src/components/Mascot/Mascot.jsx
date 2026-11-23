@@ -8,6 +8,10 @@
 // Props :
 //   size     : 'hero' | 'section' | 'inline' | 'widget' (default: 'inline')
 //   speech   : string | null — texte de la bulle (optionnel)
+//   mood     : 'joyeux' | 'perplexe' (default: 'joyeux') — S5R2-10 :
+//              « perplexe » pour la page 404 et les erreurs (charte § 7 :
+//              « le cerf a l'air perplexe, pas de message culpabilisant ») :
+//              sourcils levés, bouche en « o », point d'interrogation
 //   className: string — classes CSS supplémentaires
 //
 // Accessibilité :
@@ -15,7 +19,10 @@
 //   - Autres tailles : aria-hidden="true" (décoratif)
 // ══════════════════════════════════════════════════════════
 
-export default function Mascot({ size = 'inline', speech = null, className = '' }) {
+export default function Mascot({
+  size = 'inline', speech = null, mood = 'joyeux', className = '',
+}) {
+  const perplexed = mood === 'perplexe';
   // Le cerf hero est significatif (il accueille), les autres sont décoratifs
   const isDecorative = size !== 'hero';
 
@@ -64,8 +71,10 @@ export default function Mascot({ size = 'inline', speech = null, className = '' 
         {/* ── Museau ────────────────────────────────────── */}
         <ellipse cx="100" cy="112" rx="14" ry="9" fill="#F6F1E7" />
         <ellipse cx="100" cy="108" rx="7" ry="4.5" fill="#26333A" />
-        {/* Sourire */}
-        <path d="M93 116 Q100 121 107 116" stroke="#26333A" strokeWidth="2" fill="none" strokeLinecap="round" />
+        {/* Sourire — ou petite bouche en « o » quand il est perplexe */}
+        {perplexed
+          ? <ellipse cx="100" cy="118" rx="3.5" ry="4" fill="#26333A" />
+          : <path d="M93 116 Q100 121 107 116" stroke="#26333A" strokeWidth="2" fill="none" strokeLinecap="round" />}
 
         {/* ── Yeux (animés — clignement) ─────────────────── */}
         <g className="eye-blink" style={{ transformOrigin: '86px 96px' }}>
@@ -77,9 +86,18 @@ export default function Mascot({ size = 'inline', speech = null, className = '' 
           <circle cx="112" cy="94" r="2" fill="#fff" />
         </g>
 
-        {/* ── Sourcils (joyeux) ──────────────────────────── */}
-        <path d="M78 88 Q83 84 89 87" stroke="#C89B3C" strokeWidth="2" fill="none" strokeLinecap="round" />
-        <path d="M111 87 Q117 84 122 88" stroke="#C89B3C" strokeWidth="2" fill="none" strokeLinecap="round" />
+        {/* ── Sourcils : joyeux, ou l'un levé plus haut que l'autre (perplexe) ── */}
+        {perplexed ? (
+          <>
+            <path d="M77 84 Q83 77 90 82" stroke="#8B6914" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+            <path d="M110 88 Q117 87 123 85" stroke="#8B6914" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <path d="M78 88 Q83 84 89 87" stroke="#C89B3C" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <path d="M111 87 Q117 84 122 88" stroke="#C89B3C" strokeWidth="2" fill="none" strokeLinecap="round" />
+          </>
+        )}
 
         {/* ── Joues rosées ──────────────────────────────── */}
         <circle cx="76" cy="105" r="7" fill="#E8A090" opacity="0.3" />
@@ -107,9 +125,15 @@ export default function Mascot({ size = 'inline', speech = null, className = '' 
         <path d="M64 126 Q100 138 136 126 Q140 132 134 138 Q100 148 66 138 Q60 132 64 126 Z" fill="#1E5F7C" />
         <path d="M128 132 L136 156 L124 152 Z" fill="#1E5F7C" />
 
-        {/* ── Étoiles décoratives ────────────────────────── */}
-        <text x="40" y="56" fontSize="14" fill="#F0C45A" opacity="0.7">✦</text>
-        <text x="155" y="48" fontSize="10" fill="#fff" opacity="0.4">✦</text>
+        {/* ── Étoiles décoratives, ou un point d'interrogation (perplexe) ── */}
+        {perplexed ? (
+          <text className="mascot-question" x="150" y="40" fontSize="34" fontWeight="700" fill="#1E5F7C" fontFamily="Fraunces, Georgia, serif">?</text>
+        ) : (
+          <>
+            <text x="40" y="56" fontSize="14" fill="#F0C45A" opacity="0.7">✦</text>
+            <text x="155" y="48" fontSize="10" fill="#fff" opacity="0.4">✦</text>
+          </>
+        )}
       </svg>
     </div>
   );
