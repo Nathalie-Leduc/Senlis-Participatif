@@ -10,7 +10,7 @@
 // tu n'essaies pas de rentrer avec un faux nom (trim/lower).
 // ══════════════════════════════════════════════════════════
 
-import { z } from 'zod';
+import { z, requiredMessage } from '../lib/zod.js'; // Zod 4 réglé en français (S5R2-08)
 import { QUARTIERS, QUARTIERS_RESIDENCE } from '../lib/quartiers.js';
 import { normalizePassword, passwordProblem } from '../lib/passwordPolicy.js';
 
@@ -34,11 +34,11 @@ const email = z
 // .transform(normalizePassword) : c'est le texte NORMALISÉ (NFC) qui
 // arrive dans le contrôleur, donc qui est haché — voir passwordPolicy.js.
 const password = z
-  .string({ required_error: 'Le mot de passe est requis' })
+  .string({ error: requiredMessage('Le mot de passe est requis') })
   .transform(normalizePassword)
   .superRefine((value, ctx) => {
     const problem = passwordProblem(value);
-    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+    if (problem) ctx.addIssue({ code: 'custom', message: problem });
   });
 
 const pseudo = z
@@ -53,7 +53,7 @@ const pseudo = z
 // et au branchement de questions selon la situation déclarée.
 const situation = z.enum(
   ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
-  { errorMap: () => ({ message: 'Merci de préciser votre situation' }) },
+  { error: 'Merci de préciser votre situation' },
 );
 
 // Les quartiers de Senlis autres que le centre historique (déjà
@@ -63,7 +63,7 @@ const situation = z.enum(
 // cibler de futures enquêtes/propositions par quartier précis.
 const quartier = z.enum(
   QUARTIERS_RESIDENCE,
-  { errorMap: () => ({ message: 'Merci de préciser votre quartier' }) },
+  { error: 'Merci de préciser votre quartier' },
 );
 
 // Même enum Prisma que quartier ci-dessus, mais CENTRE_HISTORIQUE en
@@ -71,11 +71,11 @@ const quartier = z.enum(
 // résidence, où Situation.CENTRE_RESIDENT couvre déjà ce cas).
 const travailleQuartier = z.enum(
   QUARTIERS,
-  { errorMap: () => ({ message: 'Merci de préciser le quartier de travail' }) },
+  { error: 'Merci de préciser le quartier de travail' },
 );
 const travailType = z.enum(
   ['COMMERCANT', 'SALARIE'],
-  { errorMap: () => ({ message: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)' }) },
+  { error: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)' },
 );
 
 // superRefine plutôt que deux champs indépendants : la règle
@@ -84,7 +84,7 @@ const travailType = z.enum(
 function requireQuartierIfAutreQuartier(data, ctx) {
   if (data.situation === 'AUTRE_QUARTIER' && !data.quartier) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['quartier'],
       message: 'Merci de préciser votre quartier',
     });
@@ -95,7 +95,7 @@ function requireQuartierIfAutreQuartier(data, ctx) {
   // questions distinctes).
   if (data.travailleQuartier && !data.travailType) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['travailType'],
       message: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)',
     });
@@ -122,7 +122,7 @@ export const registerSchema = z.object({
   // autres contrôles, pour ne pas afficher deux messages à la fois.
   if (!passwordProblem(data.password)) {
     const problem = passwordProblem(data.password, { email: data.email, pseudo: data.pseudo });
-    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: problem });
+    if (problem) ctx.addIssue({ code: 'custom', path: ['password'], message: problem });
   }
 });
 

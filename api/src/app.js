@@ -108,7 +108,7 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 // ne vérifie pas forcément).
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: process.env.NODE_ENV === 'test' ? 10000 : 100,
+  limit: process.env.NODE_ENV === 'test' ? 10000 : 100, // « max » avant express-rate-limit 8 (même sens)
   // Seed de démonstration (npm run seed:demo, 14/10) : le script fait
   // des centaines de requêtes en quelques secondes, toutes depuis la
   // même adresse — il était bloqué au bout de 100. Il lève donc cet

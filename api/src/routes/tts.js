@@ -19,7 +19,7 @@ export const TTS_PER_MINUTE = 40;
 
 const ttsLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: TTS_PER_MINUTE,
+  limit: TTS_PER_MINUTE, // « max » avant express-rate-limit 8 (même sens)
   standardHeaders: true,
   legacyHeaders: false,
   message: {
