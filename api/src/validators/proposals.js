@@ -2,7 +2,7 @@
 // Validateurs Zod — Propositions
 // ══════════════════════════════════════════════════════════
 
-import { z } from 'zod';
+import { z } from '../lib/zod.js'; // Zod 4 réglé en français (S5R2-08)
 import { QUARTIERS } from '../lib/quartiers.js';
 
 // Les 6 statuts existent tous côté BDD (schema.prisma), mais un
@@ -77,7 +77,7 @@ export const listProposalsQuerySchema = z.object({
 
 export const voteSchema = z.object({
   value: z.enum(['POUR', 'CONTRE', 'NEUTRE'], {
-    errorMap: () => ({ message: 'La valeur doit être POUR, CONTRE ou NEUTRE' }),
+    error: 'La valeur doit être POUR, CONTRE ou NEUTRE',
   }),
 });
 
@@ -98,6 +98,6 @@ export const adminListProposalsQuerySchema = z.object({
 // vocabulaire dans tout le projet). Absent = totaux seuls.
 export const proposalStatsQuerySchema = z.object({
   segmentBy: z.enum(['situation', 'quartier', 'travailleQuartier', 'travailType'], {
-    errorMap: () => ({ message: 'Critère de segmentation inconnu' }),
+    error: 'Critère de segmentation inconnu',
   }).optional(),
 });

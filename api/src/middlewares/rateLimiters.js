@@ -44,7 +44,9 @@ function defaultMax() {
 export function createAuthLimiter({ windowMs = 15 * 60 * 1000, max = defaultMax() } = {}) {
   return rateLimit({
     windowMs,
-    max,
+    // S5R2-08 : l'option s'appelle « limit » depuis express-rate-limit 7
+    // (« max » est obsolète en version 8) ; le paramètre garde son nom
+    limit: max,
     // N'augmente le compteur que pour les réponses en échec (4xx, 5xx)
     skipSuccessfulRequests: true,
     // En-têtes RateLimit-* standard : le client peut savoir combien

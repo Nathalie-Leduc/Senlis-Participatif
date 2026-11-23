@@ -11,11 +11,13 @@
 // Analogie : un correcteur d'orthographe réglé sur « anglais » qui
 // ne signale aucune faute dans un texte en français — le silence ne
 // prouvait rien.
+//
+// S5R2-08 : passage à ESLint 10 (eslint-plugin-react retiré, voir
+// plus bas ; nouvelle règle recommandée no-useless-assignment).
 // ══════════════════════════════════════════════════════════
 
 import js from '@eslint/js';
 import globals from 'globals';
-import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
@@ -26,7 +28,7 @@ export default [
   // ── Code de l'application (navigateur) ────────────────────
   {
     files: ['src/**/*.{js,jsx}'],
-    plugins: { react, 'react-hooks': reactHooks },
+    plugins: { 'react-hooks': reactHooks },
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'module',
@@ -36,13 +38,13 @@ export default [
       // compléter à chaque nouvelle API utilisée.
       globals: { ...globals.browser },
     },
-    settings: { react: { version: 'detect' } },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      // Indispensable avec du JSX : sans cette règle, ESLint ne voit
-      // pas que <Mascot /> UTILISE l'import Mascot, et signale à tort
-      // « 'Mascot' is defined but never used » sur chaque composant.
-      'react/jsx-uses-vars': 'error',
+      // S5R2-08 (ESLint 10) : plus besoin d'eslint-plugin-react et de sa
+      // règle react/jsx-uses-vars. ESLint 10 comprend lui-même que
+      // <Mascot /> UTILISE l'import Mascot (avant, il signalait à tort
+      // « 'Mascot' is defined but never used » sur chaque composant).
+      // Le plugin, pas encore compatible ESLint 10, a donc été retiré.
       // ── eslint-plugin-react-hooks 7 : set-state-in-effect ──
       // Signale tout setState appelé directement dans un useEffect (un
       // second rendu inutile à chaque fois). Les 18 occurrences, surtout

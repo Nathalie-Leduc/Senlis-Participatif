@@ -302,7 +302,10 @@ export default function AdminPropositionForm() {
     zoneWholeCity: form.zoneMode === 'city',
     zoneQuartiers: form.zoneMode === 'quartiers' ? form.zoneQuartiers : [],
   });
-  let customShape = null;
+  // Périmètre dessiné à la main (GeoJSON) : null si vide ou illisible.
+  // (ESLint 10, no-useless-assignment : le « = null » de départ ne servait
+  // à rien, chaque branche affectait déjà une valeur.)
+  let customShape;
   try { customShape = form.geoJson.trim() ? JSON.parse(form.geoJson) : null; } catch { customShape = null; }
   const point = form.lat !== '' && form.lng !== '' && !Number.isNaN(Number(form.lat)) && !Number.isNaN(Number(form.lng))
     ? { id: 'point', lat: Number(form.lat), lng: Number(form.lng), label: form.title || 'Point précis' }

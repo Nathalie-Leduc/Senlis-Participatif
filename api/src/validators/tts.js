@@ -2,13 +2,13 @@
 // Validation — lecture par voix naturelle (S5R2-07)
 // ══════════════════════════════════════════════════════════
 
-import { z } from 'zod';
+import { z, requiredMessage } from '../lib/zod.js'; // Zod 4 réglé en français (S5R2-08)
 import { TTS_VOICES, TTS_RATES, TTS_MAX_LENGTH } from '../services/azureSpeech.js';
 
 export const ttsSchema = z.object({
   // Espaces multiples réduits à un seul : « Bonjour   Senlis » et
   // « Bonjour Senlis » donnent le même audio, donc la même entrée de cache
-  text: z.string({ required_error: 'Le texte à lire est requis' })
+  text: z.string({ error: requiredMessage('Le texte à lire est requis') })
     .transform((t) => t.replace(/\s+/g, ' ').trim())
     .pipe(z.string()
       .min(1, 'Le texte à lire est vide')

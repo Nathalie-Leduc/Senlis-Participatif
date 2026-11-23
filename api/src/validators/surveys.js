@@ -2,7 +2,7 @@
 // Validateurs Zod — Enquêtes (Survey → Question → QuestionOption)
 // ══════════════════════════════════════════════════════════
 
-import { z } from 'zod';
+import { z } from '../lib/zod.js'; // Zod 4 réglé en français (S5R2-08)
 import { QUARTIERS, QUARTIERS_RESIDENCE } from '../lib/quartiers.js';
 
 const surveyStatus = z.enum(['DRAFT', 'OPEN', 'CLOSED']);
@@ -124,7 +124,7 @@ const questionSchema = z.object({
   syncsToProfile: z.enum(['situation', 'quartier', 'travailleQuartier', 'travailType', 'travailleASenlis']).optional(),
 }).superRefine((q, ctx) => {
   // ── Règles S5R-05 : chaque réglage n'a de sens que pour un type ──
-  const issue = (path, message) => ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+  const issue = (path, message) => ctx.addIssue({ code: 'custom', path, message });
   if ((q.minValue !== undefined || q.maxValue !== undefined) && q.type !== 'NOMBRE') {
     issue(['minValue'], 'Les bornes minimum/maximum ne concernent que les questions « Nombre »');
   }
@@ -142,7 +142,7 @@ const questionSchema = z.object({
   }
   if (q.uiHint && q.type !== 'TEXTE_LIBRE') {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['uiHint'],
       message: 'uiHint "VILLE_FR" n\'a de sens que pour une question TEXTE_LIBRE',
     });
@@ -158,7 +158,7 @@ const questionSchema = z.object({
     // "jamais demandé", voir EnqueteRepondre.jsx).
     if (!['CHOIX_UNIQUE', 'OUI_NON'].includes(q.type)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['syncsToProfile'],
         message: 'syncsToProfile n\'a de sens que pour une question CHOIX_UNIQUE ou OUI_NON',
       });
@@ -167,7 +167,7 @@ const questionSchema = z.object({
       (q.options || []).forEach((opt, index) => {
         if (opt.syncValue && !validValues.includes(opt.syncValue)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: 'custom',
             path: ['options', index, 'syncValue'],
             message: `syncValue doit être l'une de : ${validValues.join(', ')}`,
           });
@@ -179,7 +179,7 @@ const questionSchema = z.object({
   if (OPTIONS_REQUIRED_TYPES.includes(q.type)) {
     if (!q.options || q.options.length < 2) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['options'],
         message: `Une question de type ${q.type} doit proposer au moins 2 options`,
       });
@@ -193,7 +193,7 @@ const questionSchema = z.object({
     // temps) — juste : si l'admin en fournit, il en faut EXACTEMENT 2.
     if (q.options && q.options.length !== 2) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['options'],
         message: 'Une question OUI_NON doit avoir exactement 2 options si vous les personnalisez (sinon "Oui"/"Non" par défaut)',
       });
@@ -204,7 +204,7 @@ const questionSchema = z.object({
   // NOMBRE, TEXTE_LIBRE : jamais d'options.
   if (q.options && q.options.length > 0) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['options'],
       message: `Une question de type ${q.type} ne doit pas avoir d'options`,
     });
@@ -231,10 +231,12 @@ export const updateSurveySchema = z.object({
   status: surveyStatus.optional(),
   resultsPublished: z.boolean().optional(),
   // null = effacer la date (ex. « Rouvrir » une enquête dont la date de
-  // clôture est passée). Sans le z.null() d'abord, z.coerce.date()
-  // transformerait null en… 1er janvier 1970.
-  opensAt: z.union([z.null(), z.coerce.date()]).optional(),
-  closesAt: z.union([z.null(), z.coerce.date()]).optional(),
+  // clôture est passée). .nullable() laisse passer null AVANT la
+  // conversion : sans lui, z.coerce.date() transformerait null en…
+  // 1er janvier 1970. (S5R2-08 : remplace z.union([z.null(), …]), dont
+  // Zod 4 ne rapporte plus que « Entrée invalide ».)
+  opensAt: z.coerce.date().nullable().optional(),
+  closesAt: z.coerce.date().nullable().optional(),
   questions: z.array(questionSchema).min(1).optional(),
 });
 
@@ -275,7 +277,7 @@ const answerSchema = z.object({
 
   if (filled.length !== 1) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       message: 'Chaque réponse doit remplir exactement un champ parmi optionId, optionIds, valueNumber, valueText',
     });
   }
