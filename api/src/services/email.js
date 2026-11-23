@@ -207,24 +207,38 @@ export async function sendTwoFactorCode(email, code) {
  *
  * @param {string} email
  * @param {Date} deletionDate - date à partir de laquelle le compte sera supprimé
+ * @param {{ final?: boolean }} [options] - final : le second email, « dernier
+ *   rappel », 7 jours avant la suppression (S5R2-09)
  * @returns {Promise<boolean>} true si l'email est parti
  */
-export async function sendInactivityWarning(email, deletionDate) {
+export async function sendInactivityWarning(email, deletionDate, { final = false } = {}) {
   const date = deletionDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   const link = `${CLIENT_URL}/connexion`;
 
+  // S5R2-09 : même email, deux tons. Le second (« dernier rappel ») part
+  // 7 jours avant la suppression, au cas où le premier aurait été manqué.
+  const subject = final
+    ? `Dernier rappel : votre compte Senlis Participatif sera supprimé le ${date}`
+    : 'Votre compte Senlis Participatif sera bientôt supprimé';
+  const title = final ? 'Dernier rappel 🦌' : 'Toujours là ? 🦌';
+  const intro = final
+    ? `Nous vous avons écrit il y a quelques semaines : vous ne vous êtes pas connecté·e à
+          Senlis Participatif depuis 3 ans. Sans nouvelle de votre part, votre compte sera
+          <strong>supprimé à partir du ${date}</strong>.`
+    : `Bonjour, vous ne vous êtes pas connecté·e à Senlis Participatif depuis bientôt 3 ans.
+          Pour ne pas conserver vos données plus longtemps que nécessaire, votre compte sera
+          <strong>supprimé à partir du ${date}</strong>.`;
+
   return sendEmail({
     to: email,
-    subject: 'Votre compte Senlis Participatif sera bientôt supprimé',
+    subject,
     html: `
       <div style="font-family: 'Public Sans', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px;">
         <h1 style="font-family: Georgia, serif; color: #26333A; font-size: 24px;">
-          Toujours là ? 🦌
+          ${title}
         </h1>
         <p style="color: #6B6257; font-size: 16px; line-height: 1.6;">
-          Bonjour, vous ne vous êtes pas connecté·e à Senlis Participatif depuis bientôt 3 ans.
-          Pour ne pas conserver vos données plus longtemps que nécessaire, votre compte sera
-          <strong>supprimé à partir du ${date}</strong>.
+          ${intro}
         </p>
         <p style="color: #6B6257; font-size: 16px; line-height: 1.6;">
           Pour le garder, il suffit de vous connecter une fois avant cette date :
