@@ -50,7 +50,7 @@ La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres
 | `npm run seed` | Injecte les données de démo (`prisma/seed.js`) |
 | `npm run seed:prod` | Données réelles de production (admin, proposition, enquête) |
 | `npm run seed:demo` | **Développement seulement** : 20 citoyen·nes fictifs aux profils variés (centre, chaque quartier, autres villes, travail) répondent aux enquêtes ouvertes et votent — options `--enquete <slug>`, `--nombre N`, `--sans-votes`, `--supprimer` (efface tout ce qui est démo) |
-| `npm run purge` | Purge RGPD : comptes inactifs (3 ans, après avertissement) et jetons expirés — `-- --dry-run` pour simuler |
+| `npm run purge` | Purge RGPD : comptes inactifs (3 ans, après deux avertissements) et jetons expirés — `-- --dry-run` pour simuler |
 | `npm test` | Tests d'intégration Vitest + Supertest (BDD de test jetable) |
 | `npm run lint` | ESLint |
 | `npx prisma migrate dev` | Nouvelle migration en dev (base uniquement) |
@@ -97,7 +97,7 @@ src/
 
 **Durées de conservation** — `npm run purge` (une fois par jour en production) :
 - jetons email et codes 2FA : effacés 24 h après expiration ou utilisation ;
-- comptes citoyens sans connexion depuis 3 ans : email d'avertissement, puis suppression 30 jours plus tard si toujours aucune connexion. Jamais de suppression sans avertissement effectivement envoyé ; jamais de suppression automatique d'un compte admin ;
+- comptes citoyens sans connexion depuis 3 ans : **deux emails** d'avertissement — le premier 30 jours avant, le second (« dernier rappel », S5R2-09) 7 jours avant — puis suppression si toujours aucune connexion. Jamais de suppression sans les deux avertissements effectivement envoyés (échec SMTP → retenté au passage suivant), ni moins de 7 jours après le dernier rappel ; une connexion annule les deux. Les comptes ADMIN et EDITOR ne sont jamais supprimés automatiquement ;
 - journal des actions d'administration (`AdminAuditLog`) : 6 mois ;
 - compteurs d'essais de connexion (`LoginThrottle`, S5R-13b) : une heure.
 

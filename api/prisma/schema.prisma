@@ -205,6 +205,11 @@ model User {
   // Date de l'email d'avertissement. Remis à null à la connexion
   // suivante : se reconnecter, c'est répondre « je suis toujours là ».
   inactivityWarnedAt DateTime?
+  // S5R2-09 : date du SECOND email, le « dernier rappel », 7 jours avant
+  // la suppression (bonne pratique RGPD : un premier email manqué —
+  // vacances, spam — ne doit pas suffire à supprimer un compte).
+  // Remis à null à la connexion, comme le premier.
+  inactivityFinalWarnedAt DateTime?
 
   // ── Révocation des sessions (S5A-06) ─────────────────────────
   // Recopié dans chaque JWT à la connexion (champ `tv`). Changer ou

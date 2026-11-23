@@ -7,8 +7,9 @@
 //
 //  1. Jetons à usage unique (liens email, codes 2FA) : effacés une
 //     fois expirés ou utilisés (après 24 h de marge, utile au debug).
-//  2. Comptes citoyens sans connexion depuis 3 ans : un email
-//     d'avertissement, puis suppression 30 jours plus tard si la
+//  2. Comptes citoyens sans connexion depuis 3 ans : DEUX emails
+//     d'avertissement — le premier 30 jours avant, le second (« dernier
+//     rappel », S5R2-09) 7 jours avant — puis suppression si la
 //     personne ne s'est toujours pas reconnectée.
 //  3. Journal des actions d'administration (S5A-06) : 6 mois, durée
 //     recommandée par la CNIL pour des journaux de traçabilité.
@@ -25,7 +26,10 @@
 //    (perdre le dernier admin bloquerait toute la plateforme) ;
 //  - pas d'avertissement parti (échec SMTP) → pas de suppression :
 //    on ne supprime jamais un compte dont le titulaire n'a pas pu
-//    être prévenu ; l'envoi sera retenté au passage suivant ;
+//    être prévenu DEUX fois ; l'envoi sera retenté au passage suivant ;
+//  - toujours au moins 7 jours entre le dernier rappel et la
+//    suppression : si ce rappel part en retard (échecs d'envoi
+//    répétés), la suppression est repoussée d'autant ;
 //  - le journal d'administration survit à la suppression d'un compte
 //    (actorId → null, pseudo conservé) : ce n'est pas un doublon, c'est
 //    la trace de ce que ce compte a fait quand il était admin ;
@@ -42,6 +46,8 @@ import { WINDOW_MS } from './loginThrottle.js';
 
 export const INACTIVITY_YEARS = 3;
 export const WARNING_NOTICE_DAYS = 30;
+// S5R2-09 : le second email part 7 jours avant la suppression
+export const FINAL_NOTICE_DAYS = 7;
 export const TOKEN_GRACE_HOURS = 24;
 export const AUDIT_LOG_MONTHS = 6;
 
@@ -114,8 +120,51 @@ export async function warnInactiveAccounts({ now = new Date(), dryRun = false } 
 }
 
 /**
- * Supprime les comptes inactifs depuis 3 ans ET prévenus depuis au
- * moins 30 jours. La suppression suit les mêmes règles que « Supprimer
+ * Second email, le « dernier rappel » (S5R2-09) : aux comptes prévenus
+ * une première fois il y a au moins 23 jours (30 − 7), toujours
+ * inactifs, et pas encore relancés.
+ *
+ * Analogie : la lettre de relance de la bibliothèque, une semaine
+ * avant la radiation — au cas où la première se serait perdue
+ * (vacances, dossier « spam », boîte pleine).
+ *
+ * @returns {Promise<{ warned: number, failed: number }>}
+ */
+export async function sendFinalInactivityWarnings({ now = new Date(), dryRun = false } = {}) {
+  const firstWarnedBefore = new Date(now.getTime() - (WARNING_NOTICE_DAYS - FINAL_NOTICE_DAYS) * DAY_MS);
+  const warningCutoff = new Date(yearsBefore(now, INACTIVITY_YEARS).getTime() + WARNING_NOTICE_DAYS * DAY_MS);
+  const users = await prisma.user.findMany({
+    where: {
+      ...inactiveSince(warningCutoff),
+      inactivityWarnedAt: { lte: firstWarnedBefore },
+      inactivityFinalWarnedAt: null,
+    },
+    select: { id: true, email: true, inactivityWarnedAt: true },
+  });
+  if (dryRun) return { warned: users.length, failed: 0 };
+
+  let warned = 0;
+  let failed = 0;
+  for (const user of users) {
+    // La date annoncée : celle promise dans le premier email, ou plus
+    // tard si ce rappel part en retard — jamais moins de 7 jours
+    const promised = user.inactivityWarnedAt.getTime() + WARNING_NOTICE_DAYS * DAY_MS;
+    const deletionDate = new Date(Math.max(promised, now.getTime() + FINAL_NOTICE_DAYS * DAY_MS));
+    const sent = await sendInactivityWarning(user.email, deletionDate, { final: true });
+    if (sent) {
+      await prisma.user.update({ where: { id: user.id }, data: { inactivityFinalWarnedAt: now } });
+      warned += 1;
+    } else {
+      failed += 1; // retenté au prochain passage
+    }
+  }
+  return { warned, failed };
+}
+
+/**
+ * Supprime les comptes inactifs depuis 3 ans, prévenus une première
+ * fois depuis au moins 30 jours ET relancés (dernier rappel) depuis
+ * au moins 7 jours (S5R2-09). La suppression suit les mêmes règles que « Supprimer
  * mon compte » : votes et jetons effacés (cascade), réponses aux
  * enquêtes et propositions détachées du compte (SET NULL).
  * @returns {Promise<number>} nombre de comptes supprimés
@@ -124,6 +173,7 @@ export async function deleteInactiveAccounts({ now = new Date(), dryRun = false 
   const where = {
     ...inactiveSince(yearsBefore(now, INACTIVITY_YEARS)),
     inactivityWarnedAt: { lte: new Date(now.getTime() - WARNING_NOTICE_DAYS * DAY_MS) },
+    inactivityFinalWarnedAt: { lte: new Date(now.getTime() - FINAL_NOTICE_DAYS * DAY_MS) },
   };
   if (dryRun) return prisma.user.count({ where });
   const { count } = await prisma.user.deleteMany({ where });
@@ -157,17 +207,25 @@ export async function purgeExpiredThrottles({ now = new Date(), dryRun = false }
 
 /**
  * Passe complète, dans l'ordre : suppressions d'abord (elles
- * concernent des comptes prévenus lors d'un passage PRÉCÉDENT), puis
- * nouveaux avertissements, puis jetons.
+ * concernent des comptes prévenus lors de passages PRÉCÉDENTS), puis
+ * derniers rappels, puis nouveaux avertissements, puis jetons.
  */
 export async function runRetention({ now = new Date(), dryRun = false } = {}) {
   const deletedAccounts = await deleteInactiveAccounts({ now, dryRun });
+  const finalWarnings = await sendFinalInactivityWarnings({ now, dryRun });
   const { warned, failed } = await warnInactiveAccounts({ now, dryRun });
   const deletedTokens = await purgeExpiredTokens({ now, dryRun });
   const deletedAuditLogs = await purgeOldAuditLogs({ now, dryRun });
   const deletedThrottles = await purgeExpiredThrottles({ now, dryRun });
   return {
-    dryRun, deletedAccounts, warnedAccounts: warned, failedWarnings: failed, deletedTokens, deletedAuditLogs,
+    dryRun,
+    deletedAccounts,
+    warnedAccounts: warned,
+    finalWarnedAccounts: finalWarnings.warned,
+    // Les échecs des deux emails réunis : le script sort en erreur s'il y en a
+    failedWarnings: failed + finalWarnings.failed,
+    deletedTokens,
+    deletedAuditLogs,
     deletedThrottles,
   };
 }

@@ -24,6 +24,7 @@ try {
   console.log(`🧹 Purge ${verb} — ${new Date().toISOString()}`);
   console.log(`   Comptes inactifs supprimés     : ${report.deletedAccounts}`);
   console.log(`   Avertissements envoyés         : ${report.warnedAccounts}`);
+  console.log(`   Derniers rappels envoyés       : ${report.finalWarnedAccounts}`);
   console.log(`   Avertissements en échec (SMTP) : ${report.failedWarnings}`);
   console.log(`   Jetons expirés supprimés       : ${report.deletedTokens}`);
   console.log(`   Journal admin > 6 mois effacé  : ${report.deletedAuditLogs}`);

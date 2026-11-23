@@ -228,7 +228,9 @@ export async function verifyEmail(req, res, next) {
 async function recordLogin(user) {
   await prisma.user.update({
     where: { id: user.id },
-    data: { lastLoginAt: new Date(), inactivityWarnedAt: null },
+    // Se connecter = « je suis toujours là » : les deux avertissements
+    // d'inactivité (S5A-05, S5R2-09) sont oubliés
+    data: { lastLoginAt: new Date(), inactivityWarnedAt: null, inactivityFinalWarnedAt: null },
   });
   if (isStaffRole(user.role)) {
     await logAdminAction({ actorId: user.id, action: AUDIT_ACTIONS.ADMIN_LOGIN });
