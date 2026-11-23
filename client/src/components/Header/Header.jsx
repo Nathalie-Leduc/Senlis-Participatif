@@ -65,7 +65,9 @@ export default function Header() {
           {isLogged ? (
             <>
               <NavBtn to="/mon-compte" active={isActive('/mon-compte')}>
-                {user?.pseudo || 'Mon compte'}
+                {/* data-no-read (S5R2-07) : le pseudo de la personne connectée
+                    n'est jamais envoyé à la lecture par voix naturelle */}
+                <span data-no-read>{user?.pseudo || 'Mon compte'}</span>
               </NavBtn>
               <button onClick={logout} style={navBtnStyle}>Déconnexion</button>
             </>

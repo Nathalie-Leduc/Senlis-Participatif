@@ -258,15 +258,40 @@ html.a11y-reduce-motion {
     &:disabled { opacity: .4; cursor: not-allowed; }
   }
 
-  span { font-weight: 700; color: $ardoise; min-width: 44px; text-align: center; }
+  // « > » : seulement le compteur de taille (« 100% »), pas les
+  // pictogrammes à l'intérieur des boutons Pause / Reprendre / Arrêter
+  > span { font-weight: 700; color: $ardoise; min-width: 44px; text-align: center; }
 }
 
 .a11y-subtitle {
+  display: block; // aussi utilisé sur un <label> (choix de la voix)
   font-size: 14px;
   font-weight: 600;
   color: $ardoise;
   margin: 0 0 6px;
 }
+
+// ── Lecture au survol (S5R2-07) ───────────────────────────
+.a11y-hint {
+  font-size: 12px;
+  color: #6b6257;
+  line-height: 1.5;
+  margin: 4px 0 12px;
+}
+
+.a11y-select {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 2px solid #e3dcce;
+  border-radius: $radius-sm;
+  background: $blanc;
+  color: $ardoise;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.a11y-reading-controls { margin-top: 12px; }
 
 .a11y-toggle-row {
   display: flex;

@@ -35,6 +35,9 @@ La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres
 | `SMTP_USER` / `SMTP_PASS` | *(fournis par Mailtrap / Brevo)* | Identifiants SMTP |
 | `EMAIL_FROM` | `Senlis Participatif <no-reply@…>` | Expéditeur affiché |
 | `TOKEN_TTL_MINUTES` | `60` | Durée de vie des jetons email |
+| `AZURE_SPEECH_KEY` | *(clé 1 de la ressource Speech F0)* | Facultatif — voix naturelles de la lecture au survol (S5R2-07). Vide : voix de l'appareil seulement. **Jamais commitée** |
+| `AZURE_SPEECH_REGION` | `francecentral` | Région de la ressource Azure |
+| `AZURE_SPEECH_MONTHLY_CHARS` | `450000` | Facultatif — garde-fou mensuel avant de repasser sur les voix de l'appareil |
 
 > 📧 **Dev = Mailtrap** (tout email est capturé, rien ne part réellement) · **Prod = Brevo** (SPF/DKIM configurés sur le domaine). Le code ne change pas : seul le `.env` change.
 
@@ -70,6 +73,17 @@ src/
 ```
 
 **Chaîne d'une requête** : `Helmet/CORS → rate limit → auth (si protégée) → validate (Zod) → contrôleur → Prisma → PostgreSQL`. Toute règle métier critique est doublée d'une contrainte en base (unicité du vote, unicité de la réponse d'enquête) : le client peut mentir, l'API vérifie, la base garantit.
+
+## Voix naturelles — relais Azure (S5R2-07)
+
+`GET /api/v1/tts` (public) : `{ enabled, voices, rates }` — les voix naturelles sont-elles disponibles ?
+`POST /api/v1/tts` (public) : `{ text, voice, rate }` → `audio/mpeg`.
+
+- La clé Azure ne quitte jamais le serveur ; le texte est envoyé à Azure (région France Central) dans un document SSML échappé, et n'est jamais écrit dans les journaux.
+- Cache en mémoire (~300 textes, ~30 Mo) : en-tête `X-TTS-Cache: HIT|MISS`.
+- Limites : 600 caractères par texte, 40 lectures par minute et par IP, garde-fou mensuel (`AZURE_SPEECH_MONTHLY_CHARS`).
+- Indisponible (pas de clé, quota, panne, délai de 8 s) : `503 TTS_UNAVAILABLE` — le client lit alors avec la voix de l'appareil. Erreur « attendue » : `err.expose = true` garde son code dans `errorHandler` (les autres 5xx restent masqués).
+- Procédure de création de la ressource et de surveillance du quota : document 33 de la documentation.
 
 ## Conventions
 

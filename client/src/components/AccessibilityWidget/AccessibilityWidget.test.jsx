@@ -14,17 +14,43 @@
 import {
   describe, it, expect, vi, beforeEach,
 } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import {
+  render, screen, fireEvent, waitFor, act,
+} from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { AccessibilityProvider } from '../../contexts/AccessibilityContext.jsx';
-import AccessibilityWidget from './AccessibilityWidget.jsx';
 
-function renderWidget(children = null) {
+// S5R2-07 : l'API (disponibilité des voix naturelles, audio) est simulée.
+// Par défaut, pas de voix naturelles : voix de l'appareil seulement.
+const apiMock = vi.hoisted(() => ({ get: vi.fn(), audio: vi.fn() }));
+vi.mock('../../services/api.js', () => ({ api: apiMock }));
+const { default: AccessibilityWidget } = await import('./AccessibilityWidget.jsx');
+
+function renderWidget(children = null, { path = '/' } = {}) {
   return render(
-    <AccessibilityProvider>
-      {children}
-      <AccessibilityWidget />
-    </AccessibilityProvider>,
+    <MemoryRouter initialEntries={[path]}>
+      <AccessibilityProvider>
+        {children}
+        <AccessibilityWidget />
+      </AccessibilityProvider>
+    </MemoryRouter>,
   );
+}
+
+/** Ouvre le panneau, active la lecture au survol, laisse les effets se poser */
+async function enableHoverReading() {
+  fireEvent.click(screen.getByRole('button', { name: "Options d'accessibilité" }));
+  fireEvent.click(screen.getByLabelText('Lire le texte survolé par la souris'));
+  await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 0); }); });
+}
+
+/** Survole un élément et laisse passer le délai avant lecture (300 ms) */
+async function hover(element) {
+  vi.useFakeTimers();
+  fireEvent.mouseOver(element);
+  vi.advanceTimersByTime(350);
+  vi.useRealTimers();
+  await act(async () => { await Promise.resolve(); });
 }
 
 describe('AccessibilityWidget', () => {
@@ -36,10 +62,15 @@ describe('AccessibilityWidget', () => {
     document.documentElement.className = '';
     document.documentElement.style.cssText = '';
 
+    apiMock.get.mockReset().mockResolvedValue({ enabled: false, voices: [] });
+    apiMock.audio.mockReset();
+
     window.speechSynthesis = {
       speak: vi.fn(),
       cancel: vi.fn(),
-      getVoices: vi.fn(() => [{ lang: 'fr-FR', name: 'Voix française de test' }]),
+      pause: vi.fn(),
+      resume: vi.fn(),
+      getVoices: vi.fn(() => [{ lang: 'fr-FR', name: 'Voix française de test', voiceURI: 'voix-test' }]),
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     };
@@ -123,20 +154,8 @@ describe('AccessibilityWidget', () => {
 
   it('la lecture au survol ne parle QUE du texte survolé, jamais de toute la page', async () => {
     renderWidget(<p>Un paragraphe de test à lire</p>);
-
-    fireEvent.click(screen.getByRole('button', { name: "Options d'accessibilité" }));
-    fireEvent.click(screen.getByLabelText('Lire le texte survolé par la souris'));
-
-    // Laisse l'effet React (qui attache l'écouteur mouseover sur
-    // document) se poser avant de simuler le survol — sans ce tick,
-    // le clic et le survol arrivent dans le même passage synchrone et
-    // l'écouteur n'est pas encore branché.
-    await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-    vi.useFakeTimers();
-    fireEvent.mouseOver(screen.getByText('Un paragraphe de test à lire'));
-    vi.advanceTimersByTime(250); // le délai anti-survol-fugace (200 ms) doit être écoulé
-    vi.useRealTimers();
+    await enableHoverReading();
+    await hover(screen.getByText('Un paragraphe de test à lire'));
 
     expect(window.speechSynthesis.speak).toHaveBeenCalledTimes(1);
     expect(window.SpeechSynthesisUtterance).toHaveBeenCalledWith('Un paragraphe de test à lire');
@@ -182,22 +201,92 @@ describe('AccessibilityWidget', () => {
   });
 
   it("lit le texte brut posé à côté d'un <span> enfant (ex. une stat-pill : <div><span>0</span> participants</div>)", async () => {
-    renderWidget(
-      <div data-testid="stat-pill"><span>0</span> participants</div>,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: "Options d'accessibilité" }));
-    fireEvent.click(screen.getByLabelText('Lire le texte survolé par la souris'));
-    await new Promise((resolve) => { setTimeout(resolve, 0); });
-
-    vi.useFakeTimers();
-    fireEvent.mouseOver(screen.getByTestId('stat-pill'));
-    vi.advanceTimersByTime(250);
-    vi.useRealTimers();
-
-    // Sans le correctif (filtre par balise), ce <div> n'aurait jamais
-    // déclenché de lecture — "participants" n'appartient à aucune des
-    // balises autorisées, seul le <span> "0" l'était.
+    renderWidget(<div data-testid="stat-pill"><span>0</span> participants</div>);
+    await enableHoverReading();
+    // Survoler le « 0 » lit toute la phrase, pas seulement le chiffre
+    await hover(screen.getByText('0'));
     expect(window.SpeechSynthesisUtterance).toHaveBeenCalledWith('0 participants');
+  });
+
+  // ── S5R2-07 (recette du 08/10) ───────────────────────────
+  it('ne lit pas le vide : un conteneur sans texte propre, ni un champ de saisie', async () => {
+    renderWidget(
+      <div data-testid="grille">
+        <section><p>Un texte</p></section>
+        <input aria-label="Votre email" defaultValue="nath@exemple.fr" />
+      </div>,
+    );
+    await enableHoverReading();
+    await hover(screen.getByTestId('grille'));
+    await hover(screen.getByLabelText('Votre email'));
+    expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
+  });
+
+  it('Pause, Reprendre, puis Arrêter — qui coupe la lecture ET désactive la lecture au survol', async () => {
+    renderWidget(<p>Un paragraphe de test à lire</p>);
+    await enableHoverReading();
+    const pauseBtn = screen.getByRole('button', { name: 'Pause' });
+    const resumeBtn = screen.getByRole('button', { name: 'Reprendre' });
+    expect(pauseBtn).toBeDisabled(); // rien à mettre en pause
+
+    await hover(screen.getByText('Un paragraphe de test à lire'));
+    expect(pauseBtn).toBeEnabled();
+    fireEvent.click(pauseBtn);
+    expect(window.speechSynthesis.pause).toHaveBeenCalled();
+    expect(resumeBtn).toBeEnabled();
+    fireEvent.click(resumeBtn);
+    expect(window.speechSynthesis.resume).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Arrêter' }));
+    expect(window.speechSynthesis.cancel).toHaveBeenCalled();
+    expect(screen.getByLabelText('Lire le texte survolé par la souris')).not.toBeChecked();
+
+    // Le survol suivant ne relance PLUS la lecture (le défaut constaté en recette)
+    window.speechSynthesis.speak.mockClear();
+    await hover(screen.getByText('Un paragraphe de test à lire'));
+    expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
+  });
+
+  it('jamais de lecture sur les pages de compte (données personnelles), avec un message', async () => {
+    renderWidget(<p>Votre adresse : nath@exemple.fr</p>, { path: '/mon-compte' });
+    await enableHoverReading();
+    expect(screen.getByText(/Pas de lecture sur cette page/)).toBeInTheDocument();
+    await hover(screen.getByText('Votre adresse : nath@exemple.fr'));
+    expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
+    expect(apiMock.audio).not.toHaveBeenCalled();
+  });
+
+  it('voix naturelles proposées par le serveur : choisies par défaut, avec la mention du sous-traitant', async () => {
+    apiMock.get.mockResolvedValue({ enabled: true, voices: [{ id: 'fr-FR-DeniseNeural', label: 'Denise (voix naturelle)' }] });
+    apiMock.audio.mockResolvedValue(new Blob(['mp3']));
+    const play = vi.fn(() => Promise.resolve());
+    window.Audio = vi.fn(function AudioMock() { this.play = play; this.pause = vi.fn(); });
+    URL.createObjectURL = vi.fn(() => 'blob:audio-test');
+
+    renderWidget(<p>Les enquêtes en cours</p>);
+    await enableHoverReading();
+    await waitFor(() => expect(screen.getByLabelText('Voix')).toHaveValue('azure:fr-FR-DeniseNeural'));
+    expect(screen.getByText(/Microsoft Azure/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lente' }));
+    await hover(screen.getByText('Les enquêtes en cours'));
+    await waitFor(() => expect(play).toHaveBeenCalled());
+    expect(apiMock.audio).toHaveBeenCalledWith('/tts', { text: 'Les enquêtes en cours', voice: 'fr-FR-DeniseNeural', rate: 'lente' });
+    expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
+    // Vitesse gardée pour la prochaine visite
+    expect(JSON.parse(localStorage.getItem('senlis:lecture')).rate).toBe('lente');
+  });
+
+  it('voix naturelle indisponible (quota, panne) : la voix de l\'appareil prend le relais, et on le dit', async () => {
+    apiMock.get.mockResolvedValue({ enabled: true, voices: [{ id: 'fr-FR-DeniseNeural', label: 'Denise (voix naturelle)' }] });
+    apiMock.audio.mockRejectedValue({ status: 503, code: 'TTS_UNAVAILABLE' });
+
+    renderWidget(<p>Les enquêtes en cours</p>);
+    await enableHoverReading();
+    await waitFor(() => expect(screen.getByLabelText('Voix')).toHaveValue('azure:fr-FR-DeniseNeural'));
+    await hover(screen.getByText('Les enquêtes en cours'));
+
+    await waitFor(() => expect(window.SpeechSynthesisUtterance).toHaveBeenCalledWith('Les enquêtes en cours'));
+    expect(screen.getByRole('status')).toHaveTextContent('voix de cet appareil');
   });
 });
