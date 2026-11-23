@@ -256,6 +256,15 @@ html.a11y-reduce-motion {
     }
 
     &:disabled { opacity: .4; cursor: not-allowed; }
+
+    // Recette du 23/11 : inactif mais LISIBLE (l'ancienne opacité .4
+    // rendait le texte illisible) — bordure en pointillés pour dire
+    // « pas maintenant », texte gris au contraste suffisant (6:1 sur blanc)
+    &[aria-disabled='true'] {
+      border-style: dashed;
+      color: #6b6257;
+      cursor: not-allowed;
+    }
   }
 
   // « > » : seulement le compteur de taille (« 100% »), pas les
@@ -291,7 +300,6 @@ html.a11y-reduce-motion {
   margin-bottom: 8px;
 }
 
-.a11y-reading-controls { margin-top: 12px; }
 
 .a11y-toggle-row {
   display: flex;
@@ -318,4 +326,82 @@ html.a11y-reduce-motion {
   min-height: 44px;
 
   &:hover { background: $brique-light; }
+}
+
+// ── Répondre à la voix (recette du 23/11) ─────────────────
+.a11y-dictation {
+  font-size: 13px;
+  color: $ardoise;
+  line-height: 1.6;
+  margin: 0 0 8px;
+  padding-left: 18px;
+
+  kbd {
+    display: inline-block;
+    padding: 0 6px;
+    border: 1px solid #c9c0ae;
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: #faf7f0;
+    font-family: inherit;
+    font-size: 12px;
+  }
+}
+
+// ── Barre de lecture (recette du 23/11) ───────────────────
+// En bas, au centre, au-dessus de la carte Leaflet (z-index 1000) et
+// sous le panneau (3000) ; marge de sécurité pour les téléphones à
+// encoche (env(safe-area-inset-bottom)).
+.a11y-player {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 2500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 10px 8px 16px;
+  border-radius: $radius-pill;
+  background: $ardoise;
+  color: $blanc;
+  box-shadow: 0 8px 24px rgba(38, 51, 58, .28);
+
+  .a11y-player-status {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  button {
+    min-height: 40px;
+    padding: 6px 14px;
+    border-radius: $radius-pill;
+    border: 2px solid $blanc;
+    background: $blanc;
+    color: $ardoise;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+
+    &[aria-disabled='true'] { opacity: .75; cursor: progress; }
+    &:focus-visible { outline: 3px solid #f2c14e; outline-offset: 2px; }
+  }
+
+  .a11y-player-notice {
+    font-size: 12px;
+    line-height: 1.3;
+    max-width: 220px;
+    color: #f4e9cf;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: a11y-player-in .18s ease-out;
+  }
+}
+
+@keyframes a11y-player-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }

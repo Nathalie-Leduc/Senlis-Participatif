@@ -9,9 +9,9 @@
 //  - ne lit que les éléments qui portent du texte (utils/hoverReading.js),
 //    jamais un champ de saisie, jamais les pages de compte ou
 //    d'administration (données personnelles) ;
-//  - trois commandes : Pause, Reprendre, Arrêter — « Arrêter » coupe la
-//    lecture ET désactive la lecture au survol (avant, elle reprenait au
-//    survol suivant).
+//  - trois commandes : Pause, Reprendre, Arrêter, dans une barre en bas de
+//    l'écran pendant la lecture — « Arrêter » coupe la lecture ET désactive
+//    la lecture au survol (avant, elle reprenait au survol suivant).
 // Le moteur (Azure ou appareil, repli automatique) est dans
 // services/speechReader.js.
 // ══════════════════════════════════════════════════════════
@@ -177,6 +177,10 @@ export default function AccessibilityWidget() {
       // Ignore le panneau lui-même : on ne lit pas ses propres boutons
       // pendant qu'on les survole pour les régler
       if (panelRef.current?.contains(e.target)) return;
+      // En pause, le survol ne relance RIEN (recette du 23/11 : en quittant
+      // la barre, la souris passait sur un texte, qui se mettait à parler —
+      // la pause semblait ne pas tenir). Seuls Reprendre ou Arrêter en sortent.
+      if (reader.status === 'paused') return;
       const found = readableTarget(e.target);
       // Rien à lire, ou toujours le même élément (la souris bouge dedans)
       if (!found || found.element === lastElementRef.current) return;
@@ -184,6 +188,10 @@ export default function AccessibilityWidget() {
       clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = setTimeout(() => {
         lastElementRef.current = found.element;
+        // Recette du 23/11 : le panneau se ferme quand une lecture commence —
+        // les commandes sont dans la barre de lecture, et il ne cache plus
+        // la page qu'on est en train de lire. On le rouvre avec le bouton ♿.
+        setOpen(false);
         reader.speak(fitForSpeech(found.text), settingsRef.current);
       }, HOVER_DELAY_MS);
     };
@@ -401,20 +409,44 @@ export default function AccessibilityWidget() {
                   ))}
                 </div>
 
-                <div className="a11y-options a11y-reading-controls" role="group" aria-label="Commandes de lecture">
-                  <button type="button" onClick={() => reader.pause()} disabled={reading.status !== 'speaking'}>
-                    <span aria-hidden="true">⏸ </span>Pause
-                  </button>
-                  <button type="button" onClick={() => reader.resume()} disabled={reading.status !== 'paused'}>
-                    <span aria-hidden="true">▶ </span>Reprendre
-                  </button>
-                  <button type="button" onClick={stopReading}>
-                    <span aria-hidden="true">⏹ </span>Arrêter
-                  </button>
-                </div>
-                {reading.notice && <p className="a11y-hint" role="status">{reading.notice}</p>}
+                {/* Recette du 23/11 : plus de Pause / Reprendre ici. Le panneau est
+                    loin du texte lu : le temps d'y venir, une lecture courte était
+                    finie et les boutons redevenaient inactifs (curseur « interdit »).
+                    Les commandes sont dans la barre en bas de l'écran, qui n'existe
+                    QUE pendant une lecture. Pour tout arrêter : décocher la case
+                    ci-dessus, ou « Arrêter » dans la barre. */}
+                <p className="a11y-hint">
+                  <strong>Pause, Reprendre, Arrêter</strong> : dès qu'une lecture commence, ce
+                  panneau se ferme et une barre de commandes s'affiche en bas de l'écran. En
+                  pause, le survol ne lit plus rien jusqu'à « Reprendre ».
+                </p>
               </>
             )}
+          </section>
+
+          {/* Recette du 23/11 : « peut-on répondre vocalement ? » — la dictée
+              existe déjà dans chaque appareil, gratuitement, dans tous les
+              champs de texte du site. On l'explique, sans rien envoyer de plus :
+              le site ne reçoit que le texte final, comme s'il avait été tapé. */}
+          <section className="a11y-section">
+            <h3>Répondre à la voix</h3>
+            <p className="a11y-hint">
+              Votre appareil sait écrire sous la dictée, dans tous les champs de texte du site
+              (réponses d'enquête, propositions) :
+            </p>
+            <ul className="a11y-dictation">
+              <li><strong>Windows</strong> : cliquez dans le champ, puis touches <kbd>⊞ Windows</kbd> + <kbd>H</kbd></li>
+              <li><strong>Mac</strong> : touche <kbd>🎤</kbd> du clavier, ou menu Édition → Démarrer la dictée</li>
+              <li><strong>Téléphone, tablette</strong> : le micro 🎤 du clavier qui s'affiche</li>
+              <li>
+                <strong>Linux</strong> : pas de dictée intégrée au système — utilisez un
+                téléphone, ou une extension de dictée de votre navigateur
+              </li>
+            </ul>
+            <p className="a11y-hint">
+              La dictée est faite par votre appareil (Microsoft, Apple ou Google selon le cas) :
+              Senlis Participatif ne reçoit que le texte, que vous pouvez relire avant d'envoyer.
+            </p>
           </section>
 
           <button type="button" className="a11y-reset" onClick={reset}>
@@ -423,6 +455,38 @@ export default function AccessibilityWidget() {
           <button type="button" className="a11y-close-bottom" onClick={() => setOpen(false)}>
             Fermer
           </button>
+        </div>
+      )}
+
+      {/* ── Barre de lecture (recette du 23/11) ──────────────
+          Un titre se lit en 2 secondes : le temps d'aller jusqu'au panneau,
+          la lecture était finie et Pause redevenue inactive. Cette barre
+          s'affiche en bas de l'écran PENDANT la lecture seulement, près de
+          tout, panneau ouvert ou fermé. data-no-read : elle ne se lit pas
+          elle-même quand on la survole.
+          Analogie : la télécommande posée sur l'accoudoir plutôt que rangée
+          dans le tiroir du meuble télé. */}
+      {hoverRead && reading.status !== 'idle' && (
+        <div className="a11y-player" role="region" aria-label="Lecture en cours" data-no-read>
+          <span className="a11y-player-status">
+            <span aria-hidden="true">🔊 </span>
+            {{ loading: 'Préparation…', speaking: 'Lecture', paused: 'En pause' }[reading.status]}
+          </span>
+          {reading.status === 'paused' ? (
+            <button type="button" onClick={() => reader.resume()}>
+              <span aria-hidden="true">▶ </span>Reprendre
+            </button>
+          ) : (
+            <button type="button" onClick={() => reader.pause()} aria-disabled={reading.status !== 'speaking'}>
+              <span aria-hidden="true">⏸ </span>Pause
+            </button>
+          )}
+          <button type="button" onClick={stopReading}>
+            <span aria-hidden="true">⏹ </span>Arrêter
+          </button>
+          {/* Le panneau étant fermé pendant la lecture, le message de repli
+              (« voix naturelle indisponible ») s'affiche dans la barre */}
+          {reading.notice && <span className="a11y-player-notice" role="status">{reading.notice}</span>}
         </div>
       )}
     </>

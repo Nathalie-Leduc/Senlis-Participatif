@@ -15,7 +15,7 @@ import {
   describe, it, expect, vi, beforeEach,
 } from 'vitest';
 import {
-  render, screen, fireEvent, waitFor, act,
+  render, screen, fireEvent, waitFor, act, within,
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AccessibilityProvider } from '../../contexts/AccessibilityContext.jsx';
@@ -222,29 +222,88 @@ describe('AccessibilityWidget', () => {
     expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
   });
 
-  it('Pause, Reprendre, puis Arrêter — qui coupe la lecture ET désactive la lecture au survol', async () => {
+  it('Pause, Reprendre, puis Arrêter (barre de lecture) — Arrêter coupe la lecture ET désactive la lecture au survol', async () => {
     renderWidget(<p>Un paragraphe de test à lire</p>);
     await enableHoverReading();
-    const pauseBtn = screen.getByRole('button', { name: 'Pause' });
-    const resumeBtn = screen.getByRole('button', { name: 'Reprendre' });
-    expect(pauseBtn).toBeDisabled(); // rien à mettre en pause
+    // Recette du 23/11 : plus de commandes dans le panneau (souvent inactives), un renvoi vers la barre
+    expect(screen.queryByRole('group', { name: 'Commandes de lecture' })).not.toBeInTheDocument();
+    expect(screen.getByText(/panneau se ferme et une barre de\s+commandes s'affiche/)).toBeInTheDocument();
 
     await hover(screen.getByText('Un paragraphe de test à lire'));
-    expect(pauseBtn).toBeEnabled();
-    fireEvent.click(pauseBtn);
-    expect(window.speechSynthesis.pause).toHaveBeenCalled();
-    expect(resumeBtn).toBeEnabled();
-    fireEvent.click(resumeBtn);
-    expect(window.speechSynthesis.resume).toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Arrêter' }));
+    // Recette du 23/11 : la lecture commence → le panneau se ferme, la barre prend le relais
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Lire le texte survolé par la souris')).not.toBeInTheDocument();
+    const bar = within(screen.getByRole('region', { name: 'Lecture en cours' }));
+    // Pause « maison » (voix de l'appareil) : on coupe… — speechSynthesis.pause()
+    // ne marche pas sous Linux, on ne s'y fie plus
+    window.speechSynthesis.cancel.mockClear();
+    fireEvent.click(bar.getByRole('button', { name: 'Pause' }));
     expect(window.speechSynthesis.cancel).toHaveBeenCalled();
+    // … et on reprend en relisant ce qui restait
+    window.speechSynthesis.speak.mockClear();
+    fireEvent.click(bar.getByRole('button', { name: 'Reprendre' }));
+    expect(window.speechSynthesis.speak).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(bar.getByRole('button', { name: 'Arrêter' }));
+    // On rouvre le panneau : la case est décochée
+    fireEvent.click(screen.getByRole('button', { name: "Options d'accessibilité" }));
     expect(screen.getByLabelText('Lire le texte survolé par la souris')).not.toBeChecked();
+    expect(screen.queryByRole('region', { name: 'Lecture en cours' })).not.toBeInTheDocument();
 
     // Le survol suivant ne relance PLUS la lecture (le défaut constaté en recette)
     window.speechSynthesis.speak.mockClear();
     await hover(screen.getByText('Un paragraphe de test à lire'));
     expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
+  });
+
+  it('recette du 23/11 : une barre de lecture apparaît PENDANT la lecture, panneau fermé, et disparaît ensuite', async () => {
+    renderWidget(<p>Un paragraphe de test à lire</p>);
+    await enableHoverReading();
+    fireEvent.click(screen.getByRole('button', { name: 'Fermer le panneau' }));
+    expect(screen.queryByRole('region', { name: 'Lecture en cours' })).not.toBeInTheDocument();
+
+    await hover(screen.getByText('Un paragraphe de test à lire'));
+    const bar = within(screen.getByRole('region', { name: 'Lecture en cours' }));
+    fireEvent.click(bar.getByRole('button', { name: 'Pause' }));
+    expect(bar.getByText('En pause')).toBeInTheDocument();
+    // Le même bouton devient « Reprendre »
+    window.speechSynthesis.speak.mockClear();
+    fireEvent.click(bar.getByRole('button', { name: 'Reprendre' }));
+    expect(window.speechSynthesis.speak).toHaveBeenCalledTimes(1);
+
+    // Fin de la phrase : la barre s'en va
+    const utterance = window.SpeechSynthesisUtterance.mock.results.at(-1).value;
+    act(() => utterance.onend());
+    expect(screen.queryByRole('region', { name: 'Lecture en cours' })).not.toBeInTheDocument();
+  });
+
+  it('recette du 23/11 : en pause, survoler un autre texte ne relance pas la lecture', async () => {
+    renderWidget(<><p>Premier paragraphe</p><p>Second paragraphe</p></>);
+    await enableHoverReading();
+    await hover(screen.getByText('Premier paragraphe'));
+    const bar = within(screen.getByRole('region', { name: 'Lecture en cours' }));
+    fireEvent.click(bar.getByRole('button', { name: 'Pause' }));
+
+    window.speechSynthesis.speak.mockClear();
+    await hover(screen.getByText('Second paragraphe'));
+    expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
+    expect(bar.getByText('En pause')).toBeInTheDocument();
+  });
+
+  it('survoler la barre de lecture ne la lit pas elle-même', async () => {
+    renderWidget(<p>Un paragraphe de test à lire</p>);
+    await enableHoverReading();
+    await hover(screen.getByText('Un paragraphe de test à lire'));
+    window.speechSynthesis.speak.mockClear();
+    await hover(within(screen.getByRole('region', { name: 'Lecture en cours' })).getByRole('button', { name: 'Arrêter' }));
+    expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
+  });
+
+  it('« Répondre à la voix » : explique la dictée de l’appareil (rien d’envoyé par le site)', () => {
+    renderWidget();
+    fireEvent.click(screen.getByRole('button', { name: "Options d'accessibilité" }));
+    expect(screen.getByRole('heading', { name: 'Répondre à la voix' })).toBeInTheDocument();
+    expect(screen.getByText(/ne reçoit que le texte/)).toBeInTheDocument();
   });
 
   it('jamais de lecture sur les pages de compte (données personnelles), avec un message', async () => {
@@ -287,6 +346,8 @@ describe('AccessibilityWidget', () => {
     await hover(screen.getByText('Les enquêtes en cours'));
 
     await waitFor(() => expect(window.SpeechSynthesisUtterance).toHaveBeenCalledWith('Les enquêtes en cours'));
-    expect(screen.getByRole('status')).toHaveTextContent('voix de cet appareil');
+    // Le panneau s'est fermé : le message s'affiche dans la barre de lecture
+    const bar = within(screen.getByRole('region', { name: 'Lecture en cours' }));
+    expect(bar.getByRole('status')).toHaveTextContent('voix de cet appareil');
   });
 });

@@ -52,6 +52,10 @@ export function createSpeechReader({
   let audio = null; // lecteur audio en cours (voix Azure)
   let seq = 0; // numéro de la lecture en cours : une réponse arrivée trop tard est ignorée
   let azureBlockedUntil = 0;
+  // Voix de l'appareil : ce qui est en train d'être dit, et jusqu'où
+  // (pour la pause « maison », voir pause() plus bas)
+  let deviceSpeech = null; // { text, offset, voiceId, rate }
+  let deviceResume = null; // ce qu'il reste à dire après une pause
   const audioCache = new Map(); // « voix|vitesse|texte » → adresse blob: du MP3
   const listeners = new Set();
 
@@ -63,6 +67,8 @@ export function createSpeechReader({
 
   function halt() {
     seq += 1;
+    deviceSpeech = null;
+    deviceResume = null;
     if (audio) {
       audio.onended = null;
       audio.onerror = null;
@@ -89,6 +95,10 @@ export function createSpeechReader({
     const voice = voices.find((v) => v.voiceURI === wanted) ?? frenchBrowserVoices(voices)[0];
     if (voice) utterance.voice = voice;
     utterance.rate = RATES[rate] ?? RATES.normale;
+    // Où en est la voix : le navigateur signale le début de chaque mot
+    deviceSpeech = { text, offset: 0, voiceId, rate };
+    const speech = deviceSpeech;
+    utterance.onboundary = (e) => { if (Number.isFinite(e.charIndex)) speech.offset = e.charIndex; };
     utterance.onend = () => { if (id === seq) setStatus('idle'); };
     utterance.onerror = () => { if (id === seq) setStatus('idle'); };
     synth.speak(utterance);
@@ -156,18 +166,39 @@ export function createSpeechReader({
       speakWithDevice(text, voice, rate, id);
     },
 
+    // Pause des voix de l'APPAREIL (recette du 23/11) : speechSynthesis.pause()
+    // ne fait rien sous Linux (et sur certains Android) — la voix continue.
+    // On fait donc une pause « maison » qui marche partout : on coupe, on
+    // retient le mot où l'on s'était arrêté, et Reprendre repart de ce mot.
+    // Analogie : on ne met pas la radio en pause, on note la page du livre
+    // qu'elle lisait, et on reprend la lecture à cette page.
     pause() {
       if (status !== 'speaking') return;
-      if (audio) audio.pause();
-      else getSynth()?.pause();
+      if (audio) {
+        audio.pause();
+      } else if (deviceSpeech) {
+        const { text, offset, voiceId, rate } = deviceSpeech;
+        deviceResume = { text: text.slice(offset), voiceId, rate };
+        seq += 1; // la fin de la phrase coupée ne doit pas passer l'état à « idle »
+        deviceSpeech = null;
+        getSynth()?.cancel();
+      }
       setStatus('paused');
     },
 
     resume() {
       if (status !== 'paused') return;
-      if (audio) audio.play();
-      else getSynth()?.resume();
-      setStatus('speaking');
+      if (audio) {
+        audio.play();
+        setStatus('speaking');
+      } else if (deviceResume?.text.trim()) {
+        const { text, voiceId, rate } = deviceResume;
+        deviceResume = null;
+        seq += 1;
+        speakWithDevice(text, voiceId, rate, seq);
+      } else {
+        setStatus('idle');
+      }
     },
 
     stop() {

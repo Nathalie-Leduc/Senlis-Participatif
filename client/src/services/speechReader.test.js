@@ -99,6 +99,24 @@ describe('createSpeechReader', () => {
     expect(states).toEqual(['loading', 'speaking', 'paused', 'speaking', 'idle']);
   });
 
+  it('voix de l\'appareil : pause « maison » (coupe, puis reprend au mot où l\'on s\'était arrêté) — speechSynthesis.pause() ne marche pas sous Linux', async () => {
+    const reader = makeReader();
+    await reader.speak('Bienvenue sur Senlis Participatif', { voice: 'appareil:google-fr' });
+    const utterance = synth.speak.mock.calls[0][0];
+    utterance.onboundary({ charIndex: 14 }); // la voix en est à « Senlis »
+
+    reader.pause();
+    expect(synth.pause).not.toHaveBeenCalled();
+    expect(synth.cancel).toHaveBeenCalled();
+    utterance.onend(); // fin de la phrase coupée : ne doit PAS repasser à « idle »
+    expect(reader.status).toBe('paused');
+
+    reader.resume();
+    expect(synth.speak).toHaveBeenCalledTimes(2);
+    expect(synth.speak.mock.calls[1][0].text).toBe('Senlis Participatif');
+    expect(reader.status).toBe('speaking');
+  });
+
   it('Pause sans lecture en cours : sans effet', () => {
     const reader = makeReader();
     reader.pause();
