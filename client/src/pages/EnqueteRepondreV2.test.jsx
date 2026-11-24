@@ -10,9 +10,9 @@ import { api } from '../services/api.js';
 import { numberRangeError, prefilledOptionFor } from './EnqueteRepondre.jsx';
 
 vi.mock('../services/api.js', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
-// Un MÊME objet user à chaque rendu, comme le vrai contexte : la page
-// recharge l'enquête quand `user` change (useEffect [slug, user]) — un
-// nouvel objet à chaque appel effacerait les réponses à chaque clic.
+// Un MÊME objet user à chaque rendu, comme le vrai contexte. (Depuis la
+// recette du 24/11, la page ne recharge l'enquête que si la PERSONNE
+// change — son id —, plus à chaque nouvel objet user.)
 const mockUser = { emailVerified: true, travailleASenlis: null };
 vi.mock('../contexts/AuthContext.jsx', () => ({
   useAuth: () => ({ user: mockUser }),

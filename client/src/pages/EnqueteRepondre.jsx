@@ -110,6 +110,19 @@ export function prefilledOptionFor(question, user) {
 }
 
 /**
+ * Recette du 24/11 : cette réponse va-t-elle MODIFIER le profil ?
+ * Vrai si la question synchronise un champ du compte et que l'option
+ * choisie porte une valeur différente de celle du profil actuel.
+ * (La mise à jour n'a lieu qu'à l'ENVOI du questionnaire.)
+ */
+export function changesProfile(question, answer, user) {
+  if (!question.syncsToProfile || !user || !answer?.optionId) return false;
+  const chosen = question.options?.find((o) => o.id === answer.optionId);
+  if (!chosen?.syncValue) return false;
+  return prefilledOptionFor(question, user)?.id !== chosen.id;
+}
+
+/**
  * S5R2-02 : la réponse SANS les options qui ne sont plus proposées.
  * Cas typique : on coche « Bus régional » (proposé car « Autre ville »),
  * on revient corriger « Senlis » — « Bus régional » disparaît de la
@@ -177,7 +190,15 @@ const PROFILE_PREFILL_LABELS = {
 
 export default function EnqueteRepondre() {
   const { slug } = useParams();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  // Recette du 24/11 : le chargement de l'enquête dépend de la PERSONNE
+  // (son id), pas de chaque détail de son profil. Sinon, rafraîchir le
+  // profil après l'envoi rechargeait l'enquête… et affichait « Vous avez
+  // déjà répondu » à la place du merci. Le profil le plus récent est lu
+  // dans cette ref, tenue à jour par l'effet juste en dessous.
+  const userId = user?.id;
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
   // Lu sur le rôle plutôt que via isAdmin : une seule source, l'objet user.
   // S5R2-11 : un compte Admin-test (EDITOR) teste aussi (brouillons)
   const testMode = user?.role === 'ADMIN' || user?.role === 'EDITOR';
@@ -197,6 +218,8 @@ export default function EnqueteRepondre() {
   // et réponses venues du profil (point de départ de « Recommencer »)
   const [resumedAt, setResumedAt] = useState(null);
   const prefilledRef = useRef({});
+  // Recette du 24/11 : l'envoi a-t-il mis à jour le profil ? (écran de fin)
+  const [profileUpdated, setProfileUpdated] = useState(false);
 
   // ── S5R2-13 : sauvegarde automatique des réponses en cours ──
   // Jamais en mode test (rien ne doit rester d'un test), ni après l'envoi
@@ -244,6 +267,7 @@ export default function EnqueteRepondre() {
     // effacée à l'arrivée de la réponse. `cancelled` : une réponse arrivée
     // après un changement d'enquête ou de compte est ignorée.
     let cancelled = false;
+    const user = userRef.current; // profil le plus récent (voir userRef)
     api.get(`/surveys/${slug}`)
       .then((data) => {
         if (cancelled) return;
@@ -295,7 +319,7 @@ export default function EnqueteRepondre() {
       .catch((err) => { if (!cancelled) setError(err.message || 'Impossible de charger cette enquête'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [slug, user, testMode]);
+  }, [slug, userId, testMode]);
 
   const setAnswer = (questionId, value) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -360,6 +384,12 @@ export default function EnqueteRepondre() {
         <p style={{ color: '#6B6257', marginBottom: 24 }}>
           Votre réponse a bien été enregistrée.
         </p>
+        {profileUpdated && (
+          <p style={{ marginBottom: 24 }}>
+            Votre profil a aussi été mis à jour avec vos réponses.{' '}
+            <Link to="/mon-compte">Voir mon compte</Link>
+          </p>
+        )}
         <Link to={`/enquetes/${slug}/resultats`} className="btn btn-primary">
           Voir les résultats
         </Link>
@@ -442,6 +472,15 @@ export default function EnqueteRepondre() {
       } else {
         await api.post(`/surveys/${survey.id}/responses`, payload);
         draft.clear(); // S5R2-13 : envoyé pour de bon, plus rien à garder
+        // Recette du 24/11 : l'API vient de mettre le profil à jour en
+        // base (situation, quartier, travail…). Sans ce rafraîchissement,
+        // « Mon compte » et les autres enquêtes affichaient l'ANCIEN
+        // profil, gardé en mémoire, jusqu'au prochain rechargement.
+        const updates = visibleQuestions.some((q) => changesProfile(q, answers[q.id], user));
+        if (updates) {
+          setProfileUpdated(true);
+          refreshUser().catch(() => {}); // sans gravité : la base est à jour
+        }
       }
       setDone(true);
     } catch (err) {
@@ -540,7 +579,12 @@ export default function EnqueteRepondre() {
           // doit pouvoir explorer chaque branche
           const prefilledOption = testMode ? null : prefilledOptionFor(question, user);
 
-          if (prefilledOption && !overrideCurrentQuestion) {
+          // Recette du 24/11 : lecture seule SEULEMENT si la réponse est
+          // toujours celle du profil. Avant, revenir sur une question
+          // modifiée (« Modifier » → « Centre historique ») réaffichait
+          // l'ancienne valeur du profil, comme si rien n'avait changé —
+          // alors que la nouvelle réponse était bien gardée.
+          if (prefilledOption && !overrideCurrentQuestion && answer?.optionId === prefilledOption.id) {
             return (
               <div>
                 <p style={{ fontSize: 17 }}>
@@ -565,14 +609,22 @@ export default function EnqueteRepondre() {
           }
 
           return (
-            <QuestionInput
-              question={question}
-              answer={answer}
-              onChange={(value) => setAnswer(question.id, value)}
-              labelledBy="question-label"
-              maxChoices={maxChoices}
-              rangeError={rangeError}
-            />
+            <>
+              <QuestionInput
+                question={question}
+                answer={answer}
+                onChange={(value) => setAnswer(question.id, value)}
+                labelledBy="question-label"
+                maxChoices={maxChoices}
+                rangeError={rangeError}
+              />
+              {/* Recette du 24/11 : dire QUAND le profil change (à l'envoi) */}
+              <p aria-live="polite" style={{ fontSize: 14, color: '#1E5F7C', margin: '10px 0 0' }}>
+                {!testMode && changesProfile(question, answer, user)
+                  ? 'Votre profil (« Mon compte ») sera mis à jour avec cette réponse quand vous enverrez le questionnaire.'
+                  : ''}
+              </p>
+            </>
           );
         })()}
       </div>
