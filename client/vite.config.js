@@ -43,5 +43,16 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test-setup.js',
+    // S5R2-08 (conseil affiché par Vitest 5) : par défaut, un navigateur
+    // simulé (jsdom) était reconstruit pour CHACUN des 67 fichiers de
+    // test — la moitié du temps total. Avec « vmThreads », chaque fichier
+    // garde son propre bac à sable (isolation conservée), mais jsdom
+    // n'est préparé qu'une fois par fil d'exécution : ~50 s → ~11 s.
+    // Analogie : on garde une table par élève, mais on ne remonte plus
+    // la salle de classe entière à chaque nouvel élève.
+    // Si un jour un test échoue SEULEMENT dans ce mode (comparaison
+    // « instanceof » entre deux bacs à sable, souvent), le relancer
+    // avec « npx vitest run --pool=threads » pour comparer.
+    pool: 'vmThreads',
   },
 });

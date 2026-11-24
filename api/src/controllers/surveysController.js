@@ -960,6 +960,13 @@ function buildAnswerRows(question, answer, answersByQuestionId, offered = null) 
       if (typeof answer.valueNumber !== 'number') {
         rejectAnswer(`« ${question.label} » attend un nombre (valueNumber)`);
       }
+      // Recette du 23/11 : une question « Nombre » compte (véhicules,
+      // personnes…) — « 4,7 voitures » n'a pas de sens. Le validateur
+      // Zod le refuse déjà ; ce contrôle protège le cœur du moteur même
+      // si un jour une autre route y menait.
+      if (!Number.isInteger(answer.valueNumber)) {
+        rejectAnswer(`« ${question.label} » attend un nombre entier`);
+      }
       // S5R-05 : bornes fixées par l'administratrice (ex. au moins 1
       // véhicule professionnel quand on vient de répondre « Oui »)
       if (question.minValue !== null && answer.valueNumber < question.minValue) {
