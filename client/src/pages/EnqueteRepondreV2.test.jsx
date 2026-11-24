@@ -90,6 +90,9 @@ describe('Fonctions utilitaires', () => {
     expect(numberRangeError(q, { valueNumber: 6 })).toMatch(/au plus 5/);
     expect(numberRangeError(q, { valueNumber: 3 })).toBeNull();
     expect(numberRangeError(q, undefined)).toBeNull();
+    // Recette du 23/11 : pas de « 4,7 voitures »
+    expect(numberRangeError(q, { valueNumber: 4.7 })).toMatch(/nombre entier/);
+    expect(numberRangeError({ type: 'NOMBRE', minValue: null, maxValue: null }, { valueNumber: 2.5 })).toMatch(/nombre entier/);
   });
 
   it('prefilledOptionFor : « travaille à Senlis » préremplit Oui, Non, ou rien si inconnu', () => {

@@ -68,12 +68,18 @@ function isAnswered(question, answer) {
 // générique unique ("D'après votre profil : ...") pour chacun de ces
 // quatre champs bien identifiés.
 /**
- * S5R-05 : message si un nombre sort des bornes fixées par
- * l'administratrice (null si tout va bien ou si rien n'est saisi).
+ * S5R-05 : message si un nombre n'est pas entier, ou sort des bornes
+ * fixées par l'administratrice (null si tout va bien ou si rien n'est saisi).
  */
 export function numberRangeError(question, answer) {
   const value = answer?.valueNumber;
   if (question.type !== 'NOMBRE' || typeof value !== 'number' || Number.isNaN(value)) return null;
+  // Recette du 23/11 : « 4,7 voitures » était accepté. Une question
+  // « Nombre » COMPTE (véhicules, personnes, places…) : entier seulement.
+  // (L'API refuse aussi, au cas où ce contrôle serait contourné.)
+  if (!Number.isInteger(value)) {
+    return 'Merci d\'indiquer un nombre entier, sans virgule.';
+  }
   if (question.minValue !== null && question.minValue !== undefined && value < question.minValue) {
     return `La valeur doit être au moins ${question.minValue}.`;
   }
@@ -746,6 +752,10 @@ function QuestionInput({ question, answer, onChange, labelledBy, maxChoices, ran
         <div>
           <input
             type="number"
+            // Entiers seulement : les flèches avancent de 1, et le clavier
+            // des téléphones n'affiche que des chiffres (pas de virgule)
+            step="1"
+            inputMode="numeric"
             {...a11y}
             // Bornes S5R-05 : les flèches du champ les respectent, et la
             // saisie au clavier est vérifiée (message ci-dessous)

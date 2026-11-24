@@ -1083,10 +1083,10 @@ function QuestionEditor({
       {question.type === 'NOMBRE' && (
         <div style={{ display: 'flex', gap: 14 }}>
           <Field label="Valeur minimum (optionnel)">
-            <input type="number" value={question.minValue} onChange={(e) => onChange({ minValue: e.target.value })} style={inputStyle} />
+            <input type="number" step="1" value={question.minValue} onChange={(e) => onChange({ minValue: e.target.value })} style={inputStyle} />
           </Field>
           <Field label="Valeur maximum (optionnel)">
-            <input type="number" value={question.maxValue} onChange={(e) => onChange({ maxValue: e.target.value })} style={inputStyle} />
+            <input type="number" step="1" value={question.maxValue} onChange={(e) => onChange({ maxValue: e.target.value })} style={inputStyle} />
           </Field>
         </div>
       )}

@@ -107,8 +107,9 @@ const questionSchema = z.object({
   // S5R-05 : plusieurs conditions, il suffit que L'UNE soit remplie (OU)
   showIfAny: z.array(showIfSchema).min(1).max(20).optional(),
   // S5R-05 : bornes d'une réponse NOMBRE
-  minValue: z.number().optional(),
-  maxValue: z.number().optional(),
+  // Recette du 23/11 : une question « Nombre » compte → bornes entières
+  minValue: z.number().int('La valeur minimum doit être un nombre entier').optional(),
+  maxValue: z.number().int('La valeur maximum doit être un nombre entier').optional(),
   // S5R-05 : CHOIX_MULTIPLE — pas plus de cases que la réponse à cette
   // question NOMBRE précédente (vérifié à la création, par position)
   maxChoicesFrom: z.object({ questionOrder: z.number().int().min(0) }).optional(),
@@ -269,7 +270,8 @@ const answerSchema = z.object({
   questionId: z.string().uuid(),
   optionId: z.string().uuid().optional(),           // CHOIX_UNIQUE / OUI_NON
   optionIds: z.array(z.string().uuid()).optional(), // CHOIX_MULTIPLE
-  valueNumber: z.number().optional(),               // NOMBRE
+  // NOMBRE — entier seulement (recette du 23/11 : « 4,7 voitures »)
+  valueNumber: z.number().int('Merci d\'indiquer un nombre entier, sans virgule').optional(),
   valueText: z.string().trim().optional(),          // TEXTE_LIBRE
 }).superRefine((a, ctx) => {
   const filled = ['optionId', 'optionIds', 'valueNumber', 'valueText']
