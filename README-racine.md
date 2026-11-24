@@ -21,13 +21,13 @@
 
 ## 🧱 Stack
 
-**Front** React 19 · Vite 8 · React Router 7 · Sass · react-leaflet · mascotte SVG inline — **API** Node 22 · Express 5 · Prisma 7 · PostgreSQL · Zod · JWT + Argon2 — **Qualité** Vitest · Testing Library · Supertest · ESLint — **Infra** Docker (dev) · GitHub Actions · Dependabot · Clever Cloud (hébergement souverain, France)
+**Front** React 19 · Vite 8 · React Router 7 · Sass · react-leaflet · mascotte SVG inline — **API** Node 22 · Express 5 · Prisma 7 · PostgreSQL · Zod 4 · JWT + Argon2 — **Qualité** Vitest 5 · Testing Library · Supertest · ESLint 10 — **Infra** Docker (dev) · GitHub Actions · Dependabot · Clever Cloud (hébergement souverain, France)
 
 Architecture découplée : le front affiche, l'API décide, la base garantit. L'API (`/api/v1`, JSON) est consommable telle quelle par une future application mobile — documentation OpenAPI/Swagger prévue, pas encore publiée.
 
 ## 🚀 Démarrage rapide
 
-**Prérequis** : Node ≥ 22, Git, et PostgreSQL 16 — installé sur la machine **ou** via Docker.
+**Prérequis** : Node **22.22.2+** ou **24.15+** (jsdom 31, utilisé par les tests du client, l'exige ; avec nvm : `nvm install 24`), Git, et PostgreSQL 16 — installé sur la machine **ou** via Docker.
 
 ```bash
 git clone https://github.com/Nathalie-Leduc/senlis-participatif.git
