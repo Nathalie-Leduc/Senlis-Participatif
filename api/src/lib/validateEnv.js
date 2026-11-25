@@ -14,13 +14,15 @@
 // justement pour être facile à tester avec de faux environnements,
 // sans avoir à manipuler de vraies variables globales dans les tests.
 // ══════════════════════════════════════════════════════════
+import { databaseUrl } from './databaseUrl.js';
 
 export function validateEnv(env = process.env) {
   const errors = [];
   const isProd = env.NODE_ENV === 'production';
 
-  if (!env.DATABASE_URL) {
-    errors.push('DATABASE_URL manquant');
+  // S5-22 : chez Clever Cloud, la base reliée fournit POSTGRESQL_ADDON_URI
+  if (!databaseUrl(env)) {
+    errors.push('DATABASE_URL manquant (ou POSTGRESQL_ADDON_URI chez Clever Cloud)');
   }
 
   if (!env.JWT_SECRET || env.JWT_SECRET === 'REMPLACER_PAR_64_CARACTERES_ALEATOIRES') {

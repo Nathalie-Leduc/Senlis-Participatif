@@ -1,0 +1,74 @@
+# ══════════════════════════════════════════════════════════
+# Caddyfile — le site (client React) en production chez Clever Cloud
+# (S5-22)
+#
+# Clever Cloud (application « Static ») lance Caddy avec ce fichier,
+# indiqué par CC_STATIC_CADDYFILE=./client/Caddyfile. Le HTTPS est
+# assuré EN AMONT par Clever Cloud (certificat Let's Encrypt) : Caddy
+# reçoit des requêtes HTTP simples sur le port 8080.
+#
+# Trois rôles :
+#   1. servir les fichiers construits par Vite (client/dist) ;
+#   2. renvoyer index.html pour toutes les adresses de React Router
+#      (/propositions/mon-slug…) — sinon, rafraîchir la page = 404 ;
+#   3. dire au navigateur quoi garder en cache, et combien de temps.
+#
+# Analogie : l'accueil de la mairie. Un dossier précis (un fichier) →
+# on le donne ; une demande de « service » (une page de l'application)
+# → on oriente toujours vers le même guichet, index.html, qui sait
+# ensuite où aller.
+#
+# Les en-têtes de sécurité (CSP, HSTS…) seront ajoutés en S5-24.
+# ══════════════════════════════════════════════════════════
+{
+	# Pas d'interface d'administration de Caddy en production
+	admin off
+	# Pas de HTTPS géré par Caddy : Clever Cloud s'en charge devant lui
+	auto_https off
+}
+
+:{$CC_STATIC_PORT:8080} {
+	# www.senlis-participatif.fr → une seule adresse officielle (sans
+	# www). Important aussi pour l'API : elle n'accepte qu'UNE origine
+	# (CLIENT_URL), sans le www.
+	@www host www.senlis-participatif.fr
+	redir @www https://senlis-participatif.fr{uri} permanent
+
+	# Le build de Vite, depuis la racine du dépôt (APP_HOME chez
+	# Clever Cloud ; « . » pour un essai en local)
+	root * {$APP_HOME:.}/client/dist
+
+	# Compression : environ 3 fois moins de données à télécharger
+	encode zstd gzip
+
+	# Fichiers de /assets/ : leur nom contient une empreinte
+	# (index-DEJ1qynk.js) qui change à chaque build → on peut les garder
+	# un an sans risque. Le reste (index.html…) est revérifié à chaque
+	# visite : une nouvelle version du site est vue tout de suite.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@notAssets not path /assets/*
+	header @notAssets Cache-Control "no-cache"
+
+	# Deux guichets :
+	# - /assets/ : le fichier, ou une vraie erreur 404. Un fichier
+	#   JavaScript absent (vieil onglet resté ouvert après une mise à
+	#   jour) ne doit PAS recevoir une page HTML que le navigateur
+	#   essaierait d'exécuter.
+	# - tout le reste : le fichier s'il existe (favicon, logo…), sinon
+	#   index.html, et React Router affiche la bonne page.
+	handle /assets/* {
+		file_server
+	}
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Une erreur (fichier /assets/ absent…) ne se garde jamais en cache :
+	# sans ce bloc, elle héritait du « un an » des fichiers de /assets/
+	handle_errors {
+		header Cache-Control "no-store"
+		respond "{err.status_code} {err.status_text}"
+	}
+}
