@@ -21,11 +21,26 @@ La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres
 - Les images (`/uploads/…`) sont servies avec `Cross-Origin-Resource-Policy: same-site`, pour être affichables depuis le domaine du site.
 - Image Docker (dev) : `docker build -f api/Dockerfile .` depuis la **racine** (lockfile unique du monorepo), utilisateur non-root.
 
+### Chez Clever Cloud (S5-22)
+
+Procédure pas à pas : **document 34** du dépôt docs. L'API est une application **Node.js** déployée depuis la **racine** du dépôt (fichier verrou unique, `overrides` compris) :
+
+| Variable | Valeur | Pourquoi |
+|---|---|---|
+| `CC_NODE_BUILD_TOOL` | `npm-ci` | Installe exactement le `package-lock.json` |
+| `CC_RUN_COMMAND` | `npm run start --workspace api` | Démarre l'API depuis le monorepo |
+| `CC_PRE_RUN_HOOK` | `npm run migrate:deploy --workspace api` | Migrations appliquées **avant** chaque démarrage ; en cas d'échec, l'ancienne version reste en ligne |
+| `CC_FS_BUCKET` | `/api/uploads:<hôte du FS Bucket>` | Le disque d'une application est effacé à chaque déploiement : les images des propositions vivent dans un FS Bucket |
+| `SENLIS_PURGE_CRON` | `true` | Active la purge RGPD nocturne (`clevercloud/cron.json` → `clevercloud/purge.sh`, 3 h 17 UTC) |
+| `DATABASE_URL` | *(rien à saisir)* | La base reliée fournit `POSTGRESQL_ADDON_URI`, lue à défaut (`src/lib/databaseUrl.js`) |
+
+Node **24** partout (`engines` du `package.json` racine, CI, Clever Cloud). Secrets neufs : `npm run secrets`.
+
 ## Variables d'environnement
 
 | Variable | Exemple | Rôle |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://senlis:secret@localhost:5432/senlis` | Connexion PostgreSQL (Prisma) |
+| `DATABASE_URL` | `postgresql://senlis:secret@localhost:5432/senlis` | Connexion PostgreSQL (Prisma) — à défaut, `POSTGRESQL_ADDON_URI` (Clever Cloud) |
 | `PORT` | `3000` | Port de l'API |
 | `CLIENT_URL` | `http://localhost:5173` | Origine autorisée (CORS) + base des liens email |
 | `JWT_SECRET` | *(64 caractères aléatoires)* | Signature des jetons — **jamais commité** |
@@ -50,14 +65,15 @@ La BDD tourne via le `docker-compose.yml` racine (`docker compose up -d postgres
 | `npm run seed` | Injecte les données de démo (`prisma/seed.js`) |
 | `npm run seed:prod` | Données réelles de production (admin, proposition, enquête) |
 | `npm run seed:demo` | **Développement seulement** : 20 citoyen·nes fictifs aux profils variés (centre, chaque quartier, autres villes, travail) répondent aux enquêtes ouvertes et votent — options `--enquete <slug>`, `--nombre N`, `--sans-votes`, `--supprimer` (efface tout ce qui est démo) |
-| `npm run purge` | Purge RGPD : comptes inactifs (3 ans, après deux avertissements) et jetons expirés — `-- --dry-run` pour simuler |
+| `npm run purge` | Purge RGPD : comptes inactifs (3 ans, après deux avertissements) et jetons expirés — `-- --dry-run` pour simuler ; lancée chaque nuit en production (`clevercloud/cron.json`) |
+| `npm run secrets` | Affiche des secrets neufs pour la production (`JWT_SECRET`, mot de passe admin) — rien n'est écrit sur le disque |
+| `npm run migrate:deploy` | Applique les migrations en production (lancé par Clever Cloud avant chaque démarrage) |
 | `npm test` | Tests d'intégration Vitest + Supertest (BDD de test jetable) |
 | `npm run lint` | ESLint |
 | `npx prisma migrate dev` | Nouvelle migration en dev (base uniquement) |
 | `npx prisma generate` | Régénère le client Prisma — **obligatoire après chaque migration** : depuis Prisma 7, `migrate dev` ne le fait plus |
 | `npm run migrate:test` | Applique les migrations à la base de test |
 | `npx prisma migrate deploy` | Applique les migrations **telles qu'écrites**, sans en générer — à utiliser pour une migration écrite à la main (ex. `survey_engine_v2`, qui déplace des données) |
-| `npx prisma migrate deploy` | Applique les migrations (prod / CI) |
 | `npx prisma studio` | Explorateur visuel de la BDD |
 
 ## Architecture

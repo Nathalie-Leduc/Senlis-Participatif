@@ -23,6 +23,7 @@
 // mal détecté selon la forme exacte de son `module.exports`, donc on
 // garde le contournement `import pkg from ...` par sécurité (même
 // principe qu'avant, juste un chemin différent).
+import { databaseUrl } from './databaseUrl.js';
 import pkg from '../generated/prisma/index.js';
 const { PrismaClient } = pkg;
 import pg from 'pg';
@@ -38,7 +39,8 @@ const globalForPrisma = globalThis;
 // fuit des connexions exactement comme le problème que le singleton
 // est censé éviter.
 function createPrismaClient() {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  // DATABASE_URL, ou POSTGRESQL_ADDON_URI chez Clever Cloud (S5-22)
+  const pool = new pg.Pool({ connectionString: databaseUrl() });
   // S5R2-08 partie 3 (OWASP A09/A10) : une connexion inactive qui casse
   // (redémarrage de PostgreSQL, coupure réseau chez l'hébergeur) est
   // rattrapée par l'adaptateur — l'API ne plante pas —, mais en SILENCE.

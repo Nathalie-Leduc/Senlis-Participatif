@@ -12,7 +12,9 @@
     "seed:prod": "node --env-file-if-exists=.env prisma/seed-prod.js",
     "seed:demo": "node --env-file-if-exists=.env prisma/seed-demo.js",
     "purge": "node --env-file-if-exists=.env scripts/purge.js",
+    "secrets": "node scripts/generate-secrets.js",
     "migrate:test": "dotenv-cli -e .env.test -- npx prisma migrate deploy",
+    "migrate:deploy": "prisma migrate deploy",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src/"

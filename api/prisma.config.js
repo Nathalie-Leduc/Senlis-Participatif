@@ -13,15 +13,17 @@
 
 import 'dotenv/config';
 import { defineConfig } from 'prisma/config';
+import { databaseUrl } from './src/lib/databaseUrl.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
 export default defineConfig({
   schema: './prisma/schema.prisma',
   datasource: {
-    url: process.env.DATABASE_URL,
+    // DATABASE_URL, ou POSTGRESQL_ADDON_URI chez Clever Cloud (S5-22)
+    url: databaseUrl(),
     // SSL requis par la plupart des hébergeurs Postgres en prod
-    // (Railway, Render, Supabase…) mais absent/inutile en local.
+    // (Clever Cloud, Railway, Render…) mais absent/inutile en local.
     ...(isProduction ? { ssl: { rejectUnauthorized: false } } : {}),
   },
   migrations: {

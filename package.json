@@ -11,7 +11,7 @@
     "test": "npm run test --workspaces"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": "^24.15.0"
   },
   "overrides": {
     "effect": "3.22.5"
