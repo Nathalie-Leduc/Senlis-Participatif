@@ -35,6 +35,8 @@ const SENLIS_CENTER = [49.2058, 2.5847];
  *   fullPage : la page /carte — la carte occupe toute la hauteur disponible
  */
 export default function ExploreMap({ height = 420, fullPage = false }) {
+  const ExploreHeading = fullPage ? 'h2' : 'h3';
+  const ListHeading = fullPage ? 'h3' : 'h4'; // un niveau sous « Par quartier »
   const [proposals, setProposals] = useState([]);
   const [surveys, setSurveys] = useState([]);
   const [iris, setIris] = useState(null);
@@ -96,6 +98,11 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
   const parkingMap = useMemo(() => parkingShapes(parkings), [parkings]);
 
   const setLayer = (key) => (e) => setLayers((l) => ({ ...l, [key]: e.target.checked }));
+  // Plein écran : toute la hauteur de l'écran ; page /carte : la hauteur
+  // de la fenêtre moins l'en-tête du site (dvh : tient compte de la barre
+  // d'adresse mobile)
+  const mapHeight = fullscreen ? 'calc(100vh - 110px)' : fullPage ? 'calc(100dvh - 230px)' : height;
+
   const selectionLabel = selected.length === 0
     ? 'Toute la ville'
     : ZONE_QUARTIERS.filter((q) => selected.includes(q.value)).map((q) => q.label).join(', ');
@@ -124,13 +131,21 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
             markers={markers}
             parkings={layers.parkings ? parkingMap.points : []}
             parkingLines={layers.parkings ? parkingMap.lines : []}
-            // Plein écran : toute la hauteur de l'écran ; page /carte : la
-            // hauteur de la fenêtre moins l'en-tête du site (dvh : tient
-            // compte de la barre d'adresse mobile)
-            height={fullscreen ? 'calc(100vh - 110px)' : fullPage ? 'calc(100dvh - 230px)' : height}
+            height={mapHeight}
           />
         ) : (
-          <p style={{ color: '#6B6257' }}>Chargement de la carte…</p>
+          // S5R2-08 partie 3 (Lighthouse, CLS 0,33 sur la page Carte) : une
+          // simple ligne de texte tenait la place d'une carte haute d'un
+          // écran ; à son arrivée, tout ce qui suit était repoussé d'un
+          // coup. On réserve tout de suite la hauteur de la carte.
+          <div
+            style={{
+              height: mapHeight, borderRadius: 20, background: '#E3EEF3', color: '#1E5F7C',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14,
+            }}
+          >
+            Chargement de la carte…
+          </div>
         )}
         <p style={{ fontSize: 13, color: '#6B6257', marginTop: 6 }}>
           Cliquez sur un quartier pour l'ajouter ou le retirer de la sélection.
@@ -140,7 +155,10 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
 
       {/* ── Sélection et liste (alternative accessible à la carte) ── */}
       <section aria-labelledby="explore-title" className="card-joyful explore-map__panel" style={{ padding: 20 }}>
-        <h3 id="explore-title" style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 10 }}>Par quartier</h3>
+        {/* S5R2-08 partie 3 (RGAA 9.1) : sur la page Carte, ce titre suit
+            directement le h1 → h2 ; sur l'accueil, il est sous le h2 de la
+            section → h3. Même apparence dans les deux cas. */}
+        <ExploreHeading id="explore-title" style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 10 }}>Par quartier</ExploreHeading>
 
         <fieldset style={{ border: 'none', padding: 0, margin: '0 0 14px' }}>
           <legend className="sr-only">Quartiers affichés</legend>
@@ -159,8 +177,8 @@ export default function ExploreMap({ height = 420, fullPage = false }) {
         {/* aria-live : la liste change quand on coche un quartier (aussi depuis la carte) */}
         <div aria-live="polite">
           <p style={{ fontSize: 14, marginBottom: 10 }}><strong>Affiché :</strong> {selectionLabel}</p>
-          <ItemList title="Enquêtes ouvertes" items={items.surveys} empty="Aucune enquête ouverte ici." href={(s) => `/enquetes/${s.slug}`} />
-          <ItemList title="Propositions" items={items.proposals} empty="Aucune proposition ici." href={(p) => `/propositions/${p.slug}`} />
+          <ItemList Heading={ListHeading} title="Enquêtes ouvertes" items={items.surveys} empty="Aucune enquête ouverte ici." href={(s) => `/enquetes/${s.slug}`} />
+          <ItemList Heading={ListHeading} title="Propositions" items={items.proposals} empty="Aucune proposition ici." href={(p) => `/propositions/${p.slug}`} />
           {unplaced.length > 0 && selected.length > 0 && (
             <p style={{ fontSize: 13, color: '#6B6257', marginTop: 10 }}>
               + {unplaced.length} proposition{unplaced.length > 1 ? 's' : ''} sans quartier précis :{' '}
@@ -185,10 +203,10 @@ function Toggle({ checked, onChange, label }) {
 }
 
 /** Une liste titrée ; les éléments « toute la ville » sont signalés */
-function ItemList({ title, items, empty, href }) {
+function ItemList({ title, items, empty, href, Heading = 'h4' }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <h4 style={{ fontSize: 15, margin: '0 0 6px' }}>{title} ({items.length})</h4>
+      <Heading style={{ fontSize: 15, margin: '0 0 6px' }}>{title} ({items.length})</Heading>
       {items.length === 0 ? (
         <p style={{ fontSize: 14, color: '#6B6257' }}>{empty}</p>
       ) : (

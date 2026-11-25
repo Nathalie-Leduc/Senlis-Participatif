@@ -39,7 +39,14 @@ const globalForPrisma = globalThis;
 // est censé éviter.
 function createPrismaClient() {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-  const adapter = new PrismaPg(pool);
+  // S5R2-08 partie 3 (OWASP A09/A10) : une connexion inactive qui casse
+  // (redémarrage de PostgreSQL, coupure réseau chez l'hébergeur) est
+  // rattrapée par l'adaptateur — l'API ne plante pas —, mais en SILENCE.
+  // onPoolError l'écrit dans les journaux : sans trace, impossible de
+  // comprendre après coup pourquoi des requêtes ont échoué.
+  const adapter = new PrismaPg(pool, {
+    onPoolError: (err) => console.error('[BDD] Connexion PostgreSQL perdue :', err.message),
+  });
 
   return new PrismaClient({
     adapter,

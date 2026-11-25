@@ -85,6 +85,30 @@ export function passwordRenewalDue(user, now = Date.now()) {
 }
 
 /**
+ * La fiche « publique » d'un compte, telle que le navigateur la reçoit
+ * (connexion, double authentification, /auth/me).
+ *
+ * S5R2-08 partie 3 (OWASP A01 — exposition de données) : avant, cette
+ * fiche était recopiée champ par champ à trois endroits, et les copies
+ * avaient déjà divergé. Une LISTE BLANCHE unique : seuls les champs
+ * nommés ici sortent, jamais le reste de la ligne (passwordHash,
+ * tokenVersion, dates internes…), même si `user` vient d'un
+ * findUnique complet. Analogie : le guichet ne photocopie pas tout le
+ * dossier, il remplit toujours le même formulaire.
+ */
+const PUBLIC_USER_FIELDS = [
+  'id', 'email', 'pseudo', 'role', 'emailVerified',
+  'situation', 'quartier', 'travailleQuartier', 'travailType', 'travailleASenlis',
+  'notifyNewProposal', 'notifySurveyClosed', 'createdAt',
+];
+export function toPublicUser(user) {
+  const fiche = Object.fromEntries(PUBLIC_USER_FIELDS.map((field) => [field, user[field]]));
+  // La date du dernier changement reste interne : seul le rappel sert
+  fiche.passwordRenewalDue = passwordRenewalDue(user);
+  return fiche;
+}
+
+/**
  * Vérifie le mot de passe ACTUEL avant une action sensible
  * (changer d'email, supprimer son compte). Recommandation OWASP :
  * une session volée — ordinateur resté ouvert, jeton dérobé — ne
@@ -368,19 +392,7 @@ export async function login(req, res, next) {
 
     res.json({
       token: jwt,
-      user: {
-        id: user.id,
-        email: user.email,
-        pseudo: user.pseudo,
-        role: user.role,
-        emailVerified: user.emailVerified,
-        situation: user.situation,
-        quartier: user.quartier,
-        travailleQuartier: user.travailleQuartier,
-        travailType: user.travailType,
-        travailleASenlis: user.travailleASenlis,
-        passwordRenewalDue: passwordRenewalDue(user),
-      },
+      user: toPublicUser(user), // liste blanche commune (voir toPublicUser)
     });
   } catch (err) {
     next(err);
@@ -430,19 +442,7 @@ export async function verifyTwoFactor(req, res, next) {
     res.json({
       trustedDeviceToken,
       token: jwt,
-      user: {
-        id: user.id,
-        email: user.email,
-        pseudo: user.pseudo,
-        role: user.role,
-        emailVerified: user.emailVerified,
-        situation: user.situation,
-        quartier: user.quartier,
-        travailleQuartier: user.travailleQuartier,
-        travailType: user.travailType,
-        travailleASenlis: user.travailleASenlis,
-        passwordRenewalDue: passwordRenewalDue(user),
-      },
+      user: toPublicUser(user), // liste blanche commune (voir toPublicUser)
     });
   } catch (err) {
     next(err);
@@ -454,20 +454,10 @@ export async function me(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
+      // Les champs de la fiche publique + ce qu'il faut pour calculer le
+      // rappel de mot de passe (passwordChangedAt, jamais renvoyé)
       select: {
-        id: true,
-        email: true,
-        pseudo: true,
-        role: true,
-        emailVerified: true,
-        situation: true,
-        quartier: true,
-        travailleQuartier: true,
-        travailType: true,
-        travailleASenlis: true,
-        notifyNewProposal: true,
-        notifySurveyClosed: true,
-        createdAt: true,
+        ...Object.fromEntries(PUBLIC_USER_FIELDS.map((field) => [field, true])),
         passwordChangedAt: true,
       },
     });
@@ -479,10 +469,7 @@ export async function me(req, res, next) {
       throw error;
     }
 
-    // La date elle-même reste interne : seul le rappel est utile au client
-    const { passwordChangedAt, ...publicUser } = user;
-    void passwordChangedAt;
-    res.json({ user: { ...publicUser, passwordRenewalDue: passwordRenewalDue(user) } });
+    res.json({ user: toPublicUser(user) });
   } catch (err) {
     next(err);
   }

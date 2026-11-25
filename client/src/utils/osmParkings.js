@@ -136,18 +136,9 @@ export function applyComplements(collection, complements) {
 
 const pick = (obj, keys) => Object.fromEntries(keys.filter((k) => k in obj).map((k) => [k, obj[k]]));
 
-const getJson = (url) => fetch(url)
-  .then((res) => (res.ok ? res.json() : null))
-  // En développement, Vite répond par la page d'accueil (HTML) pour un
-  // fichier absent : res.json() échoue → null, sans erreur
-  .catch(() => null);
-
-let promise = null;
-/** Charge l'extraction ET ses compléments (une fois par visite) ; null si rien */
-export function loadParkings() {
-  promise ??= Promise.all([
-    getJson('/data/parkings-senlis.geojson'),
-    getJson('/data/parkings-complements.json'),
-  ]).then(([collection, complements]) => applyComplements(collection, complements));
-  return promise;
-}
+// S5R2-08 partie 3 : loadParkings() et getJson() retirés. Ils lisaient
+// /data/parkings-senlis.geojson et parkings-complements.json, supprimés de
+// public/ depuis S5R2-05 (parkings gérés par l'administration, voir
+// utils/parkings.js). Le reste de ce fichier est GARDÉ volontairement
+// (décision S5R2-05) : script d'extraction et tests, au cas où la couche
+// OpenStreetMap reviendrait.

@@ -9,8 +9,3 @@ export function loadIris() {
     .catch(() => null); // pas de contours ? la page fonctionne sans
   return promise;
 }
-
-/** Pour les tests uniquement */
-export function resetIrisCache() {
-  promise = null;
-}
