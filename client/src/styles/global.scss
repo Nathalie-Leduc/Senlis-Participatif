@@ -17,6 +17,15 @@
 button, input, select, textarea { font: inherit; }
 :root { --a11y-font-scale: 1; }
 body { font-family: $font-body; font-size: calc(#{$font-size-base} * var(--a11y-font-scale)); line-height: 1.6; color: $ardoise; background: $pierre; overflow-x: hidden; }
+
+// S5R2-08 partie 3 (Lighthouse, CLS) : pendant le chargement d'une liste,
+// la page est courte et le pied de page apparaît À L'ÉCRAN ; la liste
+// arrivée, il saute vers le bas (décalage mesuré : 0,27 sur Propositions,
+// 0,17 sur Carte — « mauvais » au-delà de 0,25). Une zone principale d'au
+// moins un écran de haut le garde sous la ligne de flottaison : plus rien
+// ne bouge sous les yeux de la personne. Analogie : on réserve la table
+// avant que les invités arrivent, plutôt que de pousser les chaises.
+#main { min-height: 100vh; }
 h1, h2, h3 { font-family: $font-display; line-height: 1.2; }
 a { color: $nonette; }
 :focus-visible { outline: 3px solid $nonette; outline-offset: 2px; border-radius: 4px; }

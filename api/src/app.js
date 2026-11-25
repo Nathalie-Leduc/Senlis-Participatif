@@ -141,6 +141,18 @@ app.use('/api/v1/tts', ttsRouter); // S5R2-07 : voix naturelles (relais Azure)
 
 // Sprint 6 → app.use('/api/v1/comments', commentsRouter);
 
+// ── Adresse d'API inconnue → 404 en JSON (S5R2-08 partie 3) ──────────
+// Sans ce garde-fou, Express répond par sa page HTML « Cannot GET … » :
+// le client attend du JSON (message illisible), et la page trahit la
+// technologie du serveur (OWASP A02 — configuration). Placé APRÈS toutes
+// les routes : on n'y arrive que si aucune n'a répondu.
+app.use('/api', (req, _res, next) => {
+  const error = new Error('Adresse d\'API inconnue');
+  error.status = 404;
+  error.code = 'NOT_FOUND';
+  next(error);
+});
+
 // ── Gestionnaire d'erreurs ──────────────────────────────────
 app.use(errorHandler);
 
