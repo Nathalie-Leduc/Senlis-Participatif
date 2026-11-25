@@ -5,6 +5,8 @@ Toutes les évolutions notables du projet sont documentées ici.
 ## [Non publié] — Sprint 5bis
 
 ### Modifié
+- **Tests de l'API environ 4 fois plus rapides** (recette du 25/11 : 186 s sur le téléporteur). Argon2, volontairement lent (≈ 170 ms par inscription et connexion), utilise un réglage léger **uniquement quand `NODE_ENV === 'test'`** (`api/src/lib/argon2Options.js` : 1 Mio, 1 passe, ≈ 2 ms). Le développement et la production gardent les paramètres forts par défaut (argon2id, 64 Mio, 3 passes), ce que vérifie `argon2-options.test.js`. Mesure dans le bac à sable : 114 s → 33 s.
+- **Avertissement « Both esbuild and oxc options were set » supprimé** (tests du client) : le réglage `esbuild: { jsx: 'automatic' }` de `client/vite.config.js` ne servait plus qu'à Vitest 4 ; Vitest 5 passe par oxc, comme Vite 8.
 - **Audit avant mise en ligne, partie 3** (S5R2-08) :
   - **Revue OWASP Top 10:2025.** Corrigés : la fiche du compte envoyée au navigateur passe par une **liste blanche** unique (`toPublicUser`, A01 ; les trois copies avaient divergé) ; une adresse d'API inconnue répond **404 en JSON** (A02) ; l'audit de la CI devient **bloquant dès « élevé »** (A03) ; en production, un **`JWT_SECRET` de moins de 32 caractères** empêche le démarrage (A04) ; la CI tourne en **moindre privilège** (`permissions: contents: read`, A08) ; une perte de connexion à PostgreSQL est **journalisée** (`onPoolError`, A09) ; un **faux PNG** donne **400 `INVALID_IMAGE`** au lieu d'une 500, et le serveur **s'arrête proprement** sur `SIGTERM` (A10). Grille complète : document 31 § 5.2.
   - **Code mort** : `resetIrisCache()` et le `loadParkings()` d'`osmParkings.js` (fichiers retirés depuis S5R2-05) supprimés.
