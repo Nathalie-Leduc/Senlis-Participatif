@@ -12,7 +12,7 @@
 // change ce qu'il fait du formulaire une fois complété.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useMemo, useId, isValidElement, cloneElement } from 'react';
+import { useState, useEffect, useMemo, useId, useRef, isValidElement, cloneElement } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, assetUrl } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
@@ -90,6 +90,13 @@ export default function AdminPropositionForm() {
   // donc hors de `form`, dans son propre state.
   const [imageFile, setImageFile] = useState(null); // le File choisi, pas encore envoyé
   const [imagePreview, setImagePreview] = useState(null); // URL d'aperçu (locale OU déjà en ligne)
+  // Recette du 25/11 : un fichier qui n'est pas une image (un .docx
+  // renommé en .png…) est signalé DÈS LE CHOIX, sous le champ. Avant,
+  // l'API le refusait seulement à l'enregistrement — quand le reste de
+  // la proposition était déjà enregistré.
+  const [imageError, setImageError] = useState(null);
+  const imageInputRef = useRef(null);
+  const onlineImageRef = useRef(null); // l'image déjà en ligne, à réafficher si le nouveau fichier est refusé
 
   // ── En mode édition, charger la proposition existante ────
   useEffect(() => {
@@ -120,7 +127,10 @@ export default function AdminPropositionForm() {
         // p.imagePath est déjà un chemin exploitable tel quel par un
         // <img src="..."> (voir le proxy Vite /uploads) — pas de
         // conversion nécessaire, contrairement au geoJson.
-        if (p.imagePath) setImagePreview(assetUrl(p.imagePath));
+        if (p.imagePath) {
+          onlineImageRef.current = assetUrl(p.imagePath);
+          setImagePreview(onlineImageRef.current);
+        }
       })
       .then(() => checkDraft()) // S5R2-13 : des modifications non enregistrées ?
       .catch((err) => setError(err.message || 'Impossible de charger cette proposition'))
@@ -178,6 +188,13 @@ export default function AdminPropositionForm() {
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setImageError(null);
+
+    // Même limite que l'API (5 Mo) : inutile d'envoyer pour se faire refuser
+    if (file.size > 5 * 1024 * 1024) {
+      rejectImage('Image trop lourde : 5 Mo au maximum.');
+      return;
+    }
 
     // createObjectURL fabrique une URL locale (blob:...) qui pointe
     // directement vers le fichier choisi sur l'ordinateur de l'admin —
@@ -195,6 +212,25 @@ export default function AdminPropositionForm() {
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
     setError(null);
+  };
+
+  // Le fichier choisi est refusé : on l'oublie, on vide le champ (sinon
+  // il repartirait à l'enregistrement) et on réaffiche l'image en ligne.
+  function rejectImage(message) {
+    if (imagePreview && imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(onlineImageRef.current);
+    setImageError(message);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  }
+
+  // Le navigateur n'arrive pas à afficher l'aperçu : ce n'est pas une
+  // image, quel que soit le nom du fichier. (Seulement pour un fichier
+  // choisi — blob: —, pas pour l'image déjà en ligne.)
+  const handlePreviewError = () => {
+    if (imagePreview?.startsWith('blob:')) {
+      rejectImage('Ce fichier n\'est pas une image lisible (JPEG, PNG ou WebP attendu). Choisissez-en un autre.');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -493,6 +529,7 @@ export default function AdminPropositionForm() {
             <img
               src={imagePreview}
               alt="Aperçu"
+              onError={handlePreviewError}
               style={{
                 width: '100%', maxWidth: 320, borderRadius: 12,
                 marginBottom: 10, display: 'block', objectFit: 'cover',
@@ -501,6 +538,7 @@ export default function AdminPropositionForm() {
           )}
           <input
             type="file" accept="image/jpeg,image/png,image/webp"
+            ref={imageInputRef}
             onChange={handleImageChange}
             style={{ fontSize: 13 }}
           />
@@ -508,6 +546,11 @@ export default function AdminPropositionForm() {
             JPEG, PNG ou WebP, 5 Mo max — redimensionnée et compressée
             automatiquement à l'enregistrement.
           </p>
+          {imageError && (
+            <p role="alert" style={{ fontSize: 14, color: '#B3412E', fontWeight: 600, margin: '6px 0 0' }}>
+              {imageError}
+            </p>
+          )}
         </Field>
 
         <Field label="Date de clôture des votes (optionnel)">
