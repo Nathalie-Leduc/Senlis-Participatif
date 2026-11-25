@@ -7,6 +7,7 @@
 // ══════════════════════════════════════════════════════════
 
 import argon2 from 'argon2';
+import { argon2Options } from '../lib/argon2Options.js'; // léger en test seulement
 import prisma from '../lib/prisma.js';
 import { isStaffRole } from '../lib/roles.js';
 import {
@@ -41,7 +42,7 @@ import {
  */
 let dummyHashPromise;
 function getDummyHash() {
-  dummyHashPromise ??= argon2.hash('pas-un-vrai-mot-de-passe-' + Math.random());
+  dummyHashPromise ??= argon2.hash('pas-un-vrai-mot-de-passe-' + Math.random(), argon2Options());
   return dummyHashPromise;
 }
 
@@ -155,7 +156,7 @@ export async function register(req, res, next) {
     // Hash du mot de passe avec Argon2id (état de l'art 2026)
     // Argon2id combine résistance aux attaques GPU (Argon2d)
     // et aux attaques par canaux auxiliaires (Argon2i).
-    const passwordHash = await argon2.hash(password);
+    const passwordHash = await argon2.hash(password, argon2Options());
 
     // Crée l'utilisateur (emailVerified = false par défaut).
     //
@@ -694,7 +695,7 @@ export async function changePassword(req, res, next) {
     const problem = passwordProblem(newPassword, user);
     if (problem) throw passwordRejected('newPassword', problem);
 
-    const passwordHash = await argon2.hash(newPassword);
+    const passwordHash = await argon2.hash(newPassword, argon2Options());
     // S5A-06 : tokenVersion + 1 = toutes les sessions ouvertes
     // AILLEURS sont révoquées (si on change son mot de passe, c'est
     // souvent qu'on le croit compromis : les sessions de l'intrus
@@ -745,7 +746,7 @@ export async function resetPassword(req, res, next) {
 
     // Hachage AVANT la transaction : Argon2 prend ~100 ms, inutile de
     // garder la transaction ouverte pendant ce temps.
-    const passwordHash = await argon2.hash(password);
+    const passwordHash = await argon2.hash(password, argon2Options());
 
     // Transaction (S5R-13b) : si le mot de passe est refusé parce qu'il
     // reprend l'adresse ou le pseudo, tout est annulé — le lien reçu par

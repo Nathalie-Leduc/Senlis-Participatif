@@ -3,16 +3,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // Vite 8 utilise oxc (pas esbuild) pour dev/build — un réglage
-  // esbuild.jsx s'y appliquerait pour rien et affiche un avertissement
-  // ("esbuild options will be ignored") à chaque démarrage. Vitest, lui,
-  // passe encore par esbuild pour sa transformation JSX, et EN A besoin
-  // (sinon aucun composant .jsx du projet — qui n'importe jamais React
-  // explicitement, runtime automatique oblige — n'est transformable).
-  // process.env.VITEST n'est défini QUE pendant `vitest run`/`vitest`,
-  // jamais pendant `vite`/`vite build` : le réglage ne s'applique donc
-  // que là où il sert, silence total ailleurs.
-  esbuild: process.env.VITEST ? { jsx: 'automatic' } : undefined,
+  // Plus de réglage `esbuild` (S5R2-08, recette du 25/11) : depuis
+  // Vitest 5, les tests passent eux aussi par oxc, comme Vite 8, qui
+  // applique seul le JSX « automatique » (composants sans import React).
+  // L'ancien `esbuild: { jsx: 'automatic' }`, nécessaire avec Vitest 4,
+  // n'était plus lu et affichait « Both esbuild and oxc options were set ».
   css: {
     preprocessorOptions: {
       scss: {
