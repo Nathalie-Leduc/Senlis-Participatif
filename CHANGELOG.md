@@ -5,6 +5,7 @@ Toutes les évolutions notables du projet sont documentées ici.
 ## [Non publié] — Sprint 5bis
 
 ### Modifié
+- **Image d'une proposition vérifiée dès le choix du fichier** (recette du 25/11 : un document Word renommé en `.png` n'était signalé qu'à l'enregistrement, quand le reste de la proposition était déjà enregistré). Si le navigateur ne peut pas afficher l'aperçu, le message « Ce fichier n'est pas une image lisible… » s'affiche sous le champ, le fichier est retiré et l'image déjà en ligne réapparaît. Une image de plus de 5 Mo est refusée de la même façon. L'API garde son propre contrôle (400 `INVALID_IMAGE`). Nouveau test `AdminPropositionFormImage.test.jsx`.
 - **Tests de l'API environ 4 fois plus rapides** (recette du 25/11 : 186 s sur le téléporteur). Argon2, volontairement lent (≈ 170 ms par inscription et connexion), utilise un réglage léger **uniquement quand `NODE_ENV === 'test'`** (`api/src/lib/argon2Options.js` : 1 Mio, 1 passe, ≈ 2 ms). Le développement et la production gardent les paramètres forts par défaut (argon2id, 64 Mio, 3 passes), ce que vérifie `argon2-options.test.js`. Mesure dans le bac à sable : 114 s → 33 s.
 - **Avertissement « Both esbuild and oxc options were set » supprimé** (tests du client) : le réglage `esbuild: { jsx: 'automatic' }` de `client/vite.config.js` ne servait plus qu'à Vitest 4 ; Vitest 5 passe par oxc, comme Vite 8.
 - **Audit avant mise en ligne, partie 3** (S5R2-08) :
