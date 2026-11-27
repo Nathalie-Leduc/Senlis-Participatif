@@ -36,7 +36,8 @@ datasource db {
 
 enum Role {
   CITIZEN // citoyen inscrit : vote, répond aux enquêtes
-  ADMIN   // toi : crée propositions et enquêtes, modère
+  EDITOR  // « Admin-test » (S5R2-11) : prépare et teste des BROUILLONS, ne publie jamais
+  ADMIN   // toi : crée propositions et enquêtes, modère, publie
 }
 
 enum ProposalStatus {
@@ -98,7 +99,7 @@ enum Situation {
   HORS_SENLIS       // ne réside pas à Senlis
 }
 
-// Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
+// Les quartiers de Senlis (7 IRIS INSEE, le centre coupé en deux — S5R2-06) autres que le centre
 // historique — celui-ci est déjà couvert par Situation.CENTRE_RESIDENT,
 // pas la peine de le répéter ici. Uniquement pertinent quand
 // Situation = AUTRE_QUARTIER (menu en cascade côté formulaire) : les
@@ -108,6 +109,9 @@ enum Quartier {
   CENTRE_HISTORIQUE // uniquement pour le lieu de TRAVAIL (voir User.travailleQuartier) —
                     // pour la résidence, Situation.CENTRE_RESIDENT couvre déjà ce cas,
                     // pas la peine de la répéter ici pour cet usage-là.
+                    // S5R2-06 : désormais le seul Centre historique (ex-« Centre-Sud »)
+  SAINT_VINCENT     // S5R2-06 : Quartier Saint-Vincent (ex-« Centre-Est – Saint-Vincent »),
+                    // la partie Est de l'IRIS « Centre Ville » — un « autre quartier »
   BRICHEBAY
   BON_SECOURS
   VAL_AUNETTE_GATELIERE
@@ -201,6 +205,11 @@ model User {
   // Date de l'email d'avertissement. Remis à null à la connexion
   // suivante : se reconnecter, c'est répondre « je suis toujours là ».
   inactivityWarnedAt DateTime?
+  // S5R2-09 : date du SECOND email, le « dernier rappel », 7 jours avant
+  // la suppression (bonne pratique RGPD : un premier email manqué —
+  // vacances, spam — ne doit pas suffire à supprimer un compte).
+  // Remis à null à la connexion, comme le premier.
+  inactivityFinalWarnedAt DateTime?
 
   // ── Révocation des sessions (S5A-06) ─────────────────────────
   // Recopié dans chaque JWT à la connexion (champ `tv`). Changer ou
@@ -209,6 +218,14 @@ model User {
   // refuse. Analogie : changer la serrure — toutes les anciennes
   // clés cessent d'ouvrir d'un coup, sans avoir à les récupérer.
   tokenVersion Int @default(0)
+
+  // ── Renouvellement des mots de passe d'administration (S5R-13b) ──
+  // Date du dernier choix de mot de passe (changement, réinitialisation).
+  // Null pour les comptes antérieurs : on compte alors depuis createdAt.
+  // Sert UNIQUEMENT au rappel annuel des comptes de l'équipe (la CNIL
+  // le recommande pour les comptes d'administration ; jamais imposé aux
+  // citoyens — document 21, § 8.5).
+  passwordChangedAt DateTime?
 
   proposals Proposal[]
   votes     Vote[]
@@ -234,6 +251,20 @@ model Proposal {
   // - lat/lng : le "point d'ancrage" (marqueur) — ex : place Henri IV
   // - geoJson : le périmètre dessiné (polygone de la zone piétonne proposée).
   //   Json est volontairement souple : Leaflet produit/consomme du GeoJSON natif.
+  // ── Zone concernée (S5R-10) ─────────────────────────────
+  // Recette du 30/09 : « choisir toute la ville ou des quartiers »,
+  // plutôt que de saisir des coordonnées. Les quartiers sont les 7 IRIS
+  // de l'INSEE (centre historique compris) ; leurs contours sont affichés
+  // depuis client/public/data/iris-senlis.geojson.
+  //   zoneWholeCity = true      → « toute la ville »
+  //   zoneQuartiers = [A, B]    → ces quartiers
+  //   ni l'un ni l'autre        → pas de zone déclarée
+  zoneWholeCity Boolean    @default(false)
+  zoneQuartiers Quartier[] @default([])
+
+  // Réglages AVANCÉS (S5R-10 : rangés sous « Avancé » dans le formulaire) :
+  // un point précis (lat/lng) et/ou un tracé libre (GeoJSON), pour ce
+  // qu'un quartier entier ne décrit pas (une rue, une place, un chantier).
   lat     Float?
   lng     Float?
   geoJson Json?
@@ -429,6 +460,14 @@ model QuestionOption {
   // Questions dont l'affichage dépend du choix de cette option (S5R-05)
   conditionsTriggered QuestionCondition[] @relation("ConditionOption")
 
+  // S5R2-02 : options CONDITIONNELLES. Cette option n'est proposée que
+  // si l'une de ces options-déclencheurs a été choisie plus tôt (OU) —
+  // ex. « Bus régional » seulement pour qui réside dans une autre ville.
+  // Vide = toujours proposée.
+  conditions                OptionCondition[] @relation("OptionConditions")
+  // … et, dans l'autre sens, les options qu'ELLE fait apparaître
+  optionConditionsTriggered OptionCondition[] @relation("OptionConditionTrigger")
+
   // Choisir cette option TERMINE l'enquête (S5R-05) : les questions
   // suivantes ne sont plus posées — ex. « 0 véhicule » dans l'enquête
   // stationnement. CHOIX_UNIQUE et OUI_NON uniquement.
@@ -566,6 +605,19 @@ model AdminAuditLog {
 // peut pas être enregistrée deux fois. Cascade des deux côtés : si la
 // question OU l'option disparaît, la condition n'a plus de sens.
 // ══════════════════════════════════════════════════════════
+// S5R2-02 : « l'option optionId n'est proposée que si triggerOptionId
+// a été choisie » — même principe que QuestionCondition, une ligne par
+// déclencheur (plusieurs lignes = OU). Le déclencheur appartient
+// toujours à une question ANTÉRIEURE (vérifié à la création).
+model OptionCondition {
+  optionId        String
+  option          QuestionOption @relation("OptionConditions", fields: [optionId], references: [id], onDelete: Cascade)
+  triggerOptionId String
+  triggerOption   QuestionOption @relation("OptionConditionTrigger", fields: [triggerOptionId], references: [id], onDelete: Cascade)
+
+  @@id([optionId, triggerOptionId])
+}
+
 model QuestionCondition {
   questionId String
   question   Question       @relation("QuestionConditions", fields: [questionId], references: [id], onDelete: Cascade)
@@ -573,4 +625,86 @@ model QuestionCondition {
   option     QuestionOption @relation("ConditionOption", fields: [optionId], references: [id], onDelete: Cascade)
 
   @@id([questionId, optionId])
+}
+
+// ══════════════════════════════════════════════════════════
+// S5R2-05 — Parkings gérés par l'administration (recette du 08/10)
+//
+// Remplace l'extraction OpenStreetMap (trop de corrections à faire) :
+// la mairie — ou l'administratrice — tient elle-même la liste, d'après
+// le plan des parkings du centre-ville (2023 : noms, places) et le
+// guide du stationnement 2025 (zones, tarifs, bornes de recharge).
+//
+// Presque tout est facultatif : un parking peut être créé avec son
+// seul nom, puis complété (places, régime…) et placé sur la carte plus
+// tard. Seuls les parkings PLACÉS (au moins un point ou un trait)
+// s'affichent sur la carte publique.
+//
+// Analogie : les fiches d'un fichier de bibliothèque — on crée la
+// fiche avec le titre, on la complète au fil de l'eau, et le livre
+// n'apparaît en rayon qu'une fois qu'on lui a donné une place.
+// ══════════════════════════════════════════════════════════
+enum ParkingRegime {
+  GRATUIT        // parking public gratuit
+  ZONE_ROUGE     // payant, courte durée (centre)
+  ZONE_VERTE     // payant, durée moyenne
+  GARE           // parking de la gare (tarif et abonnements propres)
+  DUREE_LIMITEE  // gratuit avec disque, durée limitée
+  PARC_PAYANT    // parc payant à tarif propre (ex. « Brunehaut », ÉcoQuartier)
+}
+
+enum ParkingCharging {
+  AUCUNE
+  EXISTANTE  // bornes déjà installées
+  EN_PROJET  // bornes annoncées (guide 2025)
+}
+
+model Parking {
+  id             String          @id @default(uuid())
+  // Unique : deux fiches au même nom seraient un doublon (et le seed
+  // s'en sert pour ne jamais créer deux fois le même parking)
+  name           String          @unique
+  places         Int?
+  regime         ParkingRegime?  // null = « à préciser »
+  charging       ParkingCharging @default(AUCUNE)
+  chargingPoints Int?            // nombre de points de recharge, si connu
+  pmrPlaces      Int?            // places réservées aux personnes handicapées
+  note           String?         // remarque libre (ex. « disque 2 h », « souterrain »)
+  // Recette du 20/10 : un parking peut avoir PLUSIEURS emplacements (le
+  // stade : plusieurs aires) et des TRAITS le long des rues (places en
+  // voirie de la zone rouge). Stocké en GeoJSON standard : une
+  // GeometryCollection de Point et de LineString, coordonnées
+  // [longitude, latitude]. null = pas encore placé (absent de la carte).
+  // Remplace lat / lng (un seul point), convertis par la migration
+  // parking_locations.
+  geometry       Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+// ══════════════════════════════════════════════════════════
+// Limite d'essais de connexion PAR COMPTE (S5R-13b)
+//
+// 10 mots de passe faux par heure pour une même adresse, puis attente
+// (CNIL, recommandation 2022-100, § 43 ; NIST : 100 échecs au plus).
+// Complète la limite par adresse IP (middlewares/rateLimiters.js) :
+// un attaquant qui change d'adresse IP à chaque essai reste freiné.
+//
+// Une ligne par adresse email ESSAYÉE, inscrite ou non (sinon, la
+// limite trahirait quelles adresses ont un compte). L'adresse n'est
+// pas stockée en clair : `key` est son empreinte HMAC (clé secrète du
+// serveur). Les lignes de plus d'une heure ne servent plus à rien et
+// sont effacées chaque nuit (services/retention.js).
+//
+// Analogie : le distributeur de billets qui avale la carte après trois
+// codes faux — sauf qu'ici, la carte est rendue au bout d'une heure.
+// ══════════════════════════════════════════════════════════
+model LoginThrottle {
+  key         String   @id
+  // Échecs depuis le début de la fenêtre
+  failures    Int      @default(0)
+  // Début de la fenêtre d'une heure (premier échec)
+  windowStart DateTime @default(now())
+
+  @@index([windowStart])
 }

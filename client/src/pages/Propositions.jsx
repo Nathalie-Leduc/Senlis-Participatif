@@ -13,8 +13,8 @@
 // en haut — on ne perd jamais sa place.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
-import { api } from '../services/api.js';
+import { useState } from 'react';
+import { usePagedApiQuery } from '../hooks/useApiQuery.js';
 import ProposalCard from '../components/ProposalCard/ProposalCard.jsx';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
@@ -32,60 +32,21 @@ const SORT_OPTIONS = [
 
 export default function Propositions() {
   usePageTitle('Propositions');
-  const [items, setItems] = useState([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [status, setStatus] = useState(undefined);
   const [sort, setSort] = useState('recent');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Construit l'URL de requête à partir des filtres actuels.
-  // useCallback évite de recréer cette fonction à chaque rendu,
-  // ce qui casserait la dépendance du useEffect plus bas.
-  const buildQuery = useCallback((pageToFetch) => {
+  // S5R2-08 : liste paginée commune (usePagedApiQuery). Quand le statut
+  // ou le tri change, la liste repart de la page 1 — continuer à empiler
+  // des résultats « page 3 » sur un NOUVEAU filtre mélangerait deux listes.
+  const list = usePagedApiQuery((pageToFetch) => {
     const params = new URLSearchParams({ page: pageToFetch, limit: 10, sort });
     if (status) params.set('status', status);
     return `/proposals?${params.toString()}`;
-  }, [status, sort]);
-
-  // Quand le statut ou le tri change, on repart de la page 1 —
-  // continuer à empiler des résultats "page 3" sur un NOUVEAU
-  // filtre n'aurait pas de sens (mélange de deux listes différentes).
-  useEffect(() => {
-    let cancelled = false; // évite d'écraser un état plus récent
-                            // si une requête plus lente arrive en retard
-    setLoading(true);
-    setError(null);
-
-    api.get(buildQuery(1))
-      .then((data) => {
-        if (cancelled) return;
-        setItems(data.items);
-        setPage(1);
-        setTotalPages(data.pagination.totalPages);
-      })
-      .catch((err) => !cancelled && setError(err.message || 'Impossible de charger les propositions'))
-      .finally(() => !cancelled && setLoading(false));
-
-    return () => { cancelled = true; };
-  }, [buildQuery]);
-
-  // "Voir plus" : on ajoute la page suivante à la liste existante,
-  // au lieu de la remplacer.
-  const loadMore = async () => {
-    setLoading(true);
-    try {
-      const nextPage = page + 1;
-      const data = await api.get(buildQuery(nextPage));
-      setItems((prev) => [...prev, ...data.items]);
-      setPage(nextPage);
-    } catch (err) {
-      setError(err.message || 'Impossible de charger la suite');
-    } finally {
-      setLoading(false);
-    }
-  };
+  });
+  const { items, page, totalPages, loading, loadMore } = list;
+  let error = null;
+  if (list.error) error = list.error.message || 'Impossible de charger les propositions';
+  else if (list.moreError) error = list.moreError.message || 'Impossible de charger la suite';
 
   return (
     <div>

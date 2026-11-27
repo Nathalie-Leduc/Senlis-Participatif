@@ -15,22 +15,22 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api.js';
+import { clearAllDrafts } from '../utils/draftStorage.js';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // true pendant le check initial
+  // true pendant le check initial — et seulement s'il y a un jeton à
+  // vérifier (S5R2-08 : décidé dès le départ, plutôt que de repasser à
+  // false au début de l'effet, ce qui forçait un second rendu)
+  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('token')));
 
   // Au montage : si un token existe en localStorage, on vérifie
   // qu'il est encore valide en appelant /auth/me.
   // Si le token est expiré, on le supprime silencieusement.
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    if (!localStorage.getItem('token')) return;
 
     api.get('/auth/me')
       .then((data) => setUser(data.user))
@@ -99,6 +99,9 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
+    // S5R2-13 : sur un ordinateur partagé, on ne laisse aucune saisie
+    // en cours derrière soi (réponses d'enquête, brouillons d'admin)
+    clearAllDrafts();
     setUser(null);
   }, []);
 
@@ -110,10 +113,14 @@ export function AuthProvider({ children }) {
 
   const isLogged = !!user;
   const isAdmin = user?.role === 'ADMIN';
+  // S5R2-11 : « Admin-test » — prépare et teste des brouillons, ne publie jamais
+  const isEditor = user?.role === 'EDITOR';
+  // L'équipe « en cuisine » : accès aux pages de gestion (ADMIN ou Admin-test)
+  const isStaff = isAdmin || isEditor;
 
   return (
     <AuthContext.Provider value={{
-      user, isLogged, isAdmin, loading,
+      user, isLogged, isAdmin, isEditor, isStaff, loading,
       register, login, verifyTwoFactor, logout, refreshUser, replaceToken,
     }}>
       {children}

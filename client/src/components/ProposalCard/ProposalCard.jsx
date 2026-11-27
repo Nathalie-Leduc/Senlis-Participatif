@@ -21,6 +21,7 @@
 import { Link } from 'react-router-dom';
 import useScrollReveal from '../../hooks/useScrollReveal.js';
 import { assetUrl } from '../../services/api.js';
+import { describeZone } from '../../constants/zones.js';
 
 const STATUS_LABELS = {
   PUBLISHED: 'En concertation',
@@ -84,12 +85,22 @@ export default function ProposalCard({ proposal }) {
       )}
 
       {/* ── Titre + résumé ──────────────────────────────── */}
-      <h3 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, margin: '10px 0 6px' }}>
+      {/* h2 (S5R2-08 partie 3, RGAA 9.1) : sur la page Propositions, la
+          carte suit directement le h1 — un h3 sautait un niveau (Lighthouse
+          « heading-order »). Même niveau que les cartes d'enquêtes. */}
+      <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, margin: '10px 0 6px' }}>
         {proposal.title}
-      </h3>
+      </h2>
       <p style={{ color: '#6B6257', fontSize: 16, marginBottom: 18, lineHeight: 1.5 }}>
         {proposal.summary}
       </p>
+
+      {/* S5R-10 : zone concernée, si déclarée */}
+      {describeZone(proposal) && (
+        <p style={{ fontSize: 14, color: '#1E5F7C', margin: '-10px 0 16px' }}>
+          <span aria-hidden="true">📍 </span>{describeZone(proposal)}
+        </p>
+      )}
 
       {/* ── Jauge de vote ────────────────────────────────── */}
       <div className="vote-bar" ref={barRef}>

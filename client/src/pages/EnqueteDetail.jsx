@@ -5,50 +5,48 @@
 // page d'atterrissage avant d'agir. Ici, "agir" = soit répondre
 // (si ouverte et pas encore fait), soit consulter les résultats.
 //
+// S5R2-11 : même chose pour un compte Admin-test, quel que soit le statut
+// (retour du 09/10) — le mode test n'enregistre rien, aucun risque.
+//
+// S5R2-01 : pour l'administratrice, « Répondre » est remplacé par
+// « Tester l'enquête » — disponible quel que soit le statut, y compris
+// en brouillon (c'est justement là qu'on en a le plus besoin). Un
+// compte admin ne répond jamais pour de vrai : il fausserait les
+// résultats (l'API le refuse aussi, code ADMIN_CANNOT_RESPOND).
+//
 // hasResponded vient de l'API (S4-05) : null pour un visiteur
 // anonyme (on ne SAIT pas s'il a déjà répondu, différent de "non").
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { api } from '../services/api.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import Mascot from '../components/Mascot/Mascot.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { describeSurveyLength } from '../utils/surveyLength.js';
 import { describeAudience, isEveryone } from '../utils/audience.js';
+import DraftBanner from '../components/DraftBanner/DraftBanner.jsx';
+import BackLink from '../components/BackLink/BackLink.jsx';
 
 export default function EnqueteDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { isLogged } = useAuth();
+  const { isLogged, isStaff } = useAuth();
 
-  const [survey, setSurvey] = useState(null);
+  // S5R2-08 : chargement commun (useApiQuery)
+  const { data, error: loadError, loading } = useApiQuery(`/surveys/${slug}`);
+  const survey = data?.survey ?? null;
+  const hasResponded = data?.hasResponded ?? null;
+  // S5R-07 : true / false / null (on ne sait pas — visiteur anonyme ou profil incomplet)
+  const inAudience = data?.inAudience ?? null;
+  let error = null;
+  if (loadError) {
+    error = loadError.status === 404
+      ? "Cette enquête n'existe pas ou plus."
+      : (loadError.message || 'Impossible de charger cette enquête');
+  }
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(survey?.title ?? 'Enquête');
-  const [hasResponded, setHasResponded] = useState(null);
-  // S5R-07 : true / false / null (on ne sait pas — visiteur anonyme ou profil incomplet)
-  const [inAudience, setInAudience] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    api.get(`/surveys/${slug}`)
-      .then((data) => {
-        setSurvey(data.survey);
-        setHasResponded(data.hasResponded);
-        setInAudience(data.inAudience ?? null);
-      })
-      .catch((err) => setError(
-        err.status === 404
-          ? "Cette enquête n'existe pas ou plus."
-          : (err.message || 'Impossible de charger cette enquête'),
-      ))
-      .finally(() => setLoading(false));
-  }, [slug]);
 
   if (loading) {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
@@ -74,7 +72,9 @@ export default function EnqueteDetail() {
   // à la fois false ET null/anonyme) — c'est le clic qui décide quoi
   // faire ensuite (répondre directement, ou passer par la connexion
   // d'abord), jamais l'affichage du bouton lui-même.
-  const canOfferToRespond = isOpen && hasResponded !== true;
+  const canOfferToRespond = !isStaff && isOpen && hasResponded !== true;
+  // Toute l'équipe (admin, Admin-test), n'importe quel statut
+  const canTest = isStaff;
 
   const handleRespond = () => {
     if (!isLogged) {
@@ -86,6 +86,11 @@ export default function EnqueteDetail() {
 
   return (
     <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
+      {/* Recette du 13/10 : revenir à la liste d'où l'on vient */}
+      <BackLink
+        publicList={{ to: '/enquetes', label: 'Toutes les enquêtes' }}
+        staffList={{ to: '/admin/enquetes', label: 'Administration — Enquêtes' }}
+      />
       <span style={{
         fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px',
         color: isOpen ? '#3A7A4D' : '#6B6257',
@@ -93,6 +98,7 @@ export default function EnqueteDetail() {
         {isOpen ? 'Enquête ouverte' : 'Enquête clôturée'}
       </span>
 
+      <DraftBanner status={survey.status} />
       <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 30, margin: '10px 0 14px' }}>
         {survey.title}
       </h1>
@@ -127,7 +133,14 @@ export default function EnqueteDetail() {
             Répondre à l'enquête
           </button>
         )}
-        {isOpen && hasResponded === true && (
+        {/* S5R2-01 : la répétition générale — on parcourt l'enquête
+            comme un·e citoyen·ne, mais rien n'est enregistré */}
+        {canTest && (
+          <button onClick={() => navigate(`/enquetes/${slug}/repondre`)} className="btn btn-primary">
+            🧪 Tester l'enquête
+          </button>
+        )}
+        {!isStaff && isOpen && hasResponded === true && (
           <span style={{ color: '#3A7A4D', fontWeight: 700 }}>✓ Vous avez déjà répondu — merci !</span>
         )}
         <Link

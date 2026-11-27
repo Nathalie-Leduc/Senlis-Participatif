@@ -1,15 +1,31 @@
 // ══════════════════════════════════════════════════════════
 // Widget Accessibilité — bouton flottant + panneau (S5-04)
 //
-// La lecture à voix haute utilise SpeechSynthesis, une API DU
-// NAVIGATEUR (pas un lecteur d'écran tiers qu'on ne peut pas
-// piloter depuis un site web) — c'est la seule des fonctions de
-// la maquette EqualWeb qui soit authentiquement reproductible
-// sans dépendance externe.
+// Lecture au survol (S5R2-07, recette du 08/10) :
+//  - voix NATURELLES (Azure, par le relais de l'API) quand le serveur
+//    les propose, sinon les voix de l'APPAREIL — les plus naturelles en
+//    premier ; choix de la voix et de la vitesse, gardés d'une visite
+//    à l'autre ;
+//  - ne lit que les éléments qui portent du texte (utils/hoverReading.js),
+//    jamais un champ de saisie, jamais les pages de compte ou
+//    d'administration (données personnelles) ;
+//  - trois commandes : Pause, Reprendre, Arrêter, dans une barre en bas de
+//    l'écran pendant la lecture — « Arrêter » coupe la lecture ET désactive
+//    la lecture au survol (avant, elle reprenait au survol suivant).
+// Le moteur (Azure ou appareil, repli automatique) est dans
+// services/speechReader.js.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  useState, useRef, useEffect, useMemo,
+} from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAccessibility } from '../../contexts/AccessibilityContext.jsx';
+import { api } from '../../services/api.js';
+import { createSpeechReader, AZURE_PREFIX, DEVICE_PREFIX } from '../../services/speechReader.js';
+import {
+  readableTarget, isPrivatePath, fitForSpeech, frenchBrowserVoices,
+} from '../../utils/hoverReading.js';
 
 const CONTRAST_OPTIONS = [
   { value: 'none', label: 'Normal' },
@@ -18,15 +34,6 @@ const CONTRAST_OPTIONS = [
   { value: 'mono', label: 'Monochrome' },
 ];
 
-// Pas de filtre par balise (essayé, mais le projet mélange des
-// textes bruts posés directement dans des <div> avec des <span>
-// enfants pour la mise en forme — ex. `<div><span>0</span>
-// participants</div>` : le mot "participants" n'appartient à AUCUNE
-// balise de la liste, donc jamais lu). À la place, un plafond de
-// longueur : `e.target` est déjà l'élément le plus précis sous le
-// curseur, donc le vrai risque n'est pas "quelle balise" mais "un
-// grand conteneur sans enfant plus précis à cet endroit précis",
-// qu'on écarte simplement s'il contient trop de texte d'un coup.
 // S5R-03 : 4 niveaux d'interligne au lieu d'un simple « augmenté ».
 // 1,5 est la valeur de référence du critère WCAG 1.4.12.
 const LINE_HEIGHT_OPTIONS = [
@@ -39,16 +46,30 @@ const LINE_HEIGHT_OPTIONS = [
   { value: 2, label: '2' },
 ];
 
-const MAX_HOVER_READ_LENGTH = 400;
+const RATE_OPTIONS = [
+  { value: 'lente', label: 'Lente' },
+  { value: 'normale', label: 'Normale' },
+  { value: 'rapide', label: 'Rapide' },
+];
 
-// Retire émojis/pictogrammes avant lecture : une synthèse vocale qui
-// tombe sur "♿" ou "🦌" au milieu d'une phrase produit un son
-// incohérent (elle tente de le "prononcer") plutôt que de l'ignorer.
-function cleanTextForSpeech(text) {
-  return text
-    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+// Délai avant de parler : qui traverse la page sans s'arrêter ne doit
+// pas déclencher une lecture à chaque élément traversé
+const HOVER_DELAY_MS = 300;
+
+// Voix et vitesse choisies, gardées d'une visite à l'autre (sur cet
+// appareil seulement). try/catch : navigation privée, stockage bloqué.
+const PREFS_KEY = 'senlis:lecture';
+function loadPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {};
+  } catch {
+    return {};
+  }
+}
+function savePrefs(prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch { /* stockage indisponible : réglage gardé pour cette visite seulement */ }
 }
 
 export default function AccessibilityWidget() {
@@ -64,8 +85,21 @@ export default function AccessibilityWidget() {
   const toggleRef = useRef(null);
   const closeRef = useRef(null);
   const wasOpenRef = useRef(false);
-  const voicesRef = useRef([]);
   const hoverTimerRef = useRef(null);
+  const lastElementRef = useRef(null);
+  const { pathname } = useLocation();
+  const privatePage = isPrivatePath(pathname);
+
+  // ── Lecteur vocal (un seul pour toute la visite) ──────────
+  const reader = useMemo(() => createSpeechReader(), []);
+  const [reading, setReading] = useState({ status: 'idle', notice: null });
+  useEffect(() => reader.subscribe(setReading), [reader]);
+
+  // Voix naturelles proposées par le serveur : demandé une seule fois,
+  // à la première activation (pas de requête pour qui n'en a pas besoin)
+  const [azureVoices, setAzureVoices] = useState(null);
+  const [deviceVoices, setDeviceVoices] = useState([]);
+  const [prefs, setPrefs] = useState(loadPrefs);
 
   // Ferme le panneau à l'échap — un widget qui flotte par-dessus
   // tout le site doit pouvoir se fermer au clavier sans avoir à
@@ -86,65 +120,89 @@ export default function AccessibilityWidget() {
     return () => document.removeEventListener('keydown', handleKey);
   }, [open]);
 
-  // Les voix ne sont pas toujours prêtes au premier rendu (chargement
-  // asynchrone selon le navigateur) — on les récupère dès qu'elles le
-  // sont, pour ne pas avoir à y repenser au moment de parler.
+  // Les voix de l'appareil arrivent parfois après le premier rendu
+  // (chargement asynchrone selon le navigateur) : on les reprend dès
+  // que le navigateur les annonce
   useEffect(() => {
-    if (!('speechSynthesis' in window)) return undefined;
-
-    const loadVoices = () => { voicesRef.current = window.speechSynthesis.getVoices(); };
+    const synth = window.speechSynthesis;
+    if (!synth) return undefined;
+    const loadVoices = () => setDeviceVoices(frenchBrowserVoices(synth.getVoices?.() ?? []));
     loadVoices();
-    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+    synth.addEventListener?.('voiceschanged', loadVoices);
+    return () => synth.removeEventListener?.('voiceschanged', loadVoices);
   }, []);
 
-  const speakText = useCallback((rawText) => {
-    if (!window.speechSynthesis) return;
-    const text = cleanTextForSpeech(rawText);
-    if (!text) return;
+  useEffect(() => {
+    if (!hoverRead || azureVoices !== null) return;
+    api.get('/tts')
+      .then((info) => setAzureVoices(info?.enabled ? info.voices : []))
+      .catch(() => setAzureVoices([])); // API injoignable : voix de l'appareil
+  }, [hoverRead, azureVoices]);
 
-    window.speechSynthesis.cancel();
+  // Toutes les voix proposées, naturelles (serveur) d'abord
+  const voiceOptions = useMemo(() => [
+    ...(azureVoices ?? []).map((v) => ({ id: AZURE_PREFIX + v.id, label: v.label, azure: true })),
+    ...deviceVoices.map((v) => ({ id: DEVICE_PREFIX + v.voiceURI, label: v.name, azure: false })),
+  ], [azureVoices, deviceVoices]);
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'fr-FR';
-    // lang='fr-FR' n'est qu'une INDICATION — sans voix française
-    // explicitement choisie, certains navigateurs prennent la
-    // première voix disponible (souvent anglaise), qui prononce le
-    // texte français lettre à lettre de façon incompréhensible.
-    const frenchVoice = voicesRef.current.find((v) => v.lang?.toLowerCase().startsWith('fr'));
-    if (frenchVoice) utterance.voice = frenchVoice;
-    // Un peu plus lent que le défaut (1) : plus clair à l'oreille,
-    // surtout pour quelqu'un qui s'appuie dessus pour comprendre.
-    utterance.rate = 0.95;
+  // La voix choisie si elle existe encore sur cet appareil, sinon la première
+  const voice = voiceOptions.some((o) => o.id === prefs.voice) ? prefs.voice : voiceOptions[0]?.id;
+  const rate = RATE_OPTIONS.some((o) => o.value === prefs.rate) ? prefs.rate : 'normale';
+  const azureSelected = voice?.startsWith(AZURE_PREFIX);
 
-    window.speechSynthesis.speak(utterance);
-  }, []);
+  const changePrefs = (patch) => {
+    const next = { ...prefs, voice, rate, ...patch };
+    setPrefs(next);
+    savePrefs(next);
+  };
 
-  const stopSpeaking = () => {
-    window.speechSynthesis?.cancel();
+  // Arrêter = couper la lecture ET la désactiver (recette du 08/10)
+  const stopReading = () => {
+    clearTimeout(hoverTimerRef.current);
+    reader.stop();
+    setHoverRead(false);
   };
 
   // ── Mode "lecture au survol" ──────────────────────────
-  // Remplace la lecture de toute la page : on ne lit QUE l'élément
-  // sous la souris, avec un court délai avant de parler (l'utilisateur
-  // qui traverse la page sans s'arrêter ne doit pas déclencher une
-  // lecture à chaque élément qu'il ne fait que traverser du regard).
+  // On ne lit QUE l'élément sous la souris, après un court délai.
+  // Les réglages courants (voix, vitesse) passent par une référence :
+  // l'écouteur n'est pas recréé à chaque changement de réglage.
+  const settingsRef = useRef({ voice, rate });
+  useEffect(() => { settingsRef.current = { voice, rate }; }, [voice, rate]);
+
   useEffect(() => {
-    if (!hoverRead) return undefined;
+    if (!hoverRead || privatePage) return undefined;
 
     const handleMouseOver = (e) => {
-      // Ignore le panneau lui-même : on ne veut pas lire ses propres
-      // boutons/options pendant qu'on les survole pour les régler.
+      // Ignore le panneau lui-même : on ne lit pas ses propres boutons
+      // pendant qu'on les survole pour les régler
       if (panelRef.current?.contains(e.target)) return;
-
-      const text = e.target.innerText;
-      if (!text?.trim() || text.length > MAX_HOVER_READ_LENGTH) return;
+      // En pause, le survol ne relance RIEN (recette du 23/11 : en quittant
+      // la barre, la souris passait sur un texte, qui se mettait à parler —
+      // la pause semblait ne pas tenir). Seuls Reprendre ou Arrêter en sortent.
+      if (reader.status === 'paused') return;
+      const found = readableTarget(e.target);
+      // Rien à lire, ou toujours le même élément (la souris bouge dedans)
+      if (!found || found.element === lastElementRef.current) return;
 
       clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = setTimeout(() => speakText(text), 200);
+      hoverTimerRef.current = setTimeout(() => {
+        lastElementRef.current = found.element;
+        // Recette du 23/11 : le panneau se ferme quand une lecture commence —
+        // les commandes sont dans la barre de lecture, et il ne cache plus
+        // la page qu'on est en train de lire. On le rouvre avec le bouton ♿.
+        setOpen(false);
+        reader.speak(fitForSpeech(found.text), settingsRef.current);
+      }, HOVER_DELAY_MS);
     };
 
-    const handleMouseOut = () => clearTimeout(hoverTimerRef.current);
+    const handleMouseOut = (e) => {
+      clearTimeout(hoverTimerRef.current);
+      // Sorti de l'élément lu : y revenir le relira
+      if (lastElementRef.current && !lastElementRef.current.contains(e.relatedTarget)) {
+        lastElementRef.current = null;
+      }
+    };
 
     document.addEventListener('mouseover', handleMouseOver);
     document.addEventListener('mouseout', handleMouseOut);
@@ -152,11 +210,11 @@ export default function AccessibilityWidget() {
       document.removeEventListener('mouseover', handleMouseOver);
       document.removeEventListener('mouseout', handleMouseOut);
       clearTimeout(hoverTimerRef.current);
-      window.speechSynthesis?.cancel();
+      lastElementRef.current = null;
+      // Lecture désactivée, ou arrivée sur une page privée : silence
+      reader.stop();
     };
-  }, [hoverRead, speakText]);
-
-  const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  }, [hoverRead, privatePage, reader]);
 
   return (
     <>
@@ -290,27 +348,106 @@ export default function AccessibilityWidget() {
             </label>
           </section>
 
-          {speechSupported && (
-            <section className="a11y-section">
-              <h3>Lecture au survol</h3>
-              <label className="a11y-toggle-row">
-                <input
-                  type="checkbox" checked={hoverRead}
-                  onChange={(e) => {
-                    setHoverRead(e.target.checked);
-                    if (!e.target.checked) stopSpeaking();
-                  }}
-                />
-                Lire le texte survolé par la souris
-              </label>
-              {hoverRead && (
-                <p style={{ fontSize: 12, color: '#6B6257', margin: '6px 0 0' }}>
-                  Passez la souris sur un titre, un paragraphe ou un bouton pour l'entendre.
+          <section className="a11y-section">
+            <h3>Lecture au survol</h3>
+            <label className="a11y-toggle-row">
+              <input
+                type="checkbox" checked={hoverRead}
+                onChange={(e) => {
+                  if (e.target.checked) setHoverRead(true);
+                  else stopReading();
+                }}
+              />
+              Lire le texte survolé par la souris
+            </label>
+            {hoverRead && (
+              <>
+                <p className="a11y-hint">
+                  {privatePage
+                    ? 'Pas de lecture sur cette page : elle affiche des données personnelles.'
+                    : 'Passez la souris sur un titre, un paragraphe ou un bouton pour l\'entendre.'}
                 </p>
-              )}
-              <button type="button" onClick={stopSpeaking} style={{ marginTop: 8 }}>⏹ Arrêter la lecture</button>
-            </section>
-          )}
+
+                {voiceOptions.length > 0 && (
+                  <>
+                    <label className="a11y-subtitle" htmlFor="a11y-voice">Voix</label>
+                    <select
+                      id="a11y-voice" className="a11y-select" value={voice}
+                      onChange={(e) => changePrefs({ voice: e.target.value })}
+                    >
+                      {azureVoices?.length > 0 && (
+                        <optgroup label="Voix naturelles">
+                          {voiceOptions.filter((o) => o.azure).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                        </optgroup>
+                      )}
+                      {deviceVoices.length > 0 && (
+                        <optgroup label="Voix de cet appareil">
+                          {voiceOptions.filter((o) => !o.azure).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                        </optgroup>
+                      )}
+                    </select>
+                    {azureSelected && (
+                      // RGPD : Microsoft est sous-traitant — on le dit là où l'on choisit
+                      <p className="a11y-hint">
+                        Voix produites par Microsoft Azure (centre de données en France) : seul le
+                        texte lu lui est transmis, jamais vos données de compte.{' '}
+                        <Link to="/confidentialite">En savoir plus</Link>
+                      </p>
+                    )}
+                  </>
+                )}
+
+                <p className="a11y-subtitle" id="a11y-rate-label">Vitesse</p>
+                <div className="a11y-options" role="group" aria-labelledby="a11y-rate-label">
+                  {RATE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value} type="button" aria-pressed={rate === opt.value}
+                      onClick={() => changePrefs({ rate: opt.value })}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Recette du 23/11 : plus de Pause / Reprendre ici. Le panneau est
+                    loin du texte lu : le temps d'y venir, une lecture courte était
+                    finie et les boutons redevenaient inactifs (curseur « interdit »).
+                    Les commandes sont dans la barre en bas de l'écran, qui n'existe
+                    QUE pendant une lecture. Pour tout arrêter : décocher la case
+                    ci-dessus, ou « Arrêter » dans la barre. */}
+                <p className="a11y-hint">
+                  <strong>Pause, Reprendre, Arrêter</strong> : dès qu'une lecture commence, ce
+                  panneau se ferme et une barre de commandes s'affiche en bas de l'écran. En
+                  pause, le survol ne lit plus rien jusqu'à « Reprendre ».
+                </p>
+              </>
+            )}
+          </section>
+
+          {/* Recette du 23/11 : « peut-on répondre vocalement ? » — la dictée
+              existe déjà dans chaque appareil, gratuitement, dans tous les
+              champs de texte du site. On l'explique, sans rien envoyer de plus :
+              le site ne reçoit que le texte final, comme s'il avait été tapé. */}
+          <section className="a11y-section">
+            <h3>Répondre à la voix</h3>
+            <p className="a11y-hint">
+              Votre appareil sait écrire sous la dictée, dans tous les champs de texte du site
+              (réponses d'enquête, propositions) :
+            </p>
+            <ul className="a11y-dictation">
+              <li><strong>Windows</strong> : cliquez dans le champ, puis touches <kbd>⊞ Windows</kbd> + <kbd>H</kbd></li>
+              <li><strong>Mac</strong> : touche <kbd>🎤</kbd> du clavier, ou menu Édition → Démarrer la dictée</li>
+              <li><strong>Téléphone, tablette</strong> : le micro 🎤 du clavier qui s'affiche</li>
+              <li>
+                <strong>Linux</strong> : pas de dictée intégrée au système — utilisez un
+                téléphone, ou une extension de dictée de votre navigateur
+              </li>
+            </ul>
+            <p className="a11y-hint">
+              La dictée est faite par votre appareil (Microsoft, Apple ou Google selon le cas) :
+              Senlis Participatif ne reçoit que le texte, que vous pouvez relire avant d'envoyer.
+            </p>
+          </section>
 
           <button type="button" className="a11y-reset" onClick={reset}>
             Réinitialiser tous les réglages
@@ -318,6 +455,38 @@ export default function AccessibilityWidget() {
           <button type="button" className="a11y-close-bottom" onClick={() => setOpen(false)}>
             Fermer
           </button>
+        </div>
+      )}
+
+      {/* ── Barre de lecture (recette du 23/11) ──────────────
+          Un titre se lit en 2 secondes : le temps d'aller jusqu'au panneau,
+          la lecture était finie et Pause redevenue inactive. Cette barre
+          s'affiche en bas de l'écran PENDANT la lecture seulement, près de
+          tout, panneau ouvert ou fermé. data-no-read : elle ne se lit pas
+          elle-même quand on la survole.
+          Analogie : la télécommande posée sur l'accoudoir plutôt que rangée
+          dans le tiroir du meuble télé. */}
+      {hoverRead && reading.status !== 'idle' && (
+        <div className="a11y-player" role="region" aria-label="Lecture en cours" data-no-read>
+          <span className="a11y-player-status">
+            <span aria-hidden="true">🔊 </span>
+            {{ loading: 'Préparation…', speaking: 'Lecture', paused: 'En pause' }[reading.status]}
+          </span>
+          {reading.status === 'paused' ? (
+            <button type="button" onClick={() => reader.resume()}>
+              <span aria-hidden="true">▶ </span>Reprendre
+            </button>
+          ) : (
+            <button type="button" onClick={() => reader.pause()} aria-disabled={reading.status !== 'speaking'}>
+              <span aria-hidden="true">⏸ </span>Pause
+            </button>
+          )}
+          <button type="button" onClick={stopReading}>
+            <span aria-hidden="true">⏹ </span>Arrêter
+          </button>
+          {/* Le panneau étant fermé pendant la lecture, le message de repli
+              (« voix naturelle indisponible ») s'affiche dans la barre */}
+          {reading.notice && <span className="a11y-player-notice" role="status">{reading.notice}</span>}
         </div>
       )}
     </>

@@ -144,6 +144,22 @@ describe('Upload d\'image (Multer) → 400 / 413', () => {
     expect(res.body.error.code).toBe('INVALID_FILE_TYPE');
   });
 
+  it('400 INVALID_IMAGE pour un faux PNG (type annoncé falsifié) — pas une 500 (OWASP A10)', async () => {
+    const proposal = await seedProposal();
+    const { token } = await makeAdminUser();
+
+    const res = await request(app)
+      .post(`/api/v1/proposals/${proposal.id}/image`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('image', Buffer.from('<script>alert(1)</script>'), { filename: 'photo.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_IMAGE');
+    expect(res.body.error.message).not.toMatch(/Input buffer/); // pas de message technique
+    const after = await prisma.proposal.findUnique({ where: { id: proposal.id } });
+    expect(after.imagePath).toBeNull(); // rien d'enregistré
+  });
+
   it('400 UPLOAD_ERROR si le fichier arrive sous un autre nom de champ que « image »', async () => {
     const proposal = await seedProposal();
     const { token } = await makeAdminUser();

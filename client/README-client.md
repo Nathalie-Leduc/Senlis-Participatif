@@ -19,6 +19,8 @@ npm run dev              # http://localhost:5173
 | `npm run preview` | Prévisualisation du build |
 | `npm test` | Vitest + Testing Library |
 | `npm run lint` | ESLint (config React + a11y) |
+| `node scripts/update-iris.mjs` | Mise à jour annuelle des contours des quartiers (IGN), Saint-Vincent redécoupé automatiquement — `--essai` pour comparer sans écrire, `--source fichier` hors ligne (S5R-13, procédure : document 32) |
+| `node scripts/extract-parkings.mjs` | Ancienne extraction des parkings OpenStreetMap — plus utilisée par la carte depuis S5R2-05 (parkings gérés dans `/admin/parkings`) |
 
 ## Structure
 
@@ -89,4 +91,4 @@ Le cerf est un **SVG inline** : zéro requête réseau, stylable en CSS, animabl
 
 ## Cartographie
 
-`MapView` encapsule react-leaflet (fonds OSM, périmètres GeoJSON, couche IRIS statique dans `public/geo/`). La carte est chargée en lazy (import dynamique) : elle ne pèse rien tant qu'elle n'est pas affichée — performance et éco-conception.
+`MapView` encapsule react-leaflet (fonds OSM, périmètres GeoJSON, couche des quartiers statique dans `public/data/iris-senlis.geojson`, parkings de l'API avec points et traits). La carte est chargée en lazy (import dynamique) : elle ne pèse rien tant qu'elle n'est pas affichée — performance et éco-conception.

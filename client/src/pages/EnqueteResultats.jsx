@@ -2,43 +2,31 @@
 // Page résultats — /enquetes/:slug/resultats
 //
 // Consomme directement GET /surveys/:slug/results (S4-03) — la
-// forme de la réponse dicte l'affichage : "options" → barres,
+// forme de la réponse dicte l'affichage : "options" → graphique (S5R2-04),
 // "stats" → nombre, "totalAnswered" → juste un compte (voir le
 // contrôleur pour le détail de pourquoi le texte libre n'est pas
 // exposé ici).
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../services/api.js';
-import useScrollReveal from '../hooks/useScrollReveal.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
+import ResultChart from '../components/ResultChart/ResultChart.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function EnqueteResultats() {
   const { slug } = useParams();
-  const [results, setResults] = useState(null);
+  // S5R2-08 : chargement commun (useApiQuery), message d'erreur selon le cas
+  const { data: results, error: loadError, loading } = useApiQuery(`/surveys/${slug}/results`);
+  let error = null;
+  if (loadError?.status === 404) {
+    error = "Cette enquête n'existe pas ou plus.";
+  } else if (loadError?.code === 'RESULTS_NOT_PUBLISHED') {
+    error = "Les résultats de cette enquête n'ont pas encore été publiés par l'administration — revenez un peu plus tard !";
+  } else if (loadError) {
+    error = loadError.message || 'Impossible de charger les résultats';
+  }
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(results ? `Résultats — ${results.survey.title}` : 'Résultats de l’enquête');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    api.get(`/surveys/${slug}/results`)
-      .then(setResults)
-      .catch((err) => {
-        if (err.status === 404) {
-          setError("Cette enquête n'existe pas ou plus.");
-        } else if (err.code === 'RESULTS_NOT_PUBLISHED') {
-          setError("Les résultats de cette enquête n'ont pas encore été publiés par l'administration — revenez un peu plus tard !");
-        } else {
-          setError(err.message || 'Impossible de charger les résultats');
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [slug]);
 
   if (loading) {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
@@ -83,14 +71,9 @@ export default function EnqueteResultats() {
             )}
             {q.totalForQuestion === results.totalResponses && <div style={{ marginBottom: 14 }} />}
 
-            {/* CHOIX_UNIQUE / CHOIX_MULTIPLE / OUI_NON → une barre par option */}
-            {q.options && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {q.options.map((opt) => (
-                  <ResultBar key={opt.id} option={opt} />
-                ))}
-              </div>
-            )}
+            {/* CHOIX_UNIQUE / CHOIX_MULTIPLE / OUI_NON → graphique Chart.js
+                (S5R2-04) et, à côté, le tableau des nombres */}
+            {q.options && <ResultChart question={q} />}
 
             {/* NOMBRE → quelques statistiques */}
             {q.stats && (
@@ -112,27 +95,6 @@ export default function EnqueteResultats() {
             )}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Une barre de résultat, animée à l'entrée dans l'écran ────
-// Composant à part plutôt qu'un appel direct à useScrollReveal dans
-// le .map() ci-dessus : un Hook ne peut pas être appelé dans une
-// boucle — il faut un composant distinct, instancié une fois par
-// option, chacun avec son propre appel de Hook indépendant.
-function ResultBar({ option }) {
-  const ref = useScrollReveal('is-visible', { threshold: 0.3 });
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-        <span>{option.label}</span>
-        <span style={{ color: '#6B6257' }}>{option.count} — {option.percentage}%</span>
-      </div>
-      <div ref={ref} className="result-bar" style={{ '--w': `${option.percentage}%` }}>
-        <span />
       </div>
     </div>
   );

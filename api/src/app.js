@@ -31,6 +31,8 @@ import proposalsRouter from './routes/proposals.js';
 import surveysRouter from './routes/surveys.js';
 import statsRouter from './routes/stats.js';
 import usersRouter from './routes/users.js';
+import parkingsRouter from './routes/parkings.js';
+import ttsRouter from './routes/tts.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
 const app = express();
@@ -75,7 +77,17 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: '10kb' }));
+// Taille maximale d'un corps JSON. 10 ko suffisent partout (un vote, une
+// proposition, un profil) et bloquent les envois géants — SAUF pour une
+// enquête : le formulaire d'administration renvoie le questionnaire
+// COMPLET, et l'enquête stationnement (39 questions) pèse déjà ~12 ko.
+// Recette du 13/10 : « Requête trop volumineuse » en voulant la clôturer.
+// 100 ko = 8 fois la plus grande enquête actuelle, toujours raisonnable.
+// Analogie : la boîte aux lettres accepte les lettres ; le guichet des
+// enquêtes, lui, accepte aussi les colis — mais pas les déménagements.
+const jsonDefault = express.json({ limit: '10kb' });
+const jsonSurveys = express.json({ limit: '100kb' });
+app.use((req, res, next) => (req.path.startsWith('/api/v1/surveys') ? jsonSurveys : jsonDefault)(req, res, next));
 
 // ── Fichiers statiques (images uploadées) ────────────────────
 // Servi hors de /api/v1 : ce n'est pas une "ressource API" au sens
@@ -96,7 +108,16 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 // ne vérifie pas forcément).
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: process.env.NODE_ENV === 'test' ? 10000 : 100,
+  limit: process.env.NODE_ENV === 'test' ? 10000 : 100, // « max » avant express-rate-limit 8 (même sens)
+  // Seed de démonstration (npm run seed:demo, 14/10) : le script fait
+  // des centaines de requêtes en quelques secondes, toutes depuis la
+  // même adresse — il était bloqué au bout de 100. Il lève donc cet
+  // interrupteur, qui vit DANS le processus (app.locals) : aucune
+  // requête venue du réseau ne peut l'actionner, et le serveur lancé
+  // par « npm run dev » ou en production ne le lève jamais.
+  // Analogie : le videur laisse passer l'équipe de montage par la porte
+  // de service, qui ne donne pas sur la rue.
+  skip: (req) => req.app.locals.bypassRateLimit === true,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -115,8 +136,22 @@ app.use('/api/v1/proposals', proposalsRouter);
 app.use('/api/v1/surveys', surveysRouter);
 app.use('/api/v1/stats', statsRouter);
 app.use('/api/v1/admin/users', usersRouter);
+app.use('/api/v1/parkings', parkingsRouter); // S5R2-05
+app.use('/api/v1/tts', ttsRouter); // S5R2-07 : voix naturelles (relais Azure)
 
 // Sprint 6 → app.use('/api/v1/comments', commentsRouter);
+
+// ── Adresse d'API inconnue → 404 en JSON (S5R2-08 partie 3) ──────────
+// Sans ce garde-fou, Express répond par sa page HTML « Cannot GET … » :
+// le client attend du JSON (message illisible), et la page trahit la
+// technologie du serveur (OWASP A02 — configuration). Placé APRÈS toutes
+// les routes : on n'y arrive que si aucune n'a répondu.
+app.use('/api', (req, _res, next) => {
+  const error = new Error('Adresse d\'API inconnue');
+  error.status = 404;
+  error.code = 'NOT_FOUND';
+  next(error);
+});
 
 // ── Gestionnaire d'erreurs ──────────────────────────────────
 app.use(errorHandler);

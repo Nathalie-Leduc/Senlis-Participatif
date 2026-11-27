@@ -35,13 +35,27 @@ export async function saveProposalImage(buffer) {
   const filename = `${randomUUID()}.webp`;
   const filepath = path.join(UPLOAD_DIR, filename);
 
-  await sharp(buffer)
-    // withoutEnlargement : une image DÉJÀ plus petite que 1200px de
-    // large n'est jamais agrandie (l'agrandir la rendrait juste floue
-    // sans le moindre bénéfice).
-    .resize({ width: MAX_WIDTH, withoutEnlargement: true })
-    .webp({ quality: 80 })
-    .toFile(filepath);
+  try {
+    await sharp(buffer)
+      // withoutEnlargement : une image DÉJÀ plus petite que 1200px de
+      // large n'est jamais agrandie (l'agrandir la rendrait juste floue
+      // sans le moindre bénéfice).
+      .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(filepath);
+  } catch {
+    // S5R2-08 partie 3 (OWASP A10 — situations exceptionnelles) : le
+    // type annoncé par le navigateur (« image/png ») se falsifie. Un
+    // faux PNG (du texte, un script…) n'était jamais enregistré — Sharp
+    // refuse de le décoder —, mais l'API répondait 500 « erreur
+    // interne » avec le message technique de Sharp. C'est une erreur de
+    // l'envoi, pas une panne : 400, message clair, rien d'écrit.
+    await unlink(filepath).catch(() => {}); // au cas où un début de fichier existerait
+    const error = new Error('Ce fichier n\'est pas une image lisible (JPEG, PNG ou WebP attendu)');
+    error.status = 400;
+    error.code = 'INVALID_IMAGE';
+    throw error;
+  }
 
   return `/uploads/proposals/${filename}`;
 }

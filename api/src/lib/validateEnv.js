@@ -14,13 +14,15 @@
 // justement pour être facile à tester avec de faux environnements,
 // sans avoir à manipuler de vraies variables globales dans les tests.
 // ══════════════════════════════════════════════════════════
+import { databaseUrl } from './databaseUrl.js';
 
 export function validateEnv(env = process.env) {
   const errors = [];
   const isProd = env.NODE_ENV === 'production';
 
-  if (!env.DATABASE_URL) {
-    errors.push('DATABASE_URL manquant');
+  // S5-22 : chez Clever Cloud, la base reliée fournit POSTGRESQL_ADDON_URI
+  if (!databaseUrl(env)) {
+    errors.push('DATABASE_URL manquant (ou POSTGRESQL_ADDON_URI chez Clever Cloud)');
   }
 
   if (!env.JWT_SECRET || env.JWT_SECRET === 'REMPLACER_PAR_64_CARACTERES_ALEATOIRES') {
@@ -30,6 +32,15 @@ export function validateEnv(env = process.env) {
   // Les vérifications suivantes ne bloquent qu'en PRODUCTION : en
   // dev, Mailtrap/localhost sont des choix normaux, pas des erreurs.
   if (isProd) {
+    // S5R2-08 partie 3 (OWASP A04 — cryptographie) : le JWT est signé
+    // en HS256. Un secret court (« secret », « senlis2026 ») se devine
+    // hors ligne à partir d'un seul jeton intercepté, et permet alors
+    // de fabriquer un jeton ADMIN. 32 caractères au moins (256 bits),
+    // tirés au hasard : openssl rand -hex 32 en donne 64.
+    if (env.JWT_SECRET && env.JWT_SECRET.length < 32) {
+      errors.push('JWT_SECRET trop court en production (32 caractères au moins — générer avec : openssl rand -hex 32)');
+    }
+
     if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) {
       errors.push('SMTP_HOST/SMTP_USER/SMTP_PASS doivent être renseignés en production (bascule Brevo)');
     } else if (env.SMTP_HOST.includes('mailtrap')) {

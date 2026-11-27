@@ -115,6 +115,8 @@ beforeEach(async () => {
   // Journal d'administration (S5A-06) : avant User par propreté,
   // même si la clé étrangère est en SetNull.
   await prisma.adminAuditLog.deleteMany();
+  await prisma.parking.deleteMany(); // S5R2-05
+  await prisma.loginThrottle.deleteMany(); // S5R-13b : compteurs d'essais de connexion
   await prisma.user.deleteMany();
 
   // On oublie aussi les appels enregistrés par le test précédent,

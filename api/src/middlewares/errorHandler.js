@@ -30,6 +30,8 @@ import multer from 'multer';
 const UNIQUE_FIELD_ERRORS = {
   email: { code: 'EMAIL_TAKEN', message: 'Cette adresse email est déjà utilisée' },
   pseudo: { code: 'PSEUDO_TAKEN', message: 'Ce pseudo est déjà pris — choisissez-en un autre' },
+  // S5R2-05 : seul « Parking » a un nom unique
+  name: { code: 'PARKING_NAME_TAKEN', message: 'Un parking porte déjà ce nom' },
 };
 
 // Nom d'index unique généré par Prisma : <Modèle>_<champ(s)>_key
@@ -116,7 +118,12 @@ function translateKnownError(err) {
     return { status: 400, code: 'INVALID_JSON', message: 'Corps de requête JSON mal formé' };
   }
   if (err.type === 'entity.too.large') {
-    return { status: 413, code: 'PAYLOAD_TOO_LARGE', message: 'Requête trop volumineuse' };
+    // Un message qui dit QUOI faire, pas seulement le nom technique de l'erreur
+    return {
+      status: 413,
+      code: 'PAYLOAD_TOO_LARGE',
+      message: 'Trop de contenu envoyé en une seule fois : réduisez la longueur des textes, ou contactez l’administratrice du site.',
+    };
   }
 
   return null;
@@ -132,7 +139,10 @@ export function errorHandler(err, _req, res, _next) {
   // stack n'a d'intérêt que pour les vraies erreurs inattendues :
   // inutile de noyer la console sous un « pseudo déjà pris ».
   console.error(`[ERROR] ${status} ${err.message}`);
-  if (status >= 500 && process.env.NODE_ENV !== 'production') {
+  // err.expose (S5R2-07) : une erreur 5xx ATTENDUE, levée exprès par
+  // notre code (ex. 503 TTS_UNAVAILABLE : voix naturelles indisponibles)
+  // — ni pile d'appels dans la console, ni code masqué au client.
+  if (status >= 500 && !err.expose && process.env.NODE_ENV !== 'production') {
     console.error(err.stack);
   }
 
@@ -143,7 +153,7 @@ export function errorHandler(err, _req, res, _next) {
       // Une erreur 500 ne renvoie jamais le code interne d'une
       // bibliothèque (ex. « P2003 » de Prisma) : il ne sert à rien au
       // client et renseigne un attaquant sur notre pile technique.
-      code: known?.code || (status < 500 && err.code) || 'INTERNAL_ERROR',
+      code: known?.code || ((status < 500 || err.expose) && err.code) || 'INTERNAL_ERROR',
       message:
         known?.message
         || (status === 500 && process.env.NODE_ENV === 'production'

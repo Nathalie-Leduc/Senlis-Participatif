@@ -14,7 +14,7 @@
 // jamais mélanger les autres.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useId, isValidElement, cloneElement } from 'react';
+import { useState, useEffect, useMemo, useId, isValidElement, cloneElement } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api.js';
 import {
@@ -22,9 +22,16 @@ import {
 } from '../constants/surveyStatus.js';
 import { QUARTIER_OPTIONS, TRAVAIL_QUARTIER_OPTIONS, TRAVAIL_TYPE_OPTIONS } from '../constants/situation.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import FormSaveBar from '../components/FormSaveBar/FormSaveBar.jsx';
+import DraftRestorePrompt from '../components/DraftRestorePrompt/DraftRestorePrompt.jsx';
+import { useFormDraft } from '../hooks/useFormDraft.js';
 import AudiencePicker from '../components/AudiencePicker/AudiencePicker.jsx';
+import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
 import { SURVEY_TEMPLATES, PROFILE_QUESTIONS, instantiateQuestions } from '../constants/surveyTemplates.js';
 import { EMPTY_AUDIENCE } from '../utils/audience.js';
+import { endOfDayIso, startOfDayIso, toDateInput, todayInput } from '../utils/surveyDates.js';
 
 // Menu "cette question met à jour...", et la liste de valeurs
 // possibles pour CHAQUE option une fois un champ choisi — mêmes
@@ -36,6 +43,31 @@ const SYNC_FIELD_OPTIONS = [
   { value: 'travailleQuartier', label: 'Quartier de travail' },
   { value: 'travailType', label: 'Type de travail' },
 ];
+// Nom lisible de chaque champ du profil (S5R-09 v2 : message de
+// confirmation) — « travaille à Senlis » ne se règle que sur une Oui/Non
+const PROFILE_FIELD_NAMES = {
+  situation: 'lieu de résidence',
+  quartier: 'quartier de résidence',
+  travailleQuartier: 'quartier de travail',
+  travailType: 'rôle au travail',
+  travailleASenlis: 'travaille à Senlis',
+};
+
+// Intitulé d'une question qui demande une ville (S5R-09 v4)
+const CITY_KEYWORDS = /ville|commune|localité|habitez|résidez|venez/i;
+
+// Mots qu'on s'attend à trouver dans l'intitulé d'une question reliée à
+// tel champ du profil. Pas une interdiction : un simple garde-fou contre
+// la case cochée par erreur sur une question sans rapport (recette du
+// 03/10 : « Connaissiez-vous ce projet ? » reliée à « travaille à Senlis »).
+const PROFILE_FIELD_KEYWORDS = {
+  situation: /résid|habit|vivez|logez|domicile/i,
+  quartier: /quartier/i,
+  travailleQuartier: /travail|activité|emploi/i,
+  travailType: /titre|dirig|gér|salari|rôle|statut/i,
+  travailleASenlis: /travail|activité|emploi/i,
+};
+
 const SYNC_VALUE_OPTIONS = {
   situation: [
     { value: 'CENTRE_RESIDENT', label: 'Résident du centre' },
@@ -55,7 +87,18 @@ const SYNC_VALUE_OPTIONS = {
 // position d'index plutôt que par identité).
 function emptyOption() {
   // endsSurvey (S5R-05) : choisir cette option termine l'enquête
-  return { key: crypto.randomUUID(), label: '', syncValue: null, endsSurvey: false };
+  // conditions (S5R2-02) : clés d'options de questions ANTÉRIEURES ; l'option
+  // n'est proposée que si l'une d'elles a été choisie (vide = toujours)
+  return { key: crypto.randomUUID(), label: '', syncValue: null, endsSurvey: false, conditions: [] };
+}
+
+/**
+ * Toutes les clés d'options dont une question dépend (S5R2-02) : ses
+ * propres conditions ET celles de ses options. Sert à savoir où elle
+ * peut être déplacée, et quelles questions dépendent d'un bloc retiré.
+ */
+function dependencyKeys(q) {
+  return [...q.conditions, ...q.options.flatMap((o) => o.conditions ?? [])];
 }
 
 /**
@@ -107,6 +150,43 @@ function emptyQuestion() {
   };
 }
 
+/**
+ * Positions où une question peut être DÉPLACÉE sans casser ses liens
+ * (S5R-09 v3) : une question ne peut dépendre que de questions
+ * ANTÉRIEURES (conditions d'affichage, limite de cases).
+ *  - elle ne peut donc pas remonter AVANT une question dont elle dépend ;
+ *  - ni descendre APRÈS une question qui dépend d'elle.
+ * Analogie : dans une recette, on peut déplacer « ajouter le sel », mais
+ * jamais avant « faire bouillir l'eau » s'il faut saler l'eau bouillante.
+ *
+ * @returns {{ min: number, max: number, after: number|null, before: number|null }}
+ *   positions (index) permises, et les questions qui bornent le choix
+ */
+export function allowedPositions(questions, index) {
+  const q = questions[index];
+  const ownOptionKeys = new Set(q.options.map((o) => o.key));
+  let after = null; // dernière question dont elle dépend
+  let before = null; // première question qui dépend d'elle
+
+  questions.forEach((other, i) => {
+    if (i === index) return;
+    // S5R2-02 : les conditions des OPTIONS comptent comme celles de la question
+    const isSource = dependencyKeys(q).some((key) => other.options.some((o) => o.key === key))
+      || q.maxChoicesFromKey === other.key;
+    const isDependent = dependencyKeys(other).some((key) => ownOptionKeys.has(key))
+      || other.maxChoicesFromKey === q.key;
+    if (isSource) after = after === null ? i : Math.max(after, i);
+    if (isDependent) before = before === null ? i : Math.min(before, i);
+  });
+
+  return {
+    min: after === null ? 0 : after + 1,
+    max: before === null ? questions.length - 1 : before - 1,
+    after,
+    before,
+  };
+}
+
 const EMPTY_FORM = {
   title: '',
   description: '',
@@ -124,12 +204,36 @@ export default function AdminSurveyForm() {
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(isEdit ? 'Modifier une enquête' : 'Nouvelle enquête');
   const navigate = useNavigate();
+  // S5R2-11 : un compte Admin-test ne travaille que sur des brouillons
+  const { user, isEditor } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [surveyId, setSurveyId] = useState(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  // Modèle appliqué en dernier (S5R-09, voir applyTemplate plus bas) —
+  // déclaré ici car il fait partie de la sauvegarde automatique
+  const [appliedTemplateId, setAppliedTemplateId] = useState(null);
+
+  // ── S5R2-13 : sauvegarde automatique de la saisie en cours ──
+  // Une clé par enquête modifiée, une pour « nouvelle enquête »
+  const snapshot = useMemo(() => ({ form, appliedTemplateId }), [form, appliedTemplateId]);
+  const draft = useFormDraft({
+    userId: user?.id,
+    scope: isEdit ? `survey-form:${slug}` : 'survey-form:new',
+    ready: !loading,
+    snapshot,
+    checkOnMount: !isEdit,
+  });
+  const checkDraft = draft.check;
+
+  const restoreDraft = () => {
+    const data = draft.restore();
+    if (!data) return;
+    setForm(data.form);
+    setAppliedTemplateId(data.appliedTemplateId ?? null);
+  };
 
   // ── En mode édition, charger l'enquête existante ─────────
   useEffect(() => {
@@ -144,8 +248,8 @@ export default function AdminSurveyForm() {
           description: s.description,
           audience: { ...EMPTY_AUDIENCE, ...s.audience },
           status: s.status,
-          opensAt: s.opensAt ? s.opensAt.slice(0, 10) : '',
-          closesAt: s.closesAt ? s.closesAt.slice(0, 10) : '',
+          opensAt: toDateInput(s.opensAt),
+          closesAt: toDateInput(s.closesAt),
           questions: s.questions.map((q) => ({
             // q.id existe déjà en base : on le réutilise tel quel comme
             // clé React, pas besoin d'en fabriquer une nouvelle.
@@ -157,6 +261,8 @@ export default function AdminSurveyForm() {
             options: q.options.length
               ? q.options.map((o) => ({
                 key: o.id, label: o.label, syncValue: o.syncValue || null, endsSurvey: Boolean(o.endsSurvey),
+                // S5R2-02 : les id des déclencheurs servent de clés, comme les conditions
+                conditions: o.conditionOptionIds || [],
               }))
               : [emptyOption(), emptyOption()],
             // Les id d'options en base servent de clés React (ci-dessus) :
@@ -170,9 +276,10 @@ export default function AdminSurveyForm() {
           })),
         });
       })
+      .then(() => checkDraft()) // S5R2-13 : des modifications non enregistrées ?
       .catch((err) => setError(err.message || 'Impossible de charger cette enquête'))
       .finally(() => setLoading(false));
-  }, [slug, isEdit]);
+  }, [slug, isEdit, checkDraft]);
 
   // ── Champs "de l'enquête" (niveau racine) ────────────────
   const handleChange = (e) => {
@@ -201,6 +308,8 @@ export default function AdminSurveyForm() {
   const withoutStaleReferences = (q, removedOptionKeys, lostNumberQuestionKey) => ({
     ...q,
     conditions: q.conditions.filter((key) => !removedOptionKeys.has(key)),
+    // S5R2-02 : même nettoyage pour les conditions de chaque option
+    options: q.options.map((o) => ({ ...o, conditions: (o.conditions ?? []).filter((key) => !removedOptionKeys.has(key)) })),
     maxChoicesFromKey: q.maxChoicesFromKey === lostNumberQuestionKey ? null : q.maxChoicesFromKey,
   });
 
@@ -295,10 +404,31 @@ export default function AdminSurveyForm() {
     });
   };
 
+  // ── S5R-09 v3 : déplacer une question ───────────────────
+  // (recette du 03/10 : « la copie arrive toujours en position 2, il
+  // faut pouvoir la mettre en 3, 4… »). Seules les positions qui
+  // respectent les dépendances sont proposées (allowedPositions).
+  const moveQuestion = (questionKey, toIndex) => {
+    setForm((prev) => {
+      const from = prev.questions.findIndex((q) => q.key === questionKey);
+      const { min, max } = allowedPositions(prev.questions, from);
+      if (toIndex < min || toIndex > max || toIndex === from) return prev;
+      const questions = [...prev.questions];
+      const [moved] = questions.splice(from, 1);
+      questions.splice(toIndex, 0, moved);
+      return { ...prev, questions };
+    });
+  };
+
   // ── S5R-09 : partir d'un modèle ──────────────────────────
+  // appliedTemplateId (déclaré en haut) : modèle appliqué en dernier
+  // (retour du 03/10 : « on ne voit pas le modèle choisi quand on
+  // clique dessus ») — sert à le mettre en valeur
+
   const applyTemplate = (template) => {
     const hasContent = form.questions.some((q) => q.label.trim());
     if (hasContent && !window.confirm('Remplacer les questions actuelles par celles du modèle ?')) return;
+    setAppliedTemplateId(template.id);
     setForm((prev) => ({
       ...prev,
       // Le titre et la description du modèle ne remplacent qu'un champ VIDE
@@ -316,7 +446,35 @@ export default function AdminSurveyForm() {
     setForm((prev) => {
       // Une question vide laissée par défaut est remplacée, pas conservée
       const rest = prev.questions.filter((q) => q.label.trim() || prev.questions.length > 1);
-      return { ...prev, questions: [...instantiateQuestions(PROFILE_QUESTIONS, emptyQuestion), ...rest] };
+      // fromProfileBlock : marque les questions insérées par CE bouton,
+      // pour pouvoir annuler l'insertion d'un coup (jamais envoyé à l'API)
+      const inserted = instantiateQuestions(PROFILE_QUESTIONS, emptyQuestion).map((q) => ({ ...q, fromProfileBlock: true }));
+      return { ...prev, questions: [...inserted, ...rest] };
+    });
+  };
+
+  // ── Annuler l'insertion (retour du 03/10) ────────────────
+  // Retire d'un coup les questions ajoutées par « Insérer les questions
+  // de profil », même si on les a modifiées depuis. Les conditions des
+  // AUTRES questions qui en dépendaient sont nettoyées, comme lorsqu'on
+  // retire une question une par une — et la confirmation le dit.
+  const profileBlockKeys = form.questions.filter((q) => q.fromProfileBlock).map((q) => q.key);
+  const removeProfileQuestions = () => {
+    const blockKeys = new Set(profileBlockKeys);
+    const blockOptionKeys = new Set(form.questions.filter((q) => blockKeys.has(q.key)).flatMap((q) => q.options.map((o) => o.key)));
+    const dependents = form.questions.filter((q) => !blockKeys.has(q.key)
+      && (dependencyKeys(q).some((key) => blockOptionKeys.has(key)) || blockKeys.has(q.maxChoicesFromKey)));
+    const message = `Retirer les ${blockKeys.size} questions de profil ?`
+      + (dependents.length
+        ? ` ${dependents.length} autre${dependents.length > 1 ? 's questions en dépendent' : ' question en dépend'} : ${dependents.length > 1 ? 'leurs conditions' : 'sa condition'} sur ces questions ser${dependents.length > 1 ? 'ont' : 'a'} supprimée${dependents.length > 1 ? 's' : ''}.`
+        : '');
+    if (!window.confirm(message)) return;
+
+    setForm((prev) => {
+      let questions = prev.questions.filter((q) => !blockKeys.has(q.key));
+      for (const key of blockKeys) questions = questions.map((q) => withoutStaleReferences(q, blockOptionKeys, key));
+      // Jamais de formulaire sans aucune question
+      return { ...prev, questions: questions.length ? questions : [emptyQuestion()] };
     });
   };
 
@@ -379,8 +537,11 @@ export default function AdminSurveyForm() {
       description: form.description.trim(),
       audience: form.audience,
       status: form.status,
-      opensAt: form.opensAt || undefined,
-      closesAt: form.closesAt || undefined,
+      // Recette du 13/10 : la clôture tombe le soir du jour choisi, pas à
+      // minuit la veille. En modification, un champ vidé EFFACE la date
+      // (null) ; à la création, il n'y a rien à effacer (undefined).
+      opensAt: form.opensAt ? startOfDayIso(form.opensAt) : (surveyId ? null : undefined),
+      closesAt: form.closesAt ? endOfDayIso(form.closesAt) : (surveyId ? null : undefined),
       questions: form.questions.map((q, questionIndex) => {
         const meta = QUESTION_TYPE_META[q.type];
         const options = effectiveOptions(q);
@@ -424,6 +585,13 @@ export default function AdminSurveyForm() {
               // automatiquement (S5R-05) ; sinon la valeur choisie
               syncValue: syncsToProfile === 'travailleASenlis' ? (i === 0 ? 'true' : 'false') : (o.syncValue || undefined),
               endsSurvey: (q.type === 'CHOIX_UNIQUE' || q.type === 'OUI_NON') ? Boolean(o.endsSurvey) : undefined,
+              // S5R2-02 : option conditionnelle — seulement des questions ANTÉRIEURES
+              showIfAny: (() => {
+                const refs = (o.conditions ?? [])
+                  .map((key) => positionOfOption.get(key))
+                  .filter((pos) => pos && pos.questionOrder < questionIndex);
+                return refs.length ? refs : undefined;
+              })(),
             })),
           };
         }
@@ -447,6 +615,7 @@ export default function AdminSurveyForm() {
         await api.post('/surveys', payload);
       }
 
+      draft.clear(); // S5R2-13 : enregistré pour de bon, le brouillon ne sert plus
       navigate('/admin/enquetes');
     } catch (err) {
       // Même convention que AdminPropositionForm : premier détail Zod
@@ -465,6 +634,40 @@ export default function AdminSurveyForm() {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
   }
 
+  // S5R2-11 : une enquête ouverte ou clôturée n'est plus modifiable par
+  // un Admin-test — on l'explique plutôt qu'un formulaire voué au 403.
+  if (isEditor && isEdit && form.status !== 'DRAFT') {
+    return (
+      <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
+        <Link to="/admin/enquetes" style={{ color: '#6B6257', fontSize: 14 }}>← Retour à la liste</Link>
+        <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0 24px' }}>Modifier l'enquête</h1>
+        <EditorBanner />
+        <p role="status" style={{ fontSize: 16 }}>
+          Cette enquête n'est plus un brouillon : seule l'administration peut la modifier.
+        </p>
+      </div>
+    );
+  }
+
+  // S5R2-13 : une saisie non enregistrée a été retrouvée → on demande
+  // d'abord quoi en faire (le formulaire viendra juste après)
+  if (draft.pending) {
+    return (
+      <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
+        <Link to="/admin/enquetes" style={{ color: '#6B6257', fontSize: 14 }}>← Retour à la liste</Link>
+        <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0 24px' }}>
+          {isEdit ? "Modifier l'enquête" : 'Nouvelle enquête'}
+        </h1>
+        <DraftRestorePrompt
+          savedAt={draft.pending.savedAt}
+          what={isEdit ? 'les modifications de cette enquête' : 'une nouvelle enquête'}
+          onRestore={restoreDraft}
+          onDiscard={draft.discard}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 720 }}>
       <Link to="/admin/enquetes" style={{ color: '#6B6257', fontSize: 14 }}>← Retour à la liste</Link>
@@ -473,13 +676,27 @@ export default function AdminSurveyForm() {
         {isEdit ? "Modifier l'enquête" : 'Nouvelle enquête'}
       </h1>
 
-      {error && (
-        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
-          {error}
-        </div>
-      )}
+      <EditorBanner />
+
+      {/* Recette du 13/10 : l'erreur d'enregistrement s'affiche désormais
+          dans la barre du bas, à côté du bouton (FormSaveBar) */}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* S5R2-12 : le modèle d'abord (création uniquement) — il remplit
+            le titre et la description s'ils sont vides, et les questions */}
+        {!isEdit && (
+          <TemplatePicker
+            templates={SURVEY_TEMPLATES}
+            appliedId={appliedTemplateId}
+            onApply={applyTemplate}
+            intro="Un questionnaire qui fonctionne déjà, à adapter. Le titre et la description du modèle ne remplacent que des champs vides."
+            appliedHint="Modèle appliqué : questions plus bas"
+            status={appliedTemplateId
+              ? `Modèle « ${SURVEY_TEMPLATES.find((t) => t.id === appliedTemplateId)?.name} » appliqué : ${form.questions.length} question${form.questions.length > 1 ? 's' : ''} plus bas.`
+              : ''}
+          />
+        )}
+
         <Field label="Titre" hint="Court et concret. Ex. : « Stationnement dans le centre historique ».">
           <input
             type="text" name="title" value={form.title} onChange={handleChange} required
@@ -496,15 +713,22 @@ export default function AdminSurveyForm() {
 
         <AudiencePicker value={form.audience} onChange={(audience) => setForm((f) => ({ ...f, audience }))} />
 
-        <div style={{ display: 'flex', gap: 14 }}>
-          <Field label="Statut" hint="Brouillon : invisible des citoyens · Ouverte : on peut répondre · Clôturée : plus de nouvelles réponses.">
-            <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        {/* S5R2-11 : pas de choix de statut pour un Admin-test */}
+        {isEditor ? (
+          <p style={{ fontSize: 15, margin: 0 }}>
+            <strong>Statut :</strong> Brouillon <span style={{ color: '#6B6257' }}>— l'ouverture aux réponses est faite par l'administration.</span>
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 14 }}>
+            <Field label="Statut" hint="Brouillon : invisible des citoyens · Ouverte : on peut répondre · Clôturée : plus de nouvelles réponses.">
+              <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 14 }}>
           <Field label="Ouverture (optionnel)">
@@ -513,13 +737,21 @@ export default function AdminSurveyForm() {
               style={inputStyle}
             />
           </Field>
-          <Field label="Clôture (optionnel)">
+          <Field label="Clôture (optionnel)" hint="Fermeture automatique le soir de ce jour, à 23 h 59.">
             <input
               type="date" name="closesAt" value={form.closesAt} onChange={handleChange}
               style={inputStyle}
             />
           </Field>
         </div>
+        {/* Recette du 14/10 : une enquête OUVERTE avec une date passée serait
+            aussitôt refermée — on prévient avant même d'enregistrer.
+            Les dates « AAAA-MM-JJ » se comparent comme du texte. */}
+        {form.status === 'OPEN' && form.closesAt && form.closesAt < todayInput() && (
+          <p role="status" style={{ margin: '-4px 0 0', fontSize: 13, fontWeight: 600, color: '#A8442F' }}>
+            ⚠ Cette date de clôture est passée : l&apos;enquête serait aussitôt refermée. Choisissez une date à venir, ou videz le champ.
+          </p>
+        )}
 
         {/* ── Questions ─────────────────────────────────── */}
         <div style={{ marginTop: 10 }}>
@@ -527,23 +759,6 @@ export default function AdminSurveyForm() {
             Questions
           </h2>
 
-          {/* S5R-09 : partir d'un modèle (création uniquement) */}
-          {!isEdit && (
-            <section aria-labelledby="templates-title" style={{ marginBottom: 16 }}>
-              <h3 id="templates-title" style={{ fontSize: 15, marginBottom: 8 }}>Partir d'un modèle</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
-                {SURVEY_TEMPLATES.map((template) => (
-                  <button
-                    key={template.id} type="button" onClick={() => applyTemplate(template)}
-                    style={{ textAlign: 'left', background: '#fff', border: '2px solid #e3dcce', borderRadius: 14, padding: '12px 14px', cursor: 'pointer' }}
-                  >
-                    <strong style={{ display: 'block', fontSize: 15, color: '#26333A' }}>{template.name}</strong>
-                    <span style={{ fontSize: 13, color: '#6B6257' }}>{template.summary}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
 
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <button
@@ -552,6 +767,14 @@ export default function AdminSurveyForm() {
             >
               + Insérer les questions de profil
             </button>
+            {profileBlockKeys.length > 0 && (
+              <button
+                type="button" onClick={removeProfileQuestions} className="btn"
+                style={{ background: '#FCEAE6', color: '#A8442F', padding: '8px 16px', minHeight: 44 }}
+              >
+                Retirer les questions de profil
+              </button>
+            )}
             <span style={{ fontSize: 13, color: '#6B6257' }}>
               {hasProfileQuestions
                 ? 'Déjà présentes.'
@@ -583,10 +806,14 @@ export default function AdminSurveyForm() {
                 onTypeChange={(newType) => handleQuestionTypeChange(question.key, newType)}
                 onRemove={() => removeQuestion(question.key)}
                 onDuplicate={() => duplicateQuestion(question.key)}
+                total={form.questions.length}
+                positions={allowedPositions(form.questions, index)}
+                onMove={(toIndex) => moveQuestion(question.key, toIndex)}
                 onConditionsChange={(conditions) => setQuestionConditions(question.key, conditions)}
                 onOptionChange={(optionKey, label) => updateOption(question.key, optionKey, { label })}
                 onOptionSyncValueChange={(optionKey, syncValue) => updateOption(question.key, optionKey, { syncValue: syncValue || null })}
                 onOptionEndsSurveyChange={(optionKey, endsSurvey) => updateOption(question.key, optionKey, { endsSurvey })}
+                onOptionConditionsChange={(optionKey, conditions) => updateOption(question.key, optionKey, { conditions })}
                 onAddOption={() => addOption(question.key)}
                 onRemoveOption={(optionKey) => removeOption(question.key, optionKey)}
               />
@@ -603,9 +830,10 @@ export default function AdminSurveyForm() {
           </button>
         </div>
 
-        <button type="submit" disabled={saving} className="btn btn-primary" style={{ alignSelf: 'flex-start', marginTop: 10 }}>
-          {saving ? 'Enregistrement…' : (isEdit ? 'Enregistrer les modifications' : "Créer l'enquête")}
-        </button>
+        <FormSaveBar
+          saving={saving} error={error} cancelTo="/admin/enquetes"
+          label={isEdit ? 'Enregistrer les modifications' : "Créer l'enquête"}
+        />
       </form>
     </div>
   );
@@ -617,7 +845,9 @@ export default function AdminSurveyForm() {
 // vite illisible mélangée avec le reste du formulaire parent.
 function QuestionEditor({
   question, index, canRemove, priorOptions, priorNumberQuestions, onChange, onTypeChange, onRemove, onDuplicate,
-  onConditionsChange, onOptionChange, onOptionSyncValueChange, onOptionEndsSurveyChange, onAddOption, onRemoveOption,
+  total, positions, onMove,
+  onConditionsChange, onOptionChange, onOptionSyncValueChange, onOptionEndsSurveyChange, onOptionConditionsChange,
+  onAddOption, onRemoveOption,
 }) {
   const canEndSurvey = question.type === 'CHOIX_UNIQUE' || question.type === 'OUI_NON';
   const availableConditions = priorOptions.filter((opt) => !question.conditions.includes(opt.key));
@@ -629,7 +859,23 @@ function QuestionEditor({
     <div className="card-joyful" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontWeight: 700, color: '#6B6257', fontSize: 13 }}>Question {index + 1}</span>
-        <div style={{ display: 'flex', gap: 14 }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* S5R-09 v3 : déplacer, uniquement vers une position permise */}
+          {total > 1 && (
+            <select
+              value={index}
+              onChange={(e) => onMove(Number(e.target.value))}
+              aria-label={`Position de la question ${index + 1}`}
+              aria-describedby={positions.min > 0 || positions.max < total - 1 ? `move-hint-${question.key}` : undefined}
+              style={{ padding: '6px 10px', borderRadius: 10, border: '2px solid #e3dcce', fontSize: 13, minHeight: 44 }}
+            >
+              {Array.from({ length: total }, (_, i) => i)
+                .filter((i) => i >= positions.min && i <= positions.max)
+                .map((i) => (
+                  <option key={i} value={i}>{i === index ? `Position ${i + 1}` : `Déplacer en ${i + 1}`}</option>
+                ))}
+            </select>
+          )}
           {/* S5R-09 : ex. « véhicules du foyer » → « véhicules professionnels » */}
           <button
             type="button" onClick={onDuplicate}
@@ -649,6 +895,14 @@ function QuestionEditor({
           )}
         </div>
       </div>
+
+      {(positions && (positions.after !== null || positions.before !== null)) && (
+        <p id={`move-hint-${question.key}`} style={{ fontSize: 12, color: '#6B6257', margin: '-6px 0 0' }}>
+          Déplacement limité :
+          {positions.after !== null && ` elle dépend de la question ${positions.after + 1} et doit rester après elle.`}
+          {positions.before !== null && ` La question ${positions.before + 1} dépend d'elle : elle doit rester avant.`}
+        </p>
+      )}
 
       <Field label="Intitulé" hint="Une question claire, une seule idée. Ex. : « Combien de véhicules compte votre foyer ? »">
         <input
@@ -689,41 +943,102 @@ function QuestionEditor({
         </label>
       </div>
 
+      {/* ── Suggestions de villes — réglage AVANCÉ (S5R-09 v4) ──
+          Même défaut que le lien avec le profil (recette du 03/10) : la
+          case s'affichait sur TOUTES les questions en texte libre (« Qu'est-
+          ce qui vous inquiète ? »…). Repliée par défaut, ouverte si déjà
+          active, avec un avertissement si l'intitulé ne parle pas d'une ville. */}
       {question.type === 'TEXTE_LIBRE' && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#26333A' }}>
-          <input
-            type="checkbox" checked={question.uiHint === 'VILLE_FR'}
-            onChange={(e) => onChange({ uiHint: e.target.checked ? 'VILLE_FR' : null })}
-            style={{ width: 20, height: 20 }}
-          />
-          Suggestions de ville (France) pendant la saisie
-        </label>
+        <details open={question.uiHint === 'VILLE_FR'} style={{ border: '2px solid #EFEBE2', borderRadius: 12, padding: '10px 14px' }}>
+          <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#26333A' }}>
+            Réglage avancé : proposer des noms de villes pendant la saisie
+            {question.uiHint === 'VILLE_FR' && <span style={{ color: '#377349' }}> — activé</span>}
+          </summary>
+          <p style={{ fontSize: 13, color: '#6B6257', margin: '8px 0' }}>
+            Seulement pour une question qui demande <strong>une ville</strong> (ex. « Dans quelle ville résidez-vous ? ») :
+            la personne voit des propositions de communes françaises en tapant.
+          </p>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#26333A' }}>
+            <input
+              type="checkbox" checked={question.uiHint === 'VILLE_FR'}
+              onChange={(e) => onChange({ uiHint: e.target.checked ? 'VILLE_FR' : null })}
+              style={{ width: 20, height: 20 }}
+            />
+            Proposer des villes françaises
+          </label>
+          {question.uiHint === 'VILLE_FR' && question.label.trim() && !CITY_KEYWORDS.test(question.label) && (
+            <p role="alert" style={{ fontSize: 13, color: '#A8442F', fontWeight: 600, margin: '6px 0 0' }}>
+              ⚠ L'intitulé ne semble pas demander une ville : les répondants verraient des noms de communes
+              proposés pendant qu'ils écrivent leur réponse.
+            </p>
+          )}
+        </details>
       )}
 
-      {question.type === 'OUI_NON' && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#26333A' }}>
-          <input
-            type="checkbox" checked={question.syncsToProfile === 'travailleASenlis'}
-            onChange={(e) => onChange({ syncsToProfile: e.target.checked ? 'travailleASenlis' : null })}
-            style={{ width: 20, height: 20 }}
-          />
-          La réponse met à jour « travaille à Senlis » dans le profil (Oui / Non)
-        </label>
-      )}
+      {/* ── Relier la réponse au profil — réglage AVANCÉ (S5R-09 v2) ──
+          Recette du 03/10 : la case « met à jour travaille à Senlis »
+          apparaissait sur TOUTES les questions Oui/Non (« Connaissiez-
+          vous ce projet ? »…), sans rapport, et cocher ne produisait
+          aucun retour. Ce réglage est maintenant replié par défaut,
+          expliqué, confirmé par un message, et signalé s'il ne semble
+          pas correspondre à l'intitulé. Il reste ouvert pour une question
+          déjà reliée, pour qu'on voie toujours ce qui est actif. */}
+      {(question.type === 'OUI_NON' || question.type === 'CHOIX_UNIQUE') && (
+        <details open={Boolean(question.syncsToProfile)} style={{ border: '2px solid #EFEBE2', borderRadius: 12, padding: '10px 14px' }}>
+          <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#26333A' }}>
+            Réglage avancé : relier la réponse au profil du répondant
+            {question.syncsToProfile && <span style={{ color: '#377349' }}> — activé</span>}
+          </summary>
+          <p style={{ fontSize: 13, color: '#6B6257', margin: '8px 0' }}>
+            À n'utiliser que si la question demande <strong>exactement</strong> une information du profil
+            (lieu de résidence, quartier, travail à Senlis…). Le plus simple reste le bouton
+            « Insérer les questions de profil », déjà réglé.
+          </p>
 
-      {question.type === 'CHOIX_UNIQUE' && (
-        <Field label="Cette question met à jour...">
-          <select
-            value={question.syncsToProfile || ''}
-            onChange={(e) => onChange({ syncsToProfile: e.target.value || null })}
-            style={inputStyle}
-          >
-            <option value="">Rien (aucune synchronisation)</option>
-            {SYNC_FIELD_OPTIONS.map((f) => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </select>
-        </Field>
+          {question.type === 'OUI_NON' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, color: '#26333A' }}>
+              <input
+                type="checkbox" checked={question.syncsToProfile === 'travailleASenlis'}
+                onChange={(e) => onChange({ syncsToProfile: e.target.checked ? 'travailleASenlis' : null })}
+                style={{ width: 20, height: 20 }}
+              />
+              « Oui » / « Non » = la personne travaille, ou non, à Senlis
+            </label>
+          )}
+
+          {question.type === 'CHOIX_UNIQUE' && (
+            <Field label="La réponse correspond à…">
+              <select
+                value={question.syncsToProfile || ''}
+                onChange={(e) => onChange({ syncsToProfile: e.target.value || null })}
+                style={inputStyle}
+              >
+                <option value="">Rien (aucun lien avec le profil)</option>
+                {SYNC_FIELD_OPTIONS.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          {question.syncsToProfile && (
+            <>
+              {/* Retour immédiat : rien ne se passe à l'enregistrement de
+                  l'enquête — c'est chaque RÉPONSE qui mettra le profil à jour */}
+              <p role="status" style={{ fontSize: 13, color: '#377349', margin: '8px 0 0' }}>
+                ✔ Quand une personne répondra, sa réponse sera préremplie depuis son profil, puis mettra
+                à jour son « {PROFILE_FIELD_NAMES[question.syncsToProfile]} ». Rien ne change au moment
+                d'enregistrer l'enquête.
+              </p>
+              {question.label.trim() && !PROFILE_FIELD_KEYWORDS[question.syncsToProfile]?.test(question.label) && (
+                <p role="alert" style={{ fontSize: 13, color: '#A8442F', fontWeight: 600, margin: '6px 0 0' }}>
+                  ⚠ L'intitulé ne semble pas parler de « {PROFILE_FIELD_NAMES[question.syncsToProfile]} » :
+                  vérifiez que ce lien est voulu — sinon, chaque réponse modifierait le profil à tort.
+                </p>
+              )}
+            </>
+          )}
+        </details>
       )}
 
       {/* ── Conditions d'affichage (S5R-05 : plusieurs = OU) ── */}
@@ -768,10 +1083,10 @@ function QuestionEditor({
       {question.type === 'NOMBRE' && (
         <div style={{ display: 'flex', gap: 14 }}>
           <Field label="Valeur minimum (optionnel)">
-            <input type="number" value={question.minValue} onChange={(e) => onChange({ minValue: e.target.value })} style={inputStyle} />
+            <input type="number" step="1" value={question.minValue} onChange={(e) => onChange({ minValue: e.target.value })} style={inputStyle} />
           </Field>
           <Field label="Valeur maximum (optionnel)">
-            <input type="number" value={question.maxValue} onChange={(e) => onChange({ maxValue: e.target.value })} style={inputStyle} />
+            <input type="number" step="1" value={question.maxValue} onChange={(e) => onChange({ maxValue: e.target.value })} style={inputStyle} />
           </Field>
         </div>
       )}
@@ -801,50 +1116,64 @@ function QuestionEditor({
             )}
           </span>
 
-          {question.options.map((option) => (
-            <div key={option.key} style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="text" value={option.label}
-                placeholder={meta.needsOptions === 'optional' ? (question.options.indexOf(option) === 0 ? 'Oui' : 'Non') : ''}
-                onChange={(e) => onOptionChange(option.key, e.target.value)}
-                style={{ ...inputStyle, flex: 1, minHeight: 42, padding: '9px 12px' }}
-              />
-              {/* Quelle valeur EXACTE écrire dans le profil quand
-                  cette option précise est choisie — ex. l'option
-                  "Je réside dans le centre historique" correspond à
-                  la valeur CENTRE_RESIDENT, pas au texte lui-même. */}
-              {question.syncsToProfile && question.type === 'CHOIX_UNIQUE' && (
-                <select
-                  value={option.syncValue || ''}
-                  onChange={(e) => onOptionSyncValueChange(option.key, e.target.value)}
+          {question.options.map((option, optionIndex) => (
+            <div key={option.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text" value={option.label}
+                  // Un nom pour les lecteurs d'écran (RGAA 11.1) — S5R2-02
+                  aria-label={`Option ${optionIndex + 1} de la question ${index + 1}`}
+                  placeholder={meta.needsOptions === 'optional' ? (question.options.indexOf(option) === 0 ? 'Oui' : 'Non') : ''}
+                  onChange={(e) => onOptionChange(option.key, e.target.value)}
                   style={{ ...inputStyle, flex: 1, minHeight: 42, padding: '9px 12px' }}
-                >
-                  <option value="">Ne correspond à rien</option>
-                  {SYNC_VALUE_OPTIONS[question.syncsToProfile].map((v) => (
-                    <option key={v.value} value={v.value}>{v.label}</option>
-                  ))}
-                </select>
-              )}
-              {/* S5R-05 : « Termine l'enquête » — ex. « Aucun véhicule » */}
-              {canEndSurvey && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
-                  <input
-                    type="checkbox" checked={Boolean(option.endsSurvey)}
-                    onChange={(e) => onOptionEndsSurveyChange(option.key, e.target.checked)}
-                  />
-                  Termine l'enquête
-                </label>
-              )}
-              {/* CHOIX_UNIQUE/CHOIX_MULTIPLE : jamais moins de 2 options
-                  (contrainte de l'API) — bouton masqué en dessous de 3. */}
-              {meta.needsOptions === true && question.options.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => onRemoveOption(option.key)}
-                  style={{ background: '#FCEAE6', color: '#A8442F', border: 'none', borderRadius: 10, padding: '0 14px', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  ×
-                </button>
+                />
+                {/* Quelle valeur EXACTE écrire dans le profil quand
+                    cette option précise est choisie — ex. l'option
+                    "Je réside dans le centre historique" correspond à
+                    la valeur CENTRE_RESIDENT, pas au texte lui-même. */}
+                {question.syncsToProfile && question.type === 'CHOIX_UNIQUE' && (
+                  <select
+                    value={option.syncValue || ''}
+                    onChange={(e) => onOptionSyncValueChange(option.key, e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minHeight: 42, padding: '9px 12px' }}
+                  >
+                    <option value="">Ne correspond à rien</option>
+                    {SYNC_VALUE_OPTIONS[question.syncsToProfile].map((v) => (
+                      <option key={v.value} value={v.value}>{v.label}</option>
+                    ))}
+                  </select>
+                )}
+                {/* S5R-05 : « Termine l'enquête » — ex. « Aucun véhicule » */}
+                {canEndSurvey && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, whiteSpace: 'nowrap' }}>
+                    <input
+                      type="checkbox" checked={Boolean(option.endsSurvey)}
+                      onChange={(e) => onOptionEndsSurveyChange(option.key, e.target.checked)}
+                    />
+                    Termine l'enquête
+                  </label>
+                )}
+                {/* CHOIX_UNIQUE/CHOIX_MULTIPLE : jamais moins de 2 options
+                    (contrainte de l'API) — bouton masqué en dessous de 3. */}
+                {meta.needsOptions === true && question.options.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveOption(option.key)}
+                    style={{ background: '#FCEAE6', color: '#A8442F', border: 'none', borderRadius: 10, padding: '0 14px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              {/* S5R2-02 : option conditionnelle (choix uniquement) */}
+              {priorOptions.length > 0 && question.type !== 'OUI_NON' && (
+                <OptionConditionEditor
+                  option={option}
+                  optionNumber={optionIndex + 1}
+                  questionNumber={index + 1}
+                  priorOptions={priorOptions}
+                  onChange={(conditions) => onOptionConditionsChange(option.key, conditions)}
+                />
               )}
             </div>
           ))}
@@ -859,6 +1188,64 @@ function QuestionEditor({
             </button>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── S5R2-02 : « Proposer cette option seulement si… » ─────
+// Replié par défaut (la plupart des options sont toujours proposées) :
+// un simple lien sous l'option l'ouvre. Ouvert d'office si l'option a
+// déjà une condition, pour qu'on la voie toujours.
+// Analogie : la mention « sur demande » à côté d'un plat sur un menu.
+function OptionConditionEditor({ option, optionNumber, questionNumber, priorOptions, onChange }) {
+  const conditions = option.conditions ?? [];
+  const [open, setOpen] = useState(conditions.length > 0);
+  const labelOf = (key) => priorOptions.find((o) => o.key === key)?.label ?? key;
+  const available = priorOptions.filter((o) => !conditions.includes(o.key));
+  const name = option.label.trim() ? `« ${option.label.trim()} »` : `l'option ${optionNumber}`;
+
+  if (!open && conditions.length === 0) {
+    return (
+      <button
+        type="button" onClick={() => setOpen(true)}
+        aria-label={`Proposer ${name} de la question ${questionNumber} seulement si…`}
+        style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: '2px 0', color: '#1E5F7C', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+      >
+        + Proposer seulement si…
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginLeft: 12, paddingLeft: 10, borderLeft: '3px solid #E3EEF3', fontSize: 13 }}>
+      <span style={{ fontWeight: 600, color: '#26333A' }}>Proposée seulement si…</span>
+      <span style={{ color: '#6B6257' }}> (une seule condition remplie suffit)</span>
+      {conditions.map((key) => (
+        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0' }}>
+          <span style={{ flex: 1 }}>{labelOf(key)}</span>
+          <button
+            type="button"
+            onClick={() => onChange(conditions.filter((k) => k !== key))}
+            aria-label={`Retirer la condition ${labelOf(key)} de ${name}`}
+            style={{ background: '#FCEAE6', color: '#A8442F', border: 'none', borderRadius: 10, padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Retirer
+          </button>
+        </div>
+      ))}
+      {available.length > 0 && (
+        <select
+          value=""
+          aria-label={`Ajouter une condition à ${name} de la question ${questionNumber}`}
+          onChange={(e) => e.target.value && onChange([...conditions, e.target.value])}
+          style={{ ...inputStyle, width: '100%', marginTop: 4, minHeight: 40, padding: '6px 10px', fontSize: 13 }}
+        >
+          <option value="">{conditions.length ? '+ Ajouter une autre condition (OU)…' : '+ Choisir la réponse qui fait apparaître cette option…'}</option>
+          {available.map((opt) => (
+            <option key={opt.key} value={opt.key}>{opt.label}</option>
+          ))}
+        </select>
       )}
     </div>
   );

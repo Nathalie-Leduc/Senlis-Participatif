@@ -13,9 +13,16 @@ import { useState, useEffect, useRef } from 'react';
 export default function useCountUp(target, { duration = 1200, start = false } = {}) {
   const [value, setValue] = useState(0);
   const lastTargetRef = useRef(null);
+  // Personne ne devrait avoir à SUBIR une animation qu'iel a
+  // explicitement demandé d'éviter : le nombre final s'affiche
+  // directement. S5R2-08 : DÉDUIT au rendu (plus de setValue au début
+  // de l'effet, que la règle react-hooks/set-state-in-effect signale).
+  const [prefersReduced] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+  );
 
   useEffect(() => {
-    if (!start) return undefined;
+    if (!start || prefersReduced) return undefined;
     // Ne rejoue l'animation que si la cible a VRAIMENT changé depuis
     // la dernière fois — pas juste "déjà démarré une fois" (l'ancien
     // verrou), qui bloquait à tort quand la visibilité arrivait avant
@@ -24,15 +31,6 @@ export default function useCountUp(target, { duration = 1200, start = false } = 
     // ignorait ensuite la vraie valeur reçue juste après.
     if (lastTargetRef.current === target) return undefined;
     lastTargetRef.current = target;
-
-    // Personne ne devrait avoir à SUBIR une animation qu'iel a
-    // explicitement demandé d'éviter — le nombre final s'affiche
-    // directement, sans étape intermédiaire.
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReduced) {
-      setValue(target);
-      return undefined;
-    }
 
     const startTime = performance.now();
     let frameId;
@@ -48,7 +46,7 @@ export default function useCountUp(target, { duration = 1200, start = false } = 
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [start, target, duration]);
+  }, [start, target, duration, prefersReduced]);
 
-  return value;
+  return start && prefersReduced ? target : value;
 }

@@ -15,6 +15,8 @@
 //   { …, showIf: ['oui'] }                  ← affichée si « oui » choisie
 //   { ref: 'nb', …, type: 'NOMBRE' }        ← une question nommée
 //   { …, maxChoicesFrom: 'nb' }             ← cases limitées par « nb »
+//   options: [{ label: 'Bus régional', showIf: ['ailleurs'] }]
+//                                           ← option proposée si « ailleurs » (S5R2-02)
 // instantiateQuestions() remplace ces noms par de vraies clés.
 // ══════════════════════════════════════════════════════════
 
@@ -31,13 +33,15 @@ export const PROFILE_QUESTIONS = [
     label: 'Où résidez-vous ?', type: 'CHOIX_UNIQUE', syncsToProfile: 'situation',
     options: [
       { ref: 'p_centre', label: 'Le centre historique', syncValue: 'CENTRE_RESIDENT' },
-      { ref: 'p_autre', label: 'Un autre quartier de Senlis', syncValue: 'AUTRE_QUARTIER' },
+      // S5R2-06 : Saint-Vincent, séparé du centre, est « un autre quartier »
+      { ref: 'p_autre', label: 'Un autre quartier de Senlis (dont Saint-Vincent)', syncValue: 'AUTRE_QUARTIER' },
       { ref: 'p_hors', label: 'Une autre ville', syncValue: 'HORS_SENLIS' },
     ],
   },
   {
     label: 'Dans quel quartier ?', type: 'CHOIX_UNIQUE', syncsToProfile: 'quartier', showIf: ['p_autre'],
     options: [
+      { label: 'Quartier Saint-Vincent', syncValue: 'SAINT_VINCENT' },
       { label: 'Brichebay', syncValue: 'BRICHEBAY' },
       { label: 'Bon Secours', syncValue: 'BON_SECOURS' },
       { label: "Val d'Aunette - La Gâtelière", syncValue: 'VAL_AUNETTE_GATELIERE' },
@@ -54,6 +58,7 @@ export const PROFILE_QUESTIONS = [
     label: 'Dans quel quartier travaillez-vous ?', type: 'CHOIX_UNIQUE', syncsToProfile: 'travailleQuartier', showIf: ['p_travaille'],
     options: [
       { label: 'Centre historique', syncValue: 'CENTRE_HISTORIQUE' },
+      { label: 'Quartier Saint-Vincent', syncValue: 'SAINT_VINCENT' },
       { label: 'Brichebay', syncValue: 'BRICHEBAY' },
       { label: 'Bon Secours', syncValue: 'BON_SECOURS' },
       { label: "Val d'Aunette - La Gâtelière", syncValue: 'VAL_AUNETTE_GATELIERE' },
@@ -162,7 +167,8 @@ export function instantiateQuestions(templateQuestions, emptyQuestion) {
     const options = (tq.options ?? []).map((o) => {
       const key = newKey();
       if (o.ref) keyOfRef.set(o.ref, key);
-      return { key, label: o.label, syncValue: o.syncValue ?? null, endsSurvey: Boolean(o.endsSurvey) };
+      // showIf gardé de côté : résolu au 2e passage (S5R2-02)
+      return { key, label: o.label, syncValue: o.syncValue ?? null, endsSurvey: Boolean(o.endsSurvey), showIf: o.showIf ?? [] };
     });
     return { tq, questionKey, options };
   });
@@ -178,7 +184,10 @@ export function instantiateQuestions(templateQuestions, emptyQuestion) {
     syncsToProfile: tq.syncsToProfile ?? null,
     minValue: tq.minValue ?? '',
     maxValue: tq.maxValue ?? '',
-    options,
+    options: options.map(({ showIf, ...option }) => ({
+      ...option,
+      conditions: showIf.map((ref) => keyOfRef.get(ref)).filter(Boolean),
+    })),
     conditions: (tq.showIf ?? []).map((ref) => keyOfRef.get(ref)).filter(Boolean),
     maxChoicesFromKey: tq.maxChoicesFrom ? keyOfRef.get(tq.maxChoicesFrom) ?? null : null,
   }));

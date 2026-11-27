@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '../lib/zod.js'; // Zod 4 réglé en français (S5R2-08)
 
 // Même forme que les autres listes admin paginées du projet.
 export const listUsersQuerySchema = z.object({
@@ -8,7 +8,8 @@ export const listUsersQuerySchema = z.object({
 });
 
 export const updateUserRoleSchema = z.object({
-  role: z.enum(['CITIZEN', 'ADMIN'], {
-    errorMap: () => ({ message: 'Rôle invalide' }),
+  // S5R2-11 : EDITOR = « Admin-test » (brouillons seulement)
+  role: z.enum(['CITIZEN', 'EDITOR', 'ADMIN'], {
+    error: 'Rôle invalide',
   }),
 });

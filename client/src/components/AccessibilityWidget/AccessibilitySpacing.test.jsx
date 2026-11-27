@@ -13,12 +13,15 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { AccessibilityProvider, migrateSettings } from '../../contexts/AccessibilityContext.jsx';
+import { MemoryRouter } from 'react-router-dom';
 import AccessibilityWidget from './AccessibilityWidget.jsx';
 
 const root = document.documentElement;
 
 function renderAndOpen() {
-  render(<AccessibilityProvider><AccessibilityWidget /></AccessibilityProvider>);
+  // MemoryRouter : le module sait sur quelle page il est (S5R2-07 :
+  // pas de lecture au survol sur les pages de compte)
+  render(<MemoryRouter><AccessibilityProvider><AccessibilityWidget /></AccessibilityProvider></MemoryRouter>);
   fireEvent.click(screen.getByRole('button', { name: "Options d'accessibilité" }));
 }
 

@@ -36,11 +36,15 @@ function renderPage() {
 describe('Résultats détaillés', () => {
   beforeEach(() => { api.get.mockReset(); downloadText.mockReset(); });
 
-  it('affiche les résultats en barres, avec nombre et pourcentage en texte', async () => {
+  it('affiche les résultats en graphique (Chart.js), avec nombre et pourcentage en texte', async () => {
     api.get.mockResolvedValue(globalResults);
     renderPage();
     const card = (await screen.findByRole('heading', { name: /Satisfait/ })).closest('article');
-    expect(within(card).getByText('Oui').closest('li')).toHaveTextContent('Oui9 (75 %)');
+    // S5R2-04 : le graphique, décrit pour les lecteurs d'écran…
+    expect(within(card).getByRole('img', { name: /Diagramme en barres : Oui 75 %/ })).toBeInTheDocument();
+    expect(within(card).getByTestId('chart-bar')).toBeInTheDocument();
+    // … et les nombres en texte, dans un tableau
+    expect(within(card).getByRole('rowheader', { name: 'Oui' }).closest('tr')).toHaveTextContent('Oui975 %');
     expect(screen.getByText(/Posée si « Satisfait·e \? » = « Non »/)).toBeInTheDocument();
   });
 
@@ -58,6 +62,34 @@ describe('Résultats détaillés', () => {
     expect(await screen.findByText(/Moins de 5 répondants correspondent/)).toBeInTheDocument();
     expect(api.get).toHaveBeenLastCalledWith('/surveys/s1/stats?scope=custom&situations=HORS_SENLIS');
     expect(screen.getByRole('button', { name: 'Exporter (Excel, CSV)' })).toBeDisabled();
+  });
+
+  it('une fois le filtre appliqué, le panneau se replie ; « Modifier le filtre » le rouvre', async () => {
+    api.get.mockResolvedValue(globalResults);
+    renderPage();
+    await screen.findByRole('heading', { name: /Satisfait/ });
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Des profils choisis…' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Personnes qui résident hors de Senlis' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Appliquer ce filtre' }));
+
+    // Replié : plus de cases, le choix reste coché, le filtre est résumé
+    expect(screen.queryByRole('checkbox', { name: 'Personnes qui résident hors de Senlis' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Appliquer ce filtre' })).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Des profils choisis…' })).toBeChecked();
+    expect(screen.getByText('Filtre appliqué :').parentElement).toHaveTextContent(/hors de Senlis/);
+    // Le focus passe au bouton qui remplace « Appliquer »
+    const modify = screen.getByRole('button', { name: 'Modifier le filtre' });
+    expect(modify).toHaveFocus();
+
+    // Rouvert : les cases cochées sont conservées
+    fireEvent.click(modify);
+    expect(screen.getByRole('checkbox', { name: 'Personnes qui résident hors de Senlis' })).toBeChecked();
+
+    // Un clic sur le bouton radio déjà coché rouvre aussi le panneau
+    fireEvent.click(screen.getByRole('button', { name: 'Appliquer ce filtre' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Des profils choisis…' }));
+    expect(screen.getByRole('button', { name: 'Appliquer ce filtre' })).toBeInTheDocument();
   });
 
   it("« le public visé de l'enquête » en un clic", async () => {

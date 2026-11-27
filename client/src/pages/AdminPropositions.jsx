@@ -8,14 +8,22 @@
 // Analogie : /propositions, c'est la salle du restaurant ouverte
 // au public. Cette page-ci, c'est le cahier de cuisine — on y
 // voit aussi les plats encore en préparation, pas prêts à sortir.
+//
+// S5R2-11 : un compte Admin-test (EDITOR) voit la même liste, mais
+// « Modifier » et « Supprimer » n'apparaissent que sur les brouillons,
+// et « Résultats » jamais (l'API refuserait de toute façon : 403).
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api.js';
+import { useApiQuery } from '../hooks/useApiQuery.js';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { STATUS_META } from '../constants/proposalStatus.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import PasswordRenewalBanner from '../components/PasswordRenewalBanner/PasswordRenewalBanner.jsx';
 
 const FILTERS = [
   { value: undefined, label: 'Toutes' },
@@ -29,28 +37,22 @@ const FILTERS = [
 
 export default function AdminPropositions() {
   usePageTitle('Administration — Propositions');
-  const [items, setItems] = useState([]);
   const [status, setStatus] = useState(undefined);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const { showToast } = useToast();
+  const { isAdmin } = useAuth();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ limit: 50 });
-      if (status) params.set('status', status);
-      const data = await api.get(`/proposals/admin?${params.toString()}`);
-      setItems(data.items);
-    } catch (err) {
-      setError(err.message || 'Impossible de charger les propositions');
-    } finally {
-      setLoading(false);
-    }
-  }, [status]);
-
-  useEffect(() => { load(); }, [load]);
+  // S5R2-08 : chargement commun (useApiQuery) ; recharge quand le filtre change
+  const params = new URLSearchParams({ limit: 50 });
+  if (status) params.set('status', status);
+  const { data, error: loadError, loading, setData } = useApiQuery(`/proposals/admin?${params.toString()}`);
+  const items = data?.items ?? [];
+  // Erreur d'une ACTION (suppression) : effacée quand on change de filtre
+  const [actionError, setActionError] = useState(null);
+  const error = actionError ?? (loadError ? (loadError.message || 'Impossible de charger les propositions') : null);
+  const changeStatus = (value) => {
+    setStatus(value);
+    setActionError(null);
+  };
 
   const handleDelete = async (proposal) => {
     // window.confirm : suffisant pour un outil d'administration
@@ -60,10 +62,10 @@ export default function AdminPropositions() {
 
     try {
       await api.delete(`/proposals/${proposal.id}`);
-      setItems((prev) => prev.filter((p) => p.id !== proposal.id));
+      setData((prev) => ({ ...prev, items: prev.items.filter((p) => p.id !== proposal.id) }));
       showToast(`« ${proposal.title} » a été supprimée`);
     } catch (err) {
-      setError(err.message || 'La suppression a échoué');
+      setActionError(err.message || 'La suppression a échoué');
     }
   };
 
@@ -73,17 +75,28 @@ export default function AdminPropositions() {
         <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28 }}>
           Administration — Propositions
         </h1>
-        <Link to="/admin/propositions/nouvelle" className="btn btn-primary">
-          + Nouvelle proposition
-        </Link>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* S5R2-06 : outil de tracé de Saint-Vincent (zones des propositions) */}
+          {isAdmin && (
+            <Link to="/admin/quartiers" style={{ fontSize: 14, color: '#1E5F7C' }}>Contours des quartiers</Link>
+          )}
+          {/* S5R2-05 : pas dans le menu (il passerait sur deux lignes) */}
+          <Link to="/admin/parkings" style={{ fontSize: 14, color: '#1E5F7C' }}>Parkings de la carte</Link>
+          <Link to="/admin/propositions/nouvelle" className="btn btn-primary">
+            + Nouvelle proposition
+          </Link>
+        </div>
       </div>
+
+      <EditorBanner />
+      <PasswordRenewalBanner />
 
       {/* ── Filtres par statut ───────────────────────────── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
         {FILTERS.map((f) => (
           <button
             key={f.label}
-            onClick={() => setStatus(f.value)}
+            onClick={() => changeStatus(f.value)}
             aria-pressed={status === f.value}
             style={{
               padding: '7px 14px', borderRadius: 999, fontSize: 13, fontWeight: 600,
@@ -112,6 +125,8 @@ export default function AdminPropositions() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((p) => {
             const meta = STATUS_META[p.status];
+            // Admin : tout ; Admin-test : seulement ses brouillons (et ceux des autres)
+            const canEdit = isAdmin || p.status === 'DRAFT';
             return (
               <div
                 key={p.id}
@@ -128,9 +143,20 @@ export default function AdminPropositions() {
                 <span style={{ flex: 1, minWidth: 200, fontWeight: 600 }}>{p.title}</span>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {/* S5R-12 : la page telle que les citoyens la voient (un
+                      brouillon s'y affiche aussi, signalé, pour l'admin) */}
+                  <Link
+                    to={`/propositions/${p.slug}`}
+                    state={{ from: '/admin/propositions', fromLabel: 'Administration — Propositions' }}
+                    className="btn"
+                    aria-label={`Voir « ${p.title} » comme les citoyens`}
+                    style={{ background: '#fff', color: '#1E5F7C', border: '2px solid #E3F0F6', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                  >
+                    Voir
+                  </Link>
                   {/* Résultats détaillés (S5-21) : utile dès qu'il peut y
                       avoir des votes, donc pas pour un brouillon. */}
-                  {p.status !== 'DRAFT' && (
+                  {isAdmin && p.status !== 'DRAFT' && (
                     <Link
                       to={`/admin/propositions/${p.id}/stats`}
                       className="btn"
@@ -139,20 +165,24 @@ export default function AdminPropositions() {
                       Résultats
                     </Link>
                   )}
-                  <Link
-                    to={`/admin/propositions/${p.slug}/modifier`}
-                    className="btn"
-                    style={{ background: '#EFEBE2', color: '#26333A', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
-                  >
-                    Modifier
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(p)}
-                    className="btn"
-                    style={{ background: '#FCEAE6', color: '#A8442F', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
-                  >
-                    Supprimer
-                  </button>
+                  {canEdit && (
+                    <>
+                      <Link
+                        to={`/admin/propositions/${p.slug}/modifier`}
+                        className="btn"
+                        style={{ background: '#EFEBE2', color: '#26333A', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                      >
+                        Modifier
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(p)}
+                        className="btn"
+                        style={{ background: '#FCEAE6', color: '#A8442F', padding: '8px 16px', minHeight: 40, fontSize: 14 }}
+                      >
+                        Supprimer
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );

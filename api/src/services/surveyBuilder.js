@@ -14,6 +14,8 @@
 //   showIf: { questionOrder: 0, optionOrder: 1 }          (une condition)
 //   showIfAny: [{ questionOrder: 0, optionOrder: 1 }, …]  (plusieurs, OU)
 //   maxChoicesFrom: { questionOrder: 2 }                  (limite de cases)
+//   options: [{ label, showIfAny: [{ questionOrder, optionOrder }] }]
+//                                    (option conditionnelle, S5R2-02)
 //
 // Analogie : un plan de montage de meuble. Les pièces sont désignées
 // par leur numéro sur le plan (« vis B dans le trou 3 ») ; on ne peut
@@ -86,7 +88,8 @@ export function toNestedQuestionsCreate(questions) {
  * @param {object[]} inputQuestions - la liste reçue (format API)
  */
 export async function resolveReferences(tx, surveyId, inputQuestions) {
-  const needsWork = inputQuestions.some((q) => conditionsOf(q).length || q.maxChoicesFrom);
+  const hasOptionConditions = (q) => (q.options ?? []).some((o) => o.showIfAny?.length);
+  const needsWork = inputQuestions.some((q) => conditionsOf(q).length || q.maxChoicesFrom || hasOptionConditions(q));
   if (!needsWork) return;
 
   const created = await tx.question.findMany({
@@ -96,6 +99,7 @@ export async function resolveReferences(tx, surveyId, inputQuestions) {
   });
 
   const conditionRows = [];
+  const optionConditionRows = []; // S5R2-02
 
   for (const [index, input] of inputQuestions.entries()) {
     const thisQuestion = created[index];
@@ -113,6 +117,21 @@ export async function resolveReferences(tx, surveyId, inputQuestions) {
       conditionRows.push({ questionId: thisQuestion.id, optionId: option.id });
     }
 
+    // ── Options conditionnelles (S5R2-02, OU) ──
+    for (const [optionIndex, inputOption] of (input.options ?? []).entries()) {
+      for (const condition of inputOption.showIfAny ?? []) {
+        // Même règle que pour une question : le déclencheur est une
+        // réponse DÉJÀ donnée, donc à une question qui précède
+        if (condition.questionOrder >= index) {
+          throw badRequest(`Une option de la question ${index + 1} ne peut dépendre que d'une question qui la précède`);
+        }
+        const trigger = created[condition.questionOrder]?.options.find((o) => o.order === condition.optionOrder);
+        const thisOption = thisQuestion.options.find((o) => o.order === optionIndex);
+        if (!trigger || !thisOption) throw badRequest(`Référence de condition invalide pour une option de la question ${index + 1}`);
+        optionConditionRows.push({ optionId: thisOption.id, triggerOptionId: trigger.id });
+      }
+    }
+
     // ── Limite de cases cochées ──
     if (input.maxChoicesFrom) {
       const { questionOrder } = input.maxChoicesFrom;
@@ -127,6 +146,9 @@ export async function resolveReferences(tx, surveyId, inputQuestions) {
   if (conditionRows.length) {
     // skipDuplicates : la même condition donnée deux fois n'en fait qu'une
     await tx.questionCondition.createMany({ data: conditionRows, skipDuplicates: true });
+  }
+  if (optionConditionRows.length) {
+    await tx.optionCondition.createMany({ data: optionConditionRows, skipDuplicates: true });
   }
 }
 
@@ -143,7 +165,8 @@ function signature({ label, helpText, type, required, uiHint, syncsToProfile, mi
   return JSON.stringify({
     label, helpText: helpText || '', type, required, uiHint: uiHint ?? null, syncsToProfile: syncsToProfile ?? null,
     minValue: minValue ?? null, maxValue: maxValue ?? null,
-    options: (options ?? []).map((o) => [o.label, o.syncValue ?? null, Boolean(o.endsSurvey)]),
+    // S5R2-02 : les déclencheurs d'une option comptent aussi (positions « q.o », triées)
+    options: (options ?? []).map((o) => [o.label, o.syncValue ?? null, Boolean(o.endsSurvey), [...(o.triggers ?? [])].sort()]),
     conditions: [...conditions].sort(),
     maxChoicesFrom: maxChoicesFrom ?? null,
   });
@@ -167,13 +190,14 @@ export function questionsUnchanged(existing, incoming) {
     const inc = incoming[index];
     const fromDb = signature({
       ...q,
+      options: q.options.map((o) => ({ ...o, triggers: (o.conditions ?? []).map((c) => positionOfOption.get(c.triggerOptionId)) })),
       conditions: (q.conditions ?? []).map((c) => positionOfOption.get(c.optionId)),
       maxChoicesFrom: q.maxChoicesFromId ? orderOfQuestion.get(q.maxChoicesFromId) : null,
     });
     const fromInput = signature({
       ...inc,
       required: inc.required ?? true,
-      options: optionsOf(inc) ?? [],
+      options: (optionsOf(inc) ?? []).map((o) => ({ ...o, triggers: (o.showIfAny ?? []).map((c) => `${c.questionOrder}.${c.optionOrder}`) })),
       conditions: conditionsOf(inc).map((c) => `${c.questionOrder}.${c.optionOrder}`),
       maxChoicesFrom: inc.maxChoicesFrom?.questionOrder ?? null,
     });

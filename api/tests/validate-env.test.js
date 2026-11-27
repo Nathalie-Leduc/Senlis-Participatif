@@ -3,6 +3,7 @@
 // ══════════════════════════════════════════════════════════
 
 import { describe, it, expect } from 'vitest';
+import { databaseUrl } from '../src/lib/databaseUrl.js';
 import { validateEnv, assertValidEnv } from '../src/lib/validateEnv.js';
 
 const VALID_DEV_ENV = {
@@ -57,6 +58,20 @@ describe('validateEnv — production uniquement (la bascule Brevo, S5-10)', () =
     expect(validateEnv(VALID_PROD_ENV)).toEqual([]);
   });
 
+  it('accepte POSTGRESQL_ADDON_URI à la place de DATABASE_URL (Clever Cloud, S5-22)', () => {
+    const { DATABASE_URL, ...withoutUrl } = VALID_PROD_ENV;
+    void DATABASE_URL;
+    expect(validateEnv({ ...withoutUrl, POSTGRESQL_ADDON_URI: 'postgresql://u:p@h:5432/db' })).toEqual([]);
+    expect(validateEnv(withoutUrl).some((e) => e.includes('DATABASE_URL manquant'))).toBe(true);
+  });
+
+  it('signale un JWT_SECRET trop court en production (OWASP A04)', () => {
+    const errors = validateEnv({ ...VALID_PROD_ENV, JWT_SECRET: 'senlis2026' });
+    expect(errors.some((e) => e.includes('JWT_SECRET trop court'))).toBe(true);
+    // En dev, un secret court reste accepté (rien à protéger)
+    expect(validateEnv({ ...VALID_DEV_ENV, JWT_SECRET: 'senlis2026' })).toEqual([]);
+  });
+
   it('signale un SMTP manquant en production', () => {
     const { SMTP_HOST, SMTP_USER, SMTP_PASS, ...rest } = VALID_PROD_ENV;
     expect(validateEnv(rest).some((e) => e.includes('SMTP'))).toBe(true);
@@ -87,5 +102,14 @@ describe('assertValidEnv', () => {
       expect(err.message).toContain('JWT_SECRET');
       expect(err.message).toContain('Mailtrap');
     }
+  });
+});
+
+describe('databaseUrl (S5-22)', () => {
+  it('DATABASE_URL en priorité, sinon POSTGRESQL_ADDON_URI (Clever Cloud)', () => {
+    expect(databaseUrl({ DATABASE_URL: 'a', POSTGRESQL_ADDON_URI: 'b' })).toBe('a');
+    expect(databaseUrl({ POSTGRESQL_ADDON_URI: 'b' })).toBe('b');
+    expect(databaseUrl({ DATABASE_URL: '', POSTGRESQL_ADDON_URI: 'b' })).toBe('b');
+    expect(databaseUrl({})).toBeUndefined();
   });
 });

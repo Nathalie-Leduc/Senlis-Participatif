@@ -1,10 +1,15 @@
 // ══════════════════════════════════════════════════════════
 // Page Admin — gestion des comptes
 //
-// Volontairement minimal pour l'instant : juste de quoi promouvoir
-// un citoyen en admin (ex. faire tester un proche) sans toucher à
-// la base à la main. La vraie hiérarchie de rôles (salarié mairie,
-// maisons de quartier, délégués...) reste un chantier à part.
+// Volontairement minimal pour l'instant : juste de quoi changer le
+// rôle d'un compte sans toucher à la base à la main.
+//
+// S5R2-11 : trois rôles au lieu de deux — Citoyen, Admin-test
+// (EDITOR : prépare et teste des brouillons, pour la mairie ou un
+// partenaire) et Administrateur. Un menu déroulant remplace l'ancien
+// bouton « Promouvoir / Rétrograder », qui ne savait faire qu'un
+// aller-retour entre deux rôles. La vraie hiérarchie de rôles
+// (salarié mairie, maisons de quartier, délégués...) reste l'offre F1.
 // ══════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,6 +17,7 @@ import { api } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useToast } from '../contexts/ToastContext.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { ROLE_META, ROLE_OPTIONS } from '../constants/roles.js';
 
 export default function AdminUsers() {
   usePageTitle('Administration — Comptes');
@@ -43,18 +49,18 @@ export default function AdminUsers() {
     return () => clearTimeout(timeout);
   }, [load]);
 
-  const handleToggleRole = async (targetUser) => {
-    const promoting = targetUser.role !== 'ADMIN';
-    const newRole = promoting ? 'ADMIN' : 'CITIZEN';
-    const question = promoting
-      ? `Promouvoir « ${targetUser.pseudo} » (${targetUser.email}) administrateur ?`
-      : `Rétrograder « ${targetUser.pseudo} » (${targetUser.email}) en citoyen ?`;
+  const handleChangeRole = async (targetUser, newRole) => {
+    if (newRole === targetUser.role) return;
+    const meta = ROLE_META[newRole];
+    // Confirmation qui dit CE QUE le rôle permet — on ne donne pas des
+    // droits à la légère (et le menu déroulant se change d'un clic)
+    const question = `Passer « ${targetUser.pseudo} » (${targetUser.email}) en ${meta.label} — ${meta.description} ?`;
     if (!window.confirm(question)) return;
 
     try {
       const data = await api.patch(`/admin/users/${targetUser.id}`, { role: newRole });
       setItems((prev) => prev.map((u) => (u.id === targetUser.id ? data.user : u)));
-      showToast(promoting ? `${targetUser.pseudo} est maintenant administrateur` : `${targetUser.pseudo} est de nouveau citoyen`);
+      showToast(`${targetUser.pseudo} est maintenant ${meta.label}`);
     } catch (err) {
       showToast(err.message || 'La mise à jour a échoué');
     }
@@ -66,7 +72,8 @@ export default function AdminUsers() {
         Gestion des comptes
       </h1>
       <p style={{ color: '#6B6257', fontSize: 15, marginBottom: 20 }}>
-        Promouvoir un citoyen en administrateur, ou rétrograder un compte.
+        Changer le rôle d'un compte : Citoyen, Admin-test (prépare et teste des brouillons,
+        ne publie jamais) ou Administrateur.
       </p>
 
       <input
@@ -89,7 +96,8 @@ export default function AdminUsers() {
           {items.length === 0 && <p style={{ color: '#6B6257' }}>Aucun compte trouvé.</p>}
           {items.map((u) => {
             const isSelf = u.id === currentUser?.id;
-            const isAdmin = u.role === 'ADMIN';
+            const meta = ROLE_META[u.role] ?? ROLE_META.CITIZEN;
+            const selectId = `role-${u.id}`;
             return (
               <div
                 key={u.id}
@@ -105,28 +113,33 @@ export default function AdminUsers() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span
+                    aria-hidden="true"
                     style={{
                       fontSize: 13, fontWeight: 600, padding: '4px 10px', borderRadius: 999,
-                      background: isAdmin ? '#E3EEF3' : '#EFEBE2',
-                      color: isAdmin ? '#1E5F7C' : '#26333A',
+                      background: meta.bg, color: meta.color,
                     }}
                   >
-                    {isAdmin ? 'Administrateur' : 'Citoyen'}
+                    {meta.label}
                   </span>
-                  <button
-                    onClick={() => handleToggleRole(u)}
+                  {/* Étiquette visible seulement des lecteurs d'écran : le
+                      pseudo dit À QUI s'applique ce menu (RGAA 11.1) */}
+                  <label htmlFor={selectId} className="sr-only">Rôle de {u.pseudo}</label>
+                  <select
+                    id={selectId}
+                    value={u.role}
+                    onChange={(e) => handleChangeRole(u, e.target.value)}
                     disabled={isSelf}
                     title={isSelf ? 'Impossible de modifier votre propre compte' : undefined}
-                    className="btn"
                     style={{
-                      background: isAdmin ? '#FCEAE6' : '#E0F2E5',
-                      color: isAdmin ? '#A8442F' : '#377349',
-                      padding: '8px 16px', minHeight: 40, fontSize: 14,
+                      padding: '8px 12px', minHeight: 40, fontSize: 14, borderRadius: 10,
+                      border: '2px solid #e3dcce', font: 'inherit',
                       opacity: isSelf ? 0.5 : 1, cursor: isSelf ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {isAdmin ? 'Rétrograder' : 'Promouvoir admin'}
-                  </button>
+                    {ROLE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             );

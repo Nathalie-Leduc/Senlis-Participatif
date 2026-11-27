@@ -66,6 +66,12 @@ export default function MentionsLegales() {
           <li>Contours des quartiers IRIS : INSEE et IGN, sous Licence Ouverte Etalab.</li>
           <li>Polices Fraunces et Public Sans, sous licence SIL Open Font License 1.1.</li>
         </ul>
+        {/* S5R2-05 : les parkings ne viennent plus d'OpenStreetMap */}
+        <p style={{ marginTop: 10 }}>
+          Parkings de la carte : informations publiques de la Ville de Senlis (plan des parkings du
+          centre-ville, septembre 2023 ; guide du stationnement, janvier 2025), tenues à jour par
+          l'administration du site. Tarifs indicatifs : seuls les tarifs affichés sur place font foi.
+        </p>
       </Section>
 
       <Section title="Données personnelles">

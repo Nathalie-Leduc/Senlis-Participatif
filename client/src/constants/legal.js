@@ -21,7 +21,7 @@
 // ══════════════════════════════════════════════════════════
 
 /** Date de dernière mise à jour des deux pages (à changer à chaque modification de fond). */
-export const LAST_UPDATED = '25 septembre 2026';
+export const LAST_UPDATED = '23 novembre 2026';
 
 export const SITE = {
   name: 'Senlis Participatif',
@@ -81,6 +81,13 @@ export const RECIPIENTS = [
     data: 'Votre adresse email et le contenu du message (lien de vérification, code de connexion…)',
   },
   {
+    // S5R2-07 : seulement si la lecture au survol est activée ET qu'une
+    // voix naturelle est choisie. Groupe américain : on le dit.
+    name: 'Microsoft Ireland Operations Ltd — Azure AI Speech (centre de données en France)',
+    role: 'Voix naturelles de la lecture au survol, si vous l’activez et choisissez une voix « naturelle » (sous-traitant)',
+    data: 'Uniquement le texte public lu à voix haute (titres, paragraphes, boutons) — jamais les pages de compte ou d’administration, ni ce que vous tapez dans un champ, ni votre identité : la demande passe par notre serveur. Selon Microsoft, ni le texte ni l’audio produit ne sont conservés dans ses journaux. Microsoft étant un groupe américain, un accès depuis les États-Unis ne peut être exclu ; il est encadré par le cadre de protection des données UE–États-Unis. Pour l’éviter, choisissez une « voix de cet appareil » : rien ne sort alors de votre navigateur',
+  },
+  {
     name: 'Fondation OpenStreetMap (Royaume-Uni)',
     role: 'Fonds de carte affichés par votre navigateur',
     data: 'Votre adresse IP et les zones de carte consultées — le Royaume-Uni bénéficie d’une décision d’adéquation de la Commission européenne',
@@ -100,7 +107,9 @@ export const RECIPIENTS = [
  * délibération CNIL n° 2020-091).
  *
  * `key` doit correspondre EXACTEMENT à la clé utilisée dans le code :
- * le test LegalPages.test.jsx le vérifie dans les deux sens.
+ * le test LegalPages.test.jsx le vérifie dans les deux sens. Une clé
+ * qui se termine par « * » est une FAMILLE de clés de même préfixe
+ * (ex. un brouillon par compte et par formulaire, S5R2-13).
  */
 export const BROWSER_STORAGE = [
   {
@@ -122,6 +131,13 @@ export const BROWSER_STORAGE = [
     duration: 'Jusqu’à ce que vous les réinitialisiez',
   },
   {
+    // S5R2-07
+    key: 'senlis:lecture',
+    storage: 'localStorage',
+    purpose: 'Mémoriser la voix et la vitesse choisies pour la lecture au survol',
+    duration: 'Jusqu’à ce que vous effaciez les données du site',
+  },
+  {
     key: 'senlis:registerDraft',
     storage: 'sessionStorage',
     purpose: 'Garder votre saisie du formulaire d’inscription (jamais le mot de passe) si la page se recharge',
@@ -133,6 +149,13 @@ export const BROWSER_STORAGE = [
     purpose: 'Retenir un vote cliqué avant la connexion, pour l’enregistrer juste après',
     duration: 'Jusqu’à la fermeture de l’onglet',
   },
+  {
+    // S5R2-13 : un brouillon par compte et par formulaire
+    key: 'senlis:draft:*',
+    storage: 'localStorage',
+    purpose: 'Garder une saisie en cours (réponses à une enquête commencée ; pour l’administration, enquête ou proposition en préparation) pour la reprendre plus tard sur ce navigateur — rien n’est envoyé avant que vous validiez',
+    duration: 'Jusqu’à l’envoi, la déconnexion, ou 7 jours au plus',
+  },
 ];
 
 /**
@@ -142,11 +165,14 @@ export const BROWSER_STORAGE = [
  * change-la aussi là-bas, et inversement.
  */
 export const RETENTION = [
-  { data: 'Compte et profil déclaré', duration: 'Jusqu’à la suppression du compte, ou 3 ans sans connexion (après un email d’avertissement)' },
+  // S5R2-09 : deux emails avant la suppression d'un compte inactif
+  { data: 'Compte et profil déclaré', duration: 'Jusqu’à la suppression du compte, ou 3 ans sans connexion (après deux emails d’avertissement : 30 jours, puis 7 jours avant)' },
   { data: 'Votes', duration: 'Supprimés avec le compte' },
   { data: 'Réponses aux enquêtes', duration: 'Détachées du compte à sa suppression, puis conservées de façon anonyme pour ne pas fausser les résultats' },
   { data: 'Liens reçus par email (vérification, mot de passe)', duration: 'Valables 1 heure, à usage unique, puis effacés sous 24 heures' },
   { data: 'Code de connexion administrateur', duration: 'Valable 10 minutes, à usage unique, puis effacé sous 24 heures' },
+  // S5R-13b : limite de 10 essais par heure et par compte
+  { data: 'Nombre d’essais de connexion manqués (sans l’adresse en clair)', duration: '1 heure, pour bloquer les tentatives d’intrusion, puis effacé chaque nuit' },
   { data: 'Journaux techniques du serveur (adresse IP, page demandée)', duration: '1 an au plus, pour la sécurité du service' },
   { data: 'Journal des actions d’administration (comptes administrateurs uniquement)', duration: '6 mois' },
 ];

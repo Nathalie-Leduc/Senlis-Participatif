@@ -129,6 +129,32 @@ describe('Bornes et limites', () => {
     expect(ok.status).toBe(201);
   });
 
+  it('NOMBRE : refuse un nombre à virgule (recette du 23/11 : « 4,7 voitures »)', async () => {
+    const { token } = await makeAdminUser();
+    const survey = await createSurvey(token, [
+      { label: 'Combien de voitures ou motos compte votre foyer ?', type: 'NOMBRE', minValue: 0 },
+    ]);
+    const [q] = survey.questions;
+    const citizen = await makeCitizen();
+
+    const decimal = await submit(citizen.token, survey.id, [{ questionId: q.id, valueNumber: 4.7 }]);
+    expect(decimal.status).toBe(400);
+    expect(JSON.stringify(decimal.body.error)).toMatch(/nombre entier/);
+
+    const ok = await submit(citizen.token, survey.id, [{ questionId: q.id, valueNumber: 4 }]);
+    expect(ok.status).toBe(201);
+  });
+
+  it('NOMBRE : des bornes à virgule sont refusées à la création', async () => {
+    const { token } = await makeAdminUser();
+    const res = await request(app).post(API).set('Authorization', `Bearer ${token}`).send({
+      title: 'Enquête invalide', description: 'Une description suffisamment longue',
+      questions: [{ label: 'Combien de vélos ?', type: 'NOMBRE', minValue: 0.5 }],
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body.error.details)).toMatch(/minimum doit être un nombre entier/);
+  });
+
   it('CHOIX_MULTIPLE : pas plus de cases cochées que la réponse à la question « Nombre » de référence', async () => {
     const { token } = await makeAdminUser();
     const survey = await createSurvey(token, [

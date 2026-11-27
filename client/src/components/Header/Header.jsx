@@ -6,7 +6,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
 export default function Header() {
-  const { isLogged, isAdmin, user, logout } = useAuth();
+  const { isLogged, isAdmin, isStaff, user, logout } = useAuth();
   const { pathname } = useLocation();
 
   // "/" doit être une correspondance EXACTE (sinon elle matcherait
@@ -38,26 +38,36 @@ export default function Header() {
 
         <nav style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <NavBtn to="/" active={isActive('/')}>Accueil</NavBtn>
-          <NavBtn to="/propositions" active={isActive('/propositions')}>Propositions</NavBtn>
-          <NavBtn to="/enquetes" active={isActive('/enquetes')}>Enquêtes</NavBtn>
-          {isAdmin && (
+          {/* S5R-12 (recette du 30/09) : en admin, « Propositions » et
+              « Enquêtes » mènent aux pages de GESTION, et les pages
+              publiques correspondantes quittent le menu — deux paires
+              d'entrées presque homonymes (« Propositions » / « Admin
+              propositions ») prêtaient à confusion. Les pages publiques
+              restent à un clic : bouton « Voir » de chaque ligne.
+              Analogie : le menu d'un commerçant n'est pas celui de ses
+              clients — mais il peut toujours passer côté salle. */}
+          {/* S5R2-11 : l'Admin-test a le même menu de gestion, sans « Comptes » */}
+          {isStaff ? (
             <>
-              <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>
-                Admin propositions
-              </NavBtn>
-              <NavBtn to="/admin/enquetes" active={isActive('/admin/enquetes')}>
-                Admin enquêtes
-              </NavBtn>
-              <NavBtn to="/admin/comptes" active={isActive('/admin/comptes')}>
-                Comptes
-              </NavBtn>
+              <NavBtn to="/admin/propositions" active={isActive('/admin/propositions')}>Propositions</NavBtn>
+              <NavBtn to="/admin/enquetes" active={isActive('/admin/enquetes')}>Enquêtes</NavBtn>
+              {isAdmin && <NavBtn to="/admin/comptes" active={isActive('/admin/comptes')}>Comptes</NavBtn>}
+            </>
+          ) : (
+            <>
+              <NavBtn to="/propositions" active={isActive('/propositions')}>Propositions</NavBtn>
+              <NavBtn to="/enquetes" active={isActive('/enquetes')}>Enquêtes</NavBtn>
             </>
           )}
+          {/* S5R-11 : comme dans la maquette */}
+          <NavBtn to="/carte" active={isActive('/carte')}>Carte</NavBtn>
 
           {isLogged ? (
             <>
               <NavBtn to="/mon-compte" active={isActive('/mon-compte')}>
-                {user?.pseudo || 'Mon compte'}
+                {/* data-no-read (S5R2-07) : le pseudo de la personne connectée
+                    n'est jamais envoyé à la lecture par voix naturelle */}
+                <span data-no-read>{user?.pseudo || 'Mon compte'}</span>
               </NavBtn>
               <button onClick={logout} style={navBtnStyle}>Déconnexion</button>
             </>

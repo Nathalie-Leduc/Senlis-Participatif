@@ -16,15 +16,32 @@
 // revenir en arrière, et rien n'est "posté" avant la toute
 // dernière page (Terminer = un seul envoi groupé, jamais un envoi
 // par question).
+//
+// S5R2-13 — REPRISE : les réponses déjà données et la question atteinte
+// sont gardées dans le navigateur à chaque changement. En revenant, on
+// reprend au même endroit (« ← Précédent » fonctionne toujours, toutes
+// les réponses antérieures étant là), avec un lien « Recommencer à
+// zéro ». Effacé à l'envoi, à la déconnexion, au bout de 7 jours ;
+// jamais en mode test. Analogie : le marque-page dans un livre.
+//
+// S5R2-01 — MODE TEST (administratrice) : la même page, le même
+// moteur, mais une « répétition générale » : le statut n'est pas
+// vérifié (on teste surtout les BROUILLONS), le profil de l'admin
+// ne pré-remplit rien (on veut pouvoir explorer toutes les branches),
+// et l'envoi final part vers POST /surveys/:id/test, qui valide tout
+// comme pour de vrai… sans rien enregistrer. À la fin, un récapitulatif
+// du chemin parcouru et un bouton « Recommencer le test ».
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../services/api.js';
 import Confetti from '../components/Confetti/Confetti.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
-import { visibleQuestionIds, chosenFromAnswers } from '../utils/surveyFlow.js';
+import { visibleQuestionIds, surveyPath, chosenFromAnswers } from '../utils/surveyFlow.js';
+import { loadDraft, clearDraft, formatDraftDate } from '../utils/draftStorage.js';
+import { useFormDraft } from '../hooks/useFormDraft.js';
 
 // Une réponse est-elle "remplie" pour CETTE question ? Dépend du
 // type — un CHOIX_MULTIPLE vide (aucune case cochée) n'est pas
@@ -51,12 +68,18 @@ function isAnswered(question, answer) {
 // générique unique ("D'après votre profil : ...") pour chacun de ces
 // quatre champs bien identifiés.
 /**
- * S5R-05 : message si un nombre sort des bornes fixées par
- * l'administratrice (null si tout va bien ou si rien n'est saisi).
+ * S5R-05 : message si un nombre n'est pas entier, ou sort des bornes
+ * fixées par l'administratrice (null si tout va bien ou si rien n'est saisi).
  */
 export function numberRangeError(question, answer) {
   const value = answer?.valueNumber;
   if (question.type !== 'NOMBRE' || typeof value !== 'number' || Number.isNaN(value)) return null;
+  // Recette du 23/11 : « 4,7 voitures » était accepté. Une question
+  // « Nombre » COMPTE (véhicules, personnes, places…) : entier seulement.
+  // (L'API refuse aussi, au cas où ce contrôle serait contourné.)
+  if (!Number.isInteger(value)) {
+    return 'Merci d\'indiquer un nombre entier, sans virgule.';
+  }
   if (question.minValue !== null && question.minValue !== undefined && value < question.minValue) {
     return `La valeur doit être au moins ${question.minValue}.`;
   }
@@ -86,6 +109,77 @@ export function prefilledOptionFor(question, user) {
   return question.options?.find((o) => o.syncValue === value) ?? null;
 }
 
+/**
+ * Recette du 24/11 : cette réponse va-t-elle MODIFIER le profil ?
+ * Vrai si la question synchronise un champ du compte et que l'option
+ * choisie porte une valeur différente de celle du profil actuel.
+ * (La mise à jour n'a lieu qu'à l'ENVOI du questionnaire.)
+ */
+export function changesProfile(question, answer, user) {
+  if (!question.syncsToProfile || !user || !answer?.optionId) return false;
+  const chosen = question.options?.find((o) => o.id === answer.optionId);
+  if (!chosen?.syncValue) return false;
+  return prefilledOptionFor(question, user)?.id !== chosen.id;
+}
+
+/**
+ * S5R2-02 : la réponse SANS les options qui ne sont plus proposées.
+ * Cas typique : on coche « Bus régional » (proposé car « Autre ville »),
+ * on revient corriger « Senlis » — « Bus régional » disparaît de la
+ * liste, et ne doit plus compter comme réponse (l'API la refuserait).
+ * @param {object | undefined} answer
+ * @param {Set<string> | null} offered - options proposées (null = question sans options)
+ * @returns {object | undefined}
+ */
+export function keepOffered(answer, offered) {
+  if (!answer || !offered) return answer;
+  if (answer.optionId !== undefined) return offered.has(answer.optionId) ? answer : undefined;
+  if (Array.isArray(answer.optionIds)) {
+    const kept = answer.optionIds.filter((id) => offered.has(id));
+    return kept.length ? { optionIds: kept } : undefined;
+  }
+  return answer;
+}
+
+/**
+ * S5R2-13 : remet en place des réponses sauvegardées, en ne gardant que
+ * ce qui a encore un sens pour l'enquête TELLE QU'ELLE EST aujourd'hui
+ * (une question ou une option a pu être retirée entre-temps).
+ * @param {{ questions: Array<{ id: string, options: Array<{ id: string }> }> }} survey
+ * @param {Record<string, object>} saved - { [questionId]: réponse }
+ * @returns {Record<string, object>}
+ */
+export function restoreAnswers(survey, saved) {
+  const restored = {};
+  for (const question of survey.questions) {
+    const answer = saved?.[question.id];
+    if (!answer || typeof answer !== 'object') continue;
+    const optionIds = new Set(question.options.map((o) => o.id));
+    if (answer.optionId !== undefined) {
+      if (optionIds.has(answer.optionId)) restored[question.id] = { optionId: answer.optionId };
+    } else if (Array.isArray(answer.optionIds)) {
+      const kept = answer.optionIds.filter((id) => optionIds.has(id));
+      if (kept.length) restored[question.id] = { optionIds: kept };
+    } else if (typeof answer.valueNumber === 'number') {
+      restored[question.id] = { valueNumber: answer.valueNumber };
+    } else if (typeof answer.valueText === 'string') {
+      restored[question.id] = { valueText: answer.valueText };
+    }
+  }
+  return restored;
+}
+
+/**
+ * S5R2-13 : la question où reprendre — jamais au-delà de la dernière
+ * question VISIBLE avec ces réponses (sinon la page n'aurait rien à
+ * afficher).
+ */
+export function resumeStep(survey, answers, savedStep) {
+  const visibleCount = visibleQuestionIds(survey.questions, chosenFromAnswers(answers)).length;
+  const step = Number.isInteger(savedStep) ? savedStep : 0;
+  return Math.max(0, Math.min(step, visibleCount - 1));
+}
+
 const PROFILE_PREFILL_LABELS = {
   travailleASenlis: 'Vous travaillez à Senlis :',
   situation: 'Vous résidez :',
@@ -96,7 +190,18 @@ const PROFILE_PREFILL_LABELS = {
 
 export default function EnqueteRepondre() {
   const { slug } = useParams();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  // Recette du 24/11 : le chargement de l'enquête dépend de la PERSONNE
+  // (son id), pas de chaque détail de son profil. Sinon, rafraîchir le
+  // profil après l'envoi rechargeait l'enquête… et affichait « Vous avez
+  // déjà répondu » à la place du merci. Le profil le plus récent est lu
+  // dans cette ref, tenue à jour par l'effet juste en dessous.
+  const userId = user?.id;
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+  // Lu sur le rôle plutôt que via isAdmin : une seule source, l'objet user.
+  // S5R2-11 : un compte Admin-test (EDITOR) teste aussi (brouillons)
+  const testMode = user?.role === 'ADMIN' || user?.role === 'EDITOR';
 
   const [survey, setSurvey] = useState(null);
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
@@ -107,13 +212,39 @@ export default function EnqueteRepondre() {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  // S5R2-01 : réponse de POST /test — { path, totalQuestions, profileWouldUpdate }
+  const [testResult, setTestResult] = useState(null);
+  // S5R2-13 : date des réponses reprises (pour le message « reprises du… »)
+  // et réponses venues du profil (point de départ de « Recommencer »)
+  const [resumedAt, setResumedAt] = useState(null);
+  const prefilledRef = useRef({});
+  // Recette du 24/11 : l'envoi a-t-il mis à jour le profil ? (écran de fin)
+  const [profileUpdated, setProfileUpdated] = useState(false);
+
+  // ── S5R2-13 : sauvegarde automatique des réponses en cours ──
+  // Jamais en mode test (rien ne doit rester d'un test), ni après l'envoi
+  const draftScope = `survey-answers:${survey?.id}`;
+  const snapshot = useMemo(() => ({ answers, step }), [answers, step]);
+  const draft = useFormDraft({
+    userId: user?.id,
+    scope: draftScope,
+    ready: Boolean(survey) && !testMode && !done,
+    snapshot,
+  });
   // Une question pré-remplie depuis le profil s'affiche en lecture
   // seule (voir plus bas) — ce drapeau permet de basculer vers le
   // champ interactif normal si la personne clique sur "Modifier".
   // Remis à false à chaque question pour ne pas rester "ouvert" en
   // avançant dans le parcours.
   const [overrideCurrentQuestion, setOverrideCurrentQuestion] = useState(false);
-  useEffect(() => setOverrideCurrentQuestion(false), [step]);
+  // S5R2-08 : remis à false PENDANT le rendu quand la question change
+  // (motif recommandé par React), plutôt que dans un effet qui affichait
+  // d'abord la nouvelle question « ouverte », puis refaisait un rendu
+  const [overrideStep, setOverrideStep] = useState(step);
+  if (overrideStep !== step) {
+    setOverrideStep(step);
+    setOverrideCurrentQuestion(false);
+  }
 
   // S5A-07 : passer à la question suivante ne change pas de page, mais
   // pour un lecteur d'écran, rien ne se passerait. On place donc le
@@ -131,24 +262,34 @@ export default function EnqueteRepondre() {
   }, [step]);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-
+    // S5R2-08 : plus de setLoading(true) / setError(null) synchrones ici
+    // (l'état initial est déjà « chargement ») ; l'erreur précédente est
+    // effacée à l'arrivée de la réponse. `cancelled` : une réponse arrivée
+    // après un changement d'enquête ou de compte est ignorée.
+    let cancelled = false;
+    const user = userRef.current; // profil le plus récent (voir userRef)
     api.get(`/surveys/${slug}`)
       .then((data) => {
+        if (cancelled) return;
+        setError(null);
         // On vérifie ICI, pas seulement au moment du POST final :
         // pas la peine de laisser quelqu'un remplir 8 questions pour
         // découvrir à la fin qu'il avait déjà répondu, ou que
         // l'enquête vient de fermer.
-        if (data.survey.status !== 'OPEN') {
+        if (!testMode && data.survey.status !== 'OPEN') {
           setError("Cette enquête n'est plus ouverte aux réponses.");
           return;
         }
-        if (data.hasResponded) {
+        if (!testMode && data.hasResponded) {
+          // Répondu entre-temps (autre appareil, autre onglet) : la
+          // saisie gardée ici ne servira plus jamais
+          clearDraft(user?.id, `survey-answers:${data.survey.id}`);
           setError('Vous avez déjà répondu à cette enquête.');
           return;
         }
         setSurvey(data.survey);
+        // Mode test : pas de pré-remplissage depuis le profil de l'admin
+        if (testMode) return;
 
         // Pré-remplissage depuis le profil (S5-XX) : si cette
         // question synchronise un champ dont on connaît DÉJÀ la
@@ -161,11 +302,24 @@ export default function EnqueteRepondre() {
           const option = prefilledOptionFor(q, user);
           if (option) prefilled[q.id] = { optionId: option.id };
         }
+        prefilledRef.current = prefilled;
+
+        // S5R2-13 : des réponses déjà commencées ? On reprend où on en
+        // était — ce que la personne avait répondu l'emporte sur le profil
+        const saved = loadDraft(user?.id, `survey-answers:${data.survey.id}`);
+        if (saved) {
+          const restored = { ...prefilled, ...restoreAnswers(data.survey, saved.data?.answers) };
+          setAnswers(restored);
+          setStep(resumeStep(data.survey, restored, saved.data?.step));
+          setResumedAt(saved.savedAt);
+          return;
+        }
         if (Object.keys(prefilled).length) setAnswers(prefilled);
       })
-      .catch((err) => setError(err.message || 'Impossible de charger cette enquête'))
-      .finally(() => setLoading(false));
-  }, [slug, user]);
+      .catch((err) => { if (!cancelled) setError(err.message || 'Impossible de charger cette enquête'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [slug, userId, testMode]);
 
   const setAnswer = (questionId, value) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -188,7 +342,7 @@ export default function EnqueteRepondre() {
 
   // Même règle que pour le vote (UC-02) : un compte non vérifié ne
   // peut pas peser dans les résultats.
-  if (!user.emailVerified) {
+  if (!testMode && !user.emailVerified) {
     return (
       <div className="wrap" style={{ padding: '60px 20px', textAlign: 'center', maxWidth: 480, margin: '0 auto' }}>
         <p style={{ color: '#6B6257', fontSize: 16 }}>
@@ -198,6 +352,25 @@ export default function EnqueteRepondre() {
           Retour à l'enquête
         </Link>
       </div>
+    );
+  }
+
+  // S5R2-01 : on remet tout à zéro pour rejouer un autre chemin
+  const restartTest = () => {
+    setAnswers({});
+    setStep(0);
+    setTestResult(null);
+    setError(null);
+    setDone(false);
+  };
+
+  if (done && testMode && testResult) {
+    return (
+      <TestRecap
+        slug={slug}
+        result={testResult}
+        onRestart={restartTest}
+      />
     );
   }
 
@@ -211,6 +384,12 @@ export default function EnqueteRepondre() {
         <p style={{ color: '#6B6257', marginBottom: 24 }}>
           Votre réponse a bien été enregistrée.
         </p>
+        {profileUpdated && (
+          <p style={{ marginBottom: 24 }}>
+            Votre profil a aussi été mis à jour avec vos réponses.{' '}
+            <Link to="/mon-compte">Voir mon compte</Link>
+          </p>
+        )}
         <Link to={`/enquetes/${slug}/resultats`} className="btn btn-primary">
           Voir les résultats
         </Link>
@@ -225,10 +404,17 @@ export default function EnqueteRepondre() {
   // (même moteur que l'API, voir utils/surveyFlow.js). Le total
   // « Question 3 sur N » ne compte donc que les questions qu'elle
   // verra réellement — plus le questionnaire complet, décourageant.
-  const visibleIds = visibleQuestionIds(survey.questions, chosenFromAnswers(answers));
-  const visibleQuestions = visibleIds.map((id) => survey.questions.find((q) => q.id === id));
+  // S5R2-02 : le parcours donne aussi, pour chaque question, les options
+  // PROPOSÉES à cette personne (une option peut être conditionnelle)
+  const path = surveyPath(survey.questions, chosenFromAnswers(answers));
+  const visibleQuestions = path.questionIds.map((id) => survey.questions.find((q) => q.id === id));
+  const offeredFor = (q) => (q.options?.length ? new Set(path.offeredOptions.get(q.id)) : null);
 
-  const question = visibleQuestions[step];
+  const fullQuestion = visibleQuestions[step];
+  // La question telle que la personne la voit : seulement ses options proposées
+  const question = fullQuestion && fullQuestion.options?.length
+    ? { ...fullQuestion, options: fullQuestion.options.filter((o) => offeredFor(fullQuestion).has(o.id)) }
+    : fullQuestion;
   if (!question) {
     // Cas limite improbable (ex. la dernière question visible vient
     // de disparaître suite à un retour en arrière) — on ramène
@@ -236,7 +422,8 @@ export default function EnqueteRepondre() {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
   }
   const total = visibleQuestions.length;
-  const answer = answers[question.id];
+  // Une option cochée puis devenue non proposée ne compte plus
+  const answer = keepOffered(answers[question.id], offeredFor(question));
   const answered = isAnswered(question, answer);
   const rangeError = numberRangeError(question, answer);
   // Limite de cases (S5R-05) : la réponse donnée à la question « Nombre »
@@ -272,19 +459,46 @@ export default function EnqueteRepondre() {
       const payload = {
         answers: visibleQuestions
           .map((q) => {
-            const a = answers[q.id];
+            const a = keepOffered(answers[q.id], offeredFor(q)); // S5R2-02
             if (!isAnswered(q, a)) return null;
             return { questionId: q.id, ...a };
           })
           .filter(Boolean),
       };
-      await api.post(`/surveys/${survey.id}/responses`, payload);
+      if (testMode) {
+        // Répétition générale : validé par l'API, rien d'enregistré
+        const result = await api.post(`/surveys/${survey.id}/test`, payload);
+        setTestResult(result);
+      } else {
+        await api.post(`/surveys/${survey.id}/responses`, payload);
+        draft.clear(); // S5R2-13 : envoyé pour de bon, plus rien à garder
+        // Recette du 24/11 : l'API vient de mettre le profil à jour en
+        // base (situation, quartier, travail…). Sans ce rafraîchissement,
+        // « Mon compte » et les autres enquêtes affichaient l'ANCIEN
+        // profil, gardé en mémoire, jusqu'au prochain rechargement.
+        const updates = visibleQuestions.some((q) => changesProfile(q, answers[q.id], user));
+        if (updates) {
+          setProfileUpdated(true);
+          refreshUser().catch(() => {}); // sans gravité : la base est à jour
+        }
+      }
       setDone(true);
     } catch (err) {
       setError(err.message || "La réponse n'a pas pu être enregistrée");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // S5R2-13 : « Recommencer à zéro » — on oublie les réponses gardées
+  // (sauf celles venues du profil, comme à une première visite)
+  const restartFromScratch = () => {
+    // discard (et non clear) : le nouveau point de départ n'est pas
+    // ré-enregistré tant que la personne n'a rien répondu
+    draft.discard();
+    setAnswers(prefilledRef.current);
+    setStep(0);
+    setResumedAt(null);
   };
 
   const handlePrevious = () => {
@@ -296,6 +510,24 @@ export default function EnqueteRepondre() {
       <Link to={`/enquetes/${slug}`} style={{ color: '#6B6257', fontSize: 14 }}>
         ← Annuler et revenir à l'enquête
       </Link>
+
+      {testMode && <TestBanner status={survey.status} />}
+
+      {/* S5R2-13 : on dit qu'on a repris — et comment repartir de zéro */}
+      {resumedAt && (
+        <p role="status" style={{
+          background: '#E3F0F6', borderRadius: 12, padding: '10px 14px', marginTop: 16, fontSize: 15,
+        }}
+        >
+          Nous avons repris vos réponses du {formatDraftDate(resumedAt)}.{' '}
+          <button
+            type="button" onClick={restartFromScratch}
+            style={{ background: 'none', border: 'none', padding: 0, color: '#1E5F7C', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}
+          >
+            Recommencer à zéro
+          </button>
+        </p>
+      )}
 
       {/* ── Barre de progression ─────────────────────────── */}
       <div style={{ margin: '20px 0 8px' }}>
@@ -343,9 +575,16 @@ export default function EnqueteRepondre() {
           // avec la possibilité de revenir au champ normal si elle ne
           // correspond plus (ex. déménagement récent, profil pas à
           // jour).
-          const prefilledOption = prefilledOptionFor(question, user);
+          // S5R2-01 : en mode test, jamais de lecture seule — l'admin
+          // doit pouvoir explorer chaque branche
+          const prefilledOption = testMode ? null : prefilledOptionFor(question, user);
 
-          if (prefilledOption && !overrideCurrentQuestion) {
+          // Recette du 24/11 : lecture seule SEULEMENT si la réponse est
+          // toujours celle du profil. Avant, revenir sur une question
+          // modifiée (« Modifier » → « Centre historique ») réaffichait
+          // l'ancienne valeur du profil, comme si rien n'avait changé —
+          // alors que la nouvelle réponse était bien gardée.
+          if (prefilledOption && !overrideCurrentQuestion && answer?.optionId === prefilledOption.id) {
             return (
               <div>
                 <p style={{ fontSize: 17 }}>
@@ -370,14 +609,22 @@ export default function EnqueteRepondre() {
           }
 
           return (
-            <QuestionInput
-              question={question}
-              answer={answer}
-              onChange={(value) => setAnswer(question.id, value)}
-              labelledBy="question-label"
-              maxChoices={maxChoices}
-              rangeError={rangeError}
-            />
+            <>
+              <QuestionInput
+                question={question}
+                answer={answer}
+                onChange={(value) => setAnswer(question.id, value)}
+                labelledBy="question-label"
+                maxChoices={maxChoices}
+                rangeError={rangeError}
+              />
+              {/* Recette du 24/11 : dire QUAND le profil change (à l'envoi) */}
+              <p aria-live="polite" style={{ fontSize: 14, color: '#1E5F7C', margin: '10px 0 0' }}>
+                {!testMode && changesProfile(question, answer, user)
+                  ? 'Votre profil (« Mon compte ») sera mis à jour avec cette réponse quand vous enverrez le questionnaire.'
+                  : ''}
+              </p>
+            </>
           );
         })()}
       </div>
@@ -406,6 +653,79 @@ export default function EnqueteRepondre() {
           Une réponse est nécessaire pour continuer.
         </p>
       )}
+    </div>
+  );
+}
+
+// ── S5R2-01 : bandeau du mode test ───────────────────────
+// role="status" : annoncé une fois par les lecteurs d'écran, sans
+// interrompre. Le statut est rappelé : tester un brouillon est normal.
+const STATUS_LABELS = { DRAFT: 'brouillon', OPEN: 'ouverte', CLOSED: 'clôturée' };
+
+function TestBanner({ status }) {
+  return (
+    <div role="status" style={{
+      background: '#FFF4D6', border: '2px dashed #C99A2E', color: '#5C4510',
+      padding: '10px 14px', borderRadius: 12, marginTop: 16, fontSize: 14,
+    }}
+    >
+      🧪 <strong>Mode test</strong> — rien n'est enregistré
+      {STATUS_LABELS[status] && <> (enquête {STATUS_LABELS[status]})</>}.
+    </div>
+  );
+}
+
+// ── S5R2-01 : récapitulatif de fin de test ───────────────
+// Le chemin parcouru, question par question : c'est lui qui permet de
+// vérifier que les conditions et les « fin d'enquête » font bien ce
+// qu'on attendait.
+const PROFILE_FIELD_LABELS = {
+  travailleASenlis: 'travaille à Senlis',
+  situation: 'situation (résidence)',
+  quartier: 'quartier',
+  travailleQuartier: 'quartier de travail',
+  travailType: 'type de travail',
+};
+
+export function TestRecap({ slug, result, onRestart }) {
+  const path = result.path || [];
+  const fields = result.profileWouldUpdate || [];
+  return (
+    <div className="wrap" style={{ padding: '40px 20px 60px', maxWidth: 640 }}>
+      <TestBanner />
+      <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 26, margin: '18px 0 8px' }}>
+        Test terminé : le parcours est valide
+      </h1>
+      <p style={{ color: '#6B6257', marginBottom: 18 }}>
+        {path.length} question{path.length > 1 ? 's' : ''} vue{path.length > 1 ? 's' : ''} sur {result.totalQuestions} au total.
+        Aucune réponse n'a été enregistrée.
+      </p>
+
+      <ol style={{ paddingLeft: 22, lineHeight: 1.7, marginBottom: 18 }}>
+        {path.map((step) => (
+          <li key={step.questionId}>
+            {step.label}{' '}
+            <span style={{ color: step.answered ? '#377349' : '#6B6257', fontSize: 14 }}>
+              {step.answered ? '✓ répondue' : '— passée (optionnelle)'}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      <p style={{ fontSize: 14, color: '#6B6257', marginBottom: 24 }}>
+        {fields.length
+          ? `Pour un·e citoyen·ne, ces réponses mettraient à jour son profil : ${fields.map((f) => PROFILE_FIELD_LABELS[f] || f).join(', ')}.`
+          : 'Ces réponses ne modifieraient pas le profil du citoyen.'}
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onRestart} className="btn btn-primary">
+          🔁 Recommencer le test
+        </button>
+        <Link to={`/enquetes/${slug}`} className="btn" style={{ background: '#EFEBE2', color: '#26333A' }}>
+          Retour à l'enquête
+        </Link>
+      </div>
     </div>
   );
 }
@@ -484,6 +804,10 @@ function QuestionInput({ question, answer, onChange, labelledBy, maxChoices, ran
         <div>
           <input
             type="number"
+            // Entiers seulement : les flèches avancent de 1, et le clavier
+            // des téléphones n'affiche que des chiffres (pas de virgule)
+            step="1"
+            inputMode="numeric"
             {...a11y}
             // Bornes S5R-05 : les flèches du champ les respectent, et la
             // saisie au clavier est vérifiée (message ci-dessous)
@@ -535,29 +859,31 @@ function QuestionInput({ question, answer, onChange, labelledBy, maxChoices, ran
 // si l'API est indisponible ou que la ville cherchée n'apparaît pas
 // dans les suggestions, la personne peut toujours taper librement,
 // rien ne bloque la saisie.
-function VilleAutocompleteInput({ value, onChange, a11y }) {
-  const [suggestions, setSuggestions] = useState([]);
+// Exporté pour les tests (S5R2-08)
+export function VilleAutocompleteInput({ value, onChange, a11y }) {
+  const [fetched, setFetched] = useState([]);
   const [open, setOpen] = useState(false);
+  // Moins de 2 caractères : pas la peine d'interroger l'API pour une
+  // lettre isolée, trop de résultats pour être utiles — et pas de
+  // suggestions affichées. S5R2-08 : DÉDUIT au rendu, plutôt que de
+  // vider la liste au début de l'effet (setState synchrone).
+  const tooShort = value.trim().length < 2;
+  const suggestions = tooShort ? [] : fetched;
 
   useEffect(() => {
-    // Moins de 2 caractères : pas la peine d'interroger l'API pour
-    // une lettre isolée, trop de résultats pour être utiles.
-    if (value.trim().length < 2) {
-      setSuggestions([]);
-      return undefined;
-    }
+    if (tooShort) return undefined;
 
     // Anti-rebond : une seule requête une fois que la personne s'est
     // arrêtée de taper depuis 300ms, pas une par lettre tapée.
     const timeout = setTimeout(() => {
       fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(value.trim())}&boost=population&limit=8&fields=nom,codesPostaux`)
         .then((res) => (res.ok ? res.json() : []))
-        .then(setSuggestions)
-        .catch(() => setSuggestions([])); // API indisponible : la saisie libre reste toujours possible
+        .then(setFetched)
+        .catch(() => setFetched([])); // API indisponible : la saisie libre reste toujours possible
     }, 300);
 
     return () => clearTimeout(timeout);
-  }, [value]);
+  }, [value, tooShort]);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -588,7 +914,7 @@ function VilleAutocompleteInput({ value, onChange, a11y }) {
                 type="button"
                 onClick={() => {
                   onChange(`${commune.nom} (${commune.codesPostaux?.[0] || ''})`);
-                  setSuggestions([]);
+                  setFetched([]);
                   setOpen(false);
                 }}
                 style={{

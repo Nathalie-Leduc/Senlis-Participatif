@@ -7,7 +7,8 @@
 
 export const SITUATION_OPTIONS = [
   { value: 'CENTRE_RESIDENT', label: "J'habite le centre historique" },
-  { value: 'AUTRE_QUARTIER', label: "J'habite un autre quartier de Senlis" },
+  // S5R2-06 : Saint-Vincent, séparé du centre, est « un autre quartier »
+  { value: 'AUTRE_QUARTIER', label: "J'habite un autre quartier de Senlis (dont Saint-Vincent)" },
   { value: 'HORS_SENLIS', label: 'Je ne réside pas à Senlis' },
 ];
 
@@ -20,12 +21,14 @@ export const SITUATION_SHORT_LABELS = {
   NON_RENSEIGNEE: 'Non renseignée',
 };
 
-// Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
-// historique — affiché en cascade uniquement quand la situation
+// Les quartiers de Senlis autres que le centre historique (les 7 IRIS
+// de l'INSEE, le centre coupé en deux d'après le plan municipal de
+// 2018 — S5R2-06 ; mêmes valeurs que api/src/lib/quartiers.js) — affiché en cascade uniquement quand la situation
 // choisie est AUTRE_QUARTIER, pour que ces citoyens ne se sentent
 // pas réduits à une case fourre-tout, et pour pouvoir cibler de
 // futures enquêtes/propositions par quartier précis.
 export const QUARTIER_OPTIONS = [
+  { value: 'SAINT_VINCENT', label: 'Quartier Saint-Vincent' },
   { value: 'BRICHEBAY', label: 'Brichebay' },
   { value: 'BON_SECOURS', label: 'Bon Secours' },
   { value: 'VAL_AUNETTE_GATELIERE', label: "Val d'Aunette - La Gâtelière" },

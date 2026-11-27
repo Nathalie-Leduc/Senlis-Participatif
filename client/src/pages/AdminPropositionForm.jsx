@@ -12,11 +12,22 @@
 // change ce qu'il fait du formulaire une fois complété.
 // ══════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useId, useRef, isValidElement, cloneElement } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, assetUrl } from '../services/api.js';
 import { STATUS_OPTIONS } from '../constants/proposalStatus.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import EditorBanner from '../components/EditorBanner/EditorBanner.jsx';
+import FormSaveBar from '../components/FormSaveBar/FormSaveBar.jsx';
+import TemplatePicker from '../components/TemplatePicker/TemplatePicker.jsx';
+import DraftRestorePrompt from '../components/DraftRestorePrompt/DraftRestorePrompt.jsx';
+import { useFormDraft } from '../hooks/useFormDraft.js';
+import { PROPOSAL_TEMPLATES, hasPlaceholders } from '../constants/proposalTemplates.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import ZonePicker from '../components/ZonePicker/ZonePicker.jsx';
+import LazyMapView from '../components/MapView/LazyMapView.jsx';
+import { zoneFeatures } from '../constants/zones.js';
+import { loadIris } from '../utils/irisData.js';
 
 const EMPTY_FORM = {
   title: '', summary: '', content: '', status: 'DRAFT',
@@ -26,6 +37,9 @@ const EMPTY_FORM = {
   // afficher/éditer que du texte — on convertit texte <-> objet aux deux
   // portes d'entrée/sortie (chargement et soumission), jamais entre les deux.
   geoJson: '',
+  // S5R-10 : zone concernée — 'none' | 'city' | 'quartiers'
+  zoneMode: 'none',
+  zoneQuartiers: [],
 };
 
 export default function AdminPropositionForm() {
@@ -34,12 +48,38 @@ export default function AdminPropositionForm() {
   // Titre de l'onglet (RGAA 8.6) — provisoire pendant le chargement
   usePageTitle(isEdit ? 'Modifier une proposition' : 'Nouvelle proposition');
   const navigate = useNavigate();
+  // S5R2-11 : un compte Admin-test ne travaille que sur des brouillons
+  const { user, isEditor } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [proposalId, setProposalId] = useState(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  // S5R2-12 : modèle appliqué en dernier, pour le mettre en valeur (voir
+  // applyTemplate plus bas) — déclaré ici car il fait partie de la
+  // sauvegarde automatique
+  const [appliedTemplateId, setAppliedTemplateId] = useState(null);
+
+  // ── S5R2-13 : sauvegarde automatique de la saisie en cours ──
+  // Tout le formulaire SAUF l'image : un fichier ne se range pas dans
+  // le stockage du navigateur (le bandeau de reprise le précise)
+  const snapshot = useMemo(() => ({ form, appliedTemplateId }), [form, appliedTemplateId]);
+  const draft = useFormDraft({
+    userId: user?.id,
+    scope: isEdit ? `proposal-form:${slug}` : 'proposal-form:new',
+    ready: !loading,
+    snapshot,
+    checkOnMount: !isEdit,
+  });
+  const checkDraft = draft.check;
+
+  const restoreDraft = () => {
+    const data = draft.restore();
+    if (!data) return;
+    setForm(data.form);
+    setAppliedTemplateId(data.appliedTemplateId ?? null);
+  };
 
   // ── Image : traitée à PART du reste du formulaire ────────
   // Pourquoi ? title/summary/content/lat/lng/geoJson partent tous
@@ -50,6 +90,13 @@ export default function AdminPropositionForm() {
   // donc hors de `form`, dans son propre state.
   const [imageFile, setImageFile] = useState(null); // le File choisi, pas encore envoyé
   const [imagePreview, setImagePreview] = useState(null); // URL d'aperçu (locale OU déjà en ligne)
+  // Recette du 25/11 : un fichier qui n'est pas une image (un .docx
+  // renommé en .png…) est signalé DÈS LE CHOIX, sous le champ. Avant,
+  // l'API le refusait seulement à l'enregistrement — quand le reste de
+  // la proposition était déjà enregistré.
+  const [imageError, setImageError] = useState(null);
+  const imageInputRef = useRef(null);
+  const onlineImageRef = useRef(null); // l'image déjà en ligne, à réafficher si le nouveau fichier est refusé
 
   // ── En mode édition, charger la proposition existante ────
   useEffect(() => {
@@ -74,18 +121,42 @@ export default function AdminPropositionForm() {
           // la colonne Json automatiquement). On le re-transforme en texte
           // indenté pour que l'admin puisse le relire/modifier dans le textarea.
           geoJson: p.geoJson ? JSON.stringify(p.geoJson, null, 2) : '',
+          zoneMode: p.zoneWholeCity ? 'city' : (p.zoneQuartiers?.length ? 'quartiers' : 'none'),
+          zoneQuartiers: p.zoneQuartiers ?? [],
         });
         // p.imagePath est déjà un chemin exploitable tel quel par un
         // <img src="..."> (voir le proxy Vite /uploads) — pas de
         // conversion nécessaire, contrairement au geoJson.
-        if (p.imagePath) setImagePreview(assetUrl(p.imagePath));
+        if (p.imagePath) {
+          onlineImageRef.current = assetUrl(p.imagePath);
+          setImagePreview(onlineImageRef.current);
+        }
       })
+      .then(() => checkDraft()) // S5R2-13 : des modifications non enregistrées ?
       .catch((err) => setError(err.message || 'Impossible de charger cette proposition'))
       .finally(() => setLoading(false));
-  }, [slug, isEdit]);
+  }, [slug, isEdit, checkDraft]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+    setError(null);
+  };
+
+  // ── S5R2-12 : partir d'un modèle (création uniquement) ───
+  // appliedTemplateId (déclaré en haut) : modèle appliqué en dernier
+
+  const applyTemplate = (template) => {
+    // Texte « à soi » = différent de ce que le modèle précédent avait
+    // mis. Changer de modèle sans avoir rien écrit ne demande donc pas
+    // de confirmation ; écraser SA propre saisie, si.
+    const previous = PROPOSAL_TEMPLATES.find((t) => t.id === appliedTemplateId);
+    const fromPrevious = { title: previous?.title ?? '', summary: previous?.summaryText ?? '', content: previous?.content ?? '' };
+    const hasOwnText = ['title', 'summary', 'content']
+      .some((field) => form[field].trim() && form[field] !== fromPrevious[field]);
+    if (hasOwnText && !window.confirm("Remplacer le titre, l'accroche et l'argumentaire déjà saisis par ceux du modèle ?")) return;
+
+    setAppliedTemplateId(template.id);
+    setForm((prev) => ({ ...prev, title: template.title, summary: template.summaryText, content: template.content }));
     setError(null);
   };
 
@@ -117,6 +188,13 @@ export default function AdminPropositionForm() {
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setImageError(null);
+
+    // Même limite que l'API (5 Mo) : inutile d'envoyer pour se faire refuser
+    if (file.size > 5 * 1024 * 1024) {
+      rejectImage('Image trop lourde : 5 Mo au maximum.');
+      return;
+    }
 
     // createObjectURL fabrique une URL locale (blob:...) qui pointe
     // directement vers le fichier choisi sur l'ordinateur de l'admin —
@@ -134,6 +212,25 @@ export default function AdminPropositionForm() {
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
     setError(null);
+  };
+
+  // Le fichier choisi est refusé : on l'oublie, on vide le champ (sinon
+  // il repartirait à l'enregistrement) et on réaffiche l'image en ligne.
+  function rejectImage(message) {
+    if (imagePreview && imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(onlineImageRef.current);
+    setImageError(message);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  }
+
+  // Le navigateur n'arrive pas à afficher l'aperçu : ce n'est pas une
+  // image, quel que soit le nom du fichier. (Seulement pour un fichier
+  // choisi — blob: —, pas pour l'image déjà en ligne.)
+  const handlePreviewError = () => {
+    if (imagePreview?.startsWith('blob:')) {
+      rejectImage('Ce fichier n\'est pas une image lisible (JPEG, PNG ou WebP attendu). Choisissez-en un autre.');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -163,20 +260,35 @@ export default function AdminPropositionForm() {
       }
     }
 
+    if (form.zoneMode === 'quartiers' && form.zoneQuartiers.length === 0) {
+      setError('Cochez au moins un quartier, ou choisissez « toute la ville ».');
+      return;
+    }
+
+    // S5R2-12 : un « [lieu] » oublié d'un modèle se verrait en ligne.
+    // Confirmation plutôt que blocage : des crochets peuvent être voulus.
+    if (hasPlaceholders(form.title, form.summary, form.content)
+      && !window.confirm('Il reste des passages entre [crochets] à compléter. Enregistrer quand même ?')) {
+      return;
+    }
+
     setSaving(true);
 
-    // On ne transmet que ce qui a une vraie valeur — un champ vide
-    // ("") est envoyé comme "absent" (undefined), jamais comme une
-    // chaîne vide, pour laisser l'API distinguer "pas encore rempli"
-    // de "explicitement effacé".
+    // Un champ vide ("") n'est jamais envoyé comme chaîne vide. À la
+    // CRÉATION il est absent (undefined) ; en MODIFICATION (S5R-10), un
+    // champ avancé vidé vaut null = « effacer » — sans quoi un point ou
+    // un tracé déjà saisi ne pouvait plus jamais être retiré.
+    const empty = isEdit ? null : undefined;
     const payload = {
       title: form.title.trim(),
       summary: form.summary.trim(),
       content: form.content.trim(),
       status: form.status,
-      lat: form.lat === '' ? undefined : Number(form.lat),
-      lng: form.lng === '' ? undefined : Number(form.lng),
-      geoJson: geoJsonValue,
+      lat: form.lat === '' ? empty : Number(form.lat),
+      lng: form.lng === '' ? empty : Number(form.lng),
+      geoJson: geoJsonValue ?? empty,
+      zoneWholeCity: form.zoneMode === 'city',
+      zoneQuartiers: form.zoneMode === 'quartiers' ? form.zoneQuartiers : [],
       closesAt: form.closesAt === '' ? undefined : form.closesAt,
     };
 
@@ -200,6 +312,7 @@ export default function AdminPropositionForm() {
         await api.uploadProposalImage(saved.id, imageFile);
       }
 
+      draft.clear(); // S5R2-13 : enregistrée pour de bon, le brouillon ne sert plus
       navigate('/admin/propositions');
     } catch (err) {
       // Si l'API renvoie des détails de validation (Zod), on affiche
@@ -214,8 +327,49 @@ export default function AdminPropositionForm() {
     }
   };
 
+  // ── Aperçu de la zone (S5R-10) ──
+  const [iris, setIris] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadIris().then((data) => { if (!cancelled) setIris(data); });
+    return () => { cancelled = true; };
+  }, []);
+  const zoneShape = zoneFeatures(iris, {
+    zoneWholeCity: form.zoneMode === 'city',
+    zoneQuartiers: form.zoneMode === 'quartiers' ? form.zoneQuartiers : [],
+  });
+  // Périmètre dessiné à la main (GeoJSON) : null si vide ou illisible.
+  // (ESLint 10, no-useless-assignment : le « = null » de départ ne servait
+  // à rien, chaque branche affectait déjà une valeur.)
+  let customShape;
+  try { customShape = form.geoJson.trim() ? JSON.parse(form.geoJson) : null; } catch { customShape = null; }
+  const point = form.lat !== '' && form.lng !== '' && !Number.isNaN(Number(form.lat)) && !Number.isNaN(Number(form.lng))
+    ? { id: 'point', lat: Number(form.lat), lng: Number(form.lng), label: form.title || 'Point précis' }
+    : null;
+  const hasPreview = Boolean(zoneShape || customShape || point);
+
   if (loading) {
     return <div className="wrap" style={{ padding: '60px 20px' }}>Chargement…</div>;
+  }
+
+  // S5R2-13 : une saisie non enregistrée a été retrouvée → on demande
+  // d'abord quoi en faire (le formulaire viendra juste après)
+  if (draft.pending) {
+    return (
+      <div className="wrap" style={{ padding: '32px 20px 60px', maxWidth: 640 }}>
+        <Link to="/admin/propositions" style={{ color: '#6B6257', fontSize: 14 }}>← Retour à la liste</Link>
+        <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, margin: '12px 0 24px' }}>
+          {isEdit ? 'Modifier la proposition' : 'Nouvelle proposition'}
+        </h1>
+        <DraftRestorePrompt
+          savedAt={draft.pending.savedAt}
+          what={isEdit ? 'les modifications de cette proposition' : 'une nouvelle proposition'}
+          note="L'image n'est pas gardée : il faudra la choisir à nouveau."
+          onRestore={restoreDraft}
+          onDiscard={draft.discard}
+        />
+      </div>
+    );
   }
 
   return (
@@ -226,28 +380,49 @@ export default function AdminPropositionForm() {
         {isEdit ? 'Modifier la proposition' : 'Nouvelle proposition'}
       </h1>
 
-      {error && (
-        <div role="alert" style={{ background: '#FCEAE6', color: '#A8442F', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
-          {error}
-        </div>
-      )}
+      <EditorBanner />
 
+      {/* Recette du 13/10 : l'erreur d'enregistrement s'affiche désormais
+          dans la barre du bas, à côté du bouton (FormSaveBar) */}
+
+      {/* S5R2-11 : une proposition déjà publiée n'est plus modifiable par
+          un Admin-test — on l'explique au lieu d'un formulaire qui
+          échouerait à l'enregistrement (l'API répondrait 403). */}
+      {isEditor && isEdit && !loading && form.status !== 'DRAFT' ? (
+        <p role="status" style={{ fontSize: 16 }}>
+          Cette proposition n'est plus un brouillon : seule l'administration peut la modifier.
+        </p>
+      ) : (
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <Field label="Titre">
+        {/* S5R2-12 : le modèle d'abord (création uniquement) */}
+        {!isEdit && (
+          <TemplatePicker
+            templates={PROPOSAL_TEMPLATES}
+            appliedId={appliedTemplateId}
+            onApply={applyTemplate}
+            intro="Un exemple de titre et d'accroche, et un argumentaire en quatre rubriques. Remplacez les passages entre [crochets]."
+            appliedHint="Modèle appliqué : textes ci-dessous"
+            status={appliedTemplateId
+              ? `Modèle « ${PROPOSAL_TEMPLATES.find((t) => t.id === appliedTemplateId)?.name} » appliqué : titre, accroche et argumentaire remplis ci-dessous.`
+              : ''}
+          />
+        )}
+
+        <Field label="Titre" hint="Une action concrète, en quelques mots. Ex. : « Piétonniser le centre historique le samedi ».">
           <input
             name="title" value={form.title} onChange={handleChange} required
             style={inputStyle}
           />
         </Field>
 
-        <Field label="Accroche (résumé court, affiché sur les cartes)">
+        <Field label="Accroche (résumé court, affiché sur les cartes)" hint="Une phrase : quoi, où, quand. Ex. : « Fermer le centre-ville aux voitures chaque samedi, de 10 h à 18 h. »">
           <textarea
             name="summary" value={form.summary} onChange={handleChange} required
             rows={2} style={{ ...inputStyle, resize: 'vertical' }}
           />
         </Field>
 
-        <Field label="Argumentaire complet">
+        <Field label="Argumentaire complet" hint="Le contexte, ce qui changerait, pour qui, et les questions encore ouvertes. Un saut de ligne crée un nouveau paragraphe.">
           <textarea
             name="content" value={form.content} onChange={handleChange} required
             rows={8} style={{ ...inputStyle, resize: 'vertical' }}
@@ -259,34 +434,102 @@ export default function AdminPropositionForm() {
             choix (voir authController pour la même logique de defaults
             appliquée ailleurs dans le projet). On le laisse quand même
             modifiable ici : rien n'empêche de publier dès la création. */}
-        <Field label="Statut">
-          <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </Field>
+        {/* S5R2-11 : pas de choix de statut pour un Admin-test — il reste
+            « Brouillon », la publication est faite par l'administration */}
+        {isEditor ? (
+          <p style={{ fontSize: 15, margin: 0 }}>
+            <strong>Statut :</strong> Brouillon <span style={{ color: '#6B6257' }}>— la publication est faite par l'administration.</span>
+          </p>
+        ) : (
+          <Field label="Statut" hint="Brouillon : invisible des citoyens · Publiée : visible, on peut voter · Clôturée : visible, votes fermés.">
+            <select name="status" value={form.status} onChange={handleChange} style={inputStyle}>
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </Field>
+        )}
 
-        <div style={{ display: 'flex', gap: 14 }}>
-          <Field label="Latitude (optionnel)">
-            <input
-              type="number" step="any" name="lat" value={form.lat} onChange={handleChange}
-              placeholder="49.2058" style={inputStyle}
+        {/* ── Zone concernée (S5R-10) ── */}
+        <ZonePicker
+          mode={form.zoneMode}
+          quartiers={form.zoneQuartiers}
+          onChange={({ mode, quartiers }) => setForm((f) => ({ ...f, zoneMode: mode, zoneQuartiers: quartiers }))}
+        />
+
+        {hasPreview && (
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Aperçu sur la carte</p>
+            <LazyMapView
+              center={point ? [point.lat, point.lng] : undefined}
+              zoom={form.zoneMode === 'city' ? 13 : 14}
+              markers={point ? [point] : []}
+              perimeters={[zoneShape, customShape].filter(Boolean)}
+              height={260}
             />
-          </Field>
-          <Field label="Longitude (optionnel)">
-            <input
-              type="number" step="any" name="lng" value={form.lng} onChange={handleChange}
-              placeholder="2.5847" style={inputStyle}
+          </div>
+        )}
+
+        {/* ── Réglages avancés (S5R-10) ── Recette du 30/09 : latitude,
+            longitude et GeoJSON effrayaient en tête du formulaire. Ils
+            restent possibles — pour ce qu'un quartier ne décrit pas (une
+            rue, une place) — mais repliés. Ouverts d'office s'ils
+            contiennent déjà quelque chose. */}
+        <details open={Boolean(form.lat || form.lng || form.geoJson.trim())} style={{ border: '2px solid #EFEBE2', borderRadius: 12, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+            Avancé : un point précis ou un tracé sur la carte
+          </summary>
+          <p style={{ fontSize: 13, color: '#6B6257', margin: '8px 0 12px', lineHeight: 1.5 }}>
+            <strong>Point précis</strong> (l'adresse d'un chantier, une place) : sur{' '}
+            <a href="https://www.openstreetmap.org/#map=15/49.2058/2.5847" target="_blank" rel="noopener noreferrer">
+              openstreetmap.org<span className="sr-only"> (s'ouvre dans un nouvel onglet)</span>
+            </a>
+            , clic droit sur le lieu → « Afficher l'adresse » : les deux nombres affichés sont la latitude
+            (≈ 49,2) et la longitude (≈ 2,58). Videz les deux champs pour retirer le point.
+          </p>
+          <div style={{ display: 'flex', gap: 14 }}>
+            <Field label="Latitude (optionnel)">
+              <input
+                type="number" step="any" name="lat" value={form.lat} onChange={handleChange}
+                placeholder="49.2058" style={inputStyle}
+              />
+            </Field>
+            <Field label="Longitude (optionnel)">
+              <input
+                type="number" step="any" name="lng" value={form.lng} onChange={handleChange}
+                placeholder="2.5847" style={inputStyle}
+              />
+            </Field>
+          </div>
+
+          <Field label="Périmètre GeoJSON (optionnel)">
+            <textarea
+              name="geoJson" value={form.geoJson} onChange={handleChange}
+              rows={6} placeholder='{"type": "Polygon", "coordinates": [...]}'
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: 13 }}
             />
+            {/* Champ file "brut" : pas de style personnalisé, on garde le
+                rendu natif du navigateur pour ce type d'input — le personnaliser
+                demande de le masquer et de simuler un bouton, complexité pas
+                justifiée ici pour un usage admin ponctuel. */}
+            <input
+              type="file" accept=".json,.geojson,application/geo+json,application/json"
+              onChange={handleGeoJsonFile}
+              style={{ marginTop: 8, fontSize: 13 }}
+            />
+            <p style={{ fontSize: 12, color: '#6B6257', margin: '4px 0 0' }}>
+              Colle un objet GeoJSON (Feature, FeatureCollection ou géométrie brute)
+              ou importe un fichier .geojson/.json — même format que la couche IRIS.
+            </p>
           </Field>
-        </div>
+        </details>
 
         <Field label="Image (optionnel)">
           {imagePreview && (
             <img
               src={imagePreview}
               alt="Aperçu"
+              onError={handlePreviewError}
               style={{
                 width: '100%', maxWidth: 320, borderRadius: 12,
                 marginBottom: 10, display: 'block', objectFit: 'cover',
@@ -295,6 +538,7 @@ export default function AdminPropositionForm() {
           )}
           <input
             type="file" accept="image/jpeg,image/png,image/webp"
+            ref={imageInputRef}
             onChange={handleImageChange}
             style={{ fontSize: 13 }}
           />
@@ -302,27 +546,11 @@ export default function AdminPropositionForm() {
             JPEG, PNG ou WebP, 5 Mo max — redimensionnée et compressée
             automatiquement à l'enregistrement.
           </p>
-        </Field>
-
-        <Field label="Périmètre GeoJSON (optionnel)">
-          <textarea
-            name="geoJson" value={form.geoJson} onChange={handleChange}
-            rows={6} placeholder='{"type": "Polygon", "coordinates": [...]}'
-            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: 13 }}
-          />
-          {/* Champ file "brut" : pas de style personnalisé, on garde le
-              rendu natif du navigateur pour ce type d'input — le personnaliser
-              demande de le masquer et de simuler un bouton, complexité pas
-              justifiée ici pour un usage admin ponctuel. */}
-          <input
-            type="file" accept=".json,.geojson,application/geo+json,application/json"
-            onChange={handleGeoJsonFile}
-            style={{ marginTop: 8, fontSize: 13 }}
-          />
-          <p style={{ fontSize: 12, color: '#6B6257', margin: '4px 0 0' }}>
-            Colle un objet GeoJSON (Feature, FeatureCollection ou géométrie brute)
-            ou importe un fichier .geojson/.json — même format que la couche IRIS.
-          </p>
+          {imageError && (
+            <p role="alert" style={{ fontSize: 14, color: '#B3412E', fontWeight: 600, margin: '6px 0 0' }}>
+              {imageError}
+            </p>
+          )}
         </Field>
 
         <Field label="Date de clôture des votes (optionnel)">
@@ -332,21 +560,30 @@ export default function AdminPropositionForm() {
           />
         </Field>
 
-        <button type="submit" disabled={saving} className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
-          {saving ? 'Enregistrement…' : (isEdit ? 'Enregistrer les modifications' : 'Créer la proposition')}
-        </button>
+        <FormSaveBar
+          saving={saving} error={error} cancelTo="/admin/propositions"
+          label={isEdit ? 'Enregistrer les modifications' : 'Créer la proposition'}
+        />
       </form>
+      )}
     </div>
   );
 }
 
 // ── Petit composant local : un label + son champ ─────────
-function Field({ label, children }) {
+// S5R-10 : `hint` = aide sous le champ, reliée par aria-describedby
+// (même composant que dans le constructeur d'enquête, S5R-09)
+function Field({ label, hint, children }) {
+  const hintId = useId();
+  const field = hint && isValidElement(children) ? cloneElement(children, { 'aria-describedby': hintId }) : children;
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, fontWeight: 600, fontSize: 14, color: '#26333A' }}>
-      {label}
-      {children}
-    </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontWeight: 600, fontSize: 14, color: '#26333A' }}>
+        {label}
+        {field}
+      </label>
+      {hint && <span id={hintId} style={{ fontSize: 13, color: '#6B6257' }}>{hint}</span>}
+    </div>
   );
 }
 

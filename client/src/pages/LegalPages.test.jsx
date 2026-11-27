@@ -119,6 +119,13 @@ function storageKeysUsedInCode() {
         keys.add(`${storage}:${literal[1]}`);
         continue;
       }
+      // S5R2-13 : PRÉFIXE + suite calculée (ex. DRAFT_PREFIX + clé) → famille « préfixe* »
+      const prefixed = arg.trim().match(/^([A-Z_][A-Z0-9_]*)\s*\+/);
+      if (prefixed) {
+        const prefix = code.match(new RegExp(`const ${prefixed[1]}\\s*=\\s*['"\`]([^'"\`]+)['"\`]`));
+        keys.add(`${storage}:${prefix ? `${prefix[1]}*` : `<clé non résolue : ${arg.trim()}>`}`);
+        continue;
+      }
       // Une constante : on cherche sa valeur dans le même fichier
       const constant = code.match(new RegExp(`const ${arg.trim()}\\s*=\\s*['"\`]([^'"\`]+)['"\`]`));
       keys.add(`${storage}:${constant ? constant[1] : `<clé non résolue : ${arg.trim()}>`}`);

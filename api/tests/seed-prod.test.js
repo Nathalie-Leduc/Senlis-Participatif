@@ -8,10 +8,10 @@
 // ══════════════════════════════════════════════════════════
 
 import { describe, it, expect } from 'vitest';
-import { validateAdminCredentials } from '../prisma/seed-prod.js';
+import { validateAdminCredentials, surveySeedAction } from '../prisma/seed-prod.js';
 
 describe('validateAdminCredentials', () => {
-  it('accepte un email et un mot de passe valides (12+ caractères)', () => {
+  it('accepte un email et un mot de passe valides (15+ caractères, S5R-13b)', () => {
     expect(validateAdminCredentials('mairie@senlis.fr', 'MotDePasseSolide2026!')).toEqual([]);
   });
 
@@ -30,12 +30,36 @@ describe('validateAdminCredentials', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
-  it('refuse un mot de passe de moins de 12 caractères', () => {
-    const errors = validateAdminCredentials('mairie@senlis.fr', 'court1234!');
-    expect(errors.some((e) => e.includes('12 caractères'))).toBe(true);
+  it('refuse un mot de passe de moins de 15 caractères (S5R-13b)', () => {
+    const errors = validateAdminCredentials('mairie@senlis.fr', 'A1b2C3d4E5f!');
+    expect(errors.some((e) => e.includes('15 caractères'))).toBe(true);
   });
 
-  it('accepte un mot de passe de exactement 12 caractères (limite incluse)', () => {
-    expect(validateAdminCredentials('mairie@senlis.fr', 'A1b2C3d4E5f!')).toEqual([]);
+  it('accepte exactement 15 caractères, sans règle de composition (limite incluse)', () => {
+    expect(validateAdminCredentials('mairie@senlis.fr', 'quinzecaractere')).toEqual([]);
+  });
+
+  it('refuse un mot de passe courant ou qui reprend le nom du site', () => {
+    expect(validateAdminCredentials('mairie@senlis.fr', 'iloveyouforever')).toHaveLength(1);
+    expect(validateAdminCredentials('mairie@senlis.fr', 'Senlis2026!!!!!!')).toHaveLength(1);
+  });
+});
+
+// S5R2-03 : « npm run seed:prod -- --remplacer »
+describe('surveySeedAction', () => {
+  const state = (over) => ({ exists: true, responses: 0, replace: false, production: false, ...over });
+
+  it('pas encore en base : on la crée', () => {
+    expect(surveySeedAction(state({ exists: false }))).toBe('create');
+  });
+  it('déjà en base, sans --remplacer : on n’y touche pas', () => {
+    expect(surveySeedAction(state({ responses: 12 }))).toBe('skip');
+  });
+  it('avec --remplacer en développement : remplacée, même avec des réponses de test', () => {
+    expect(surveySeedAction(state({ replace: true, responses: 7 }))).toBe('replace');
+  });
+  it('avec --remplacer en production : refusé dès qu’il y a de vraies réponses', () => {
+    expect(surveySeedAction(state({ replace: true, production: true, responses: 1 }))).toBe('refuse');
+    expect(surveySeedAction(state({ replace: true, production: true, responses: 0 }))).toBe('replace');
   });
 });

@@ -2,7 +2,8 @@
 // Validateurs Zod — Propositions
 // ══════════════════════════════════════════════════════════
 
-import { z } from 'zod';
+import { z } from '../lib/zod.js'; // Zod 4 réglé en français (S5R2-08)
+import { QUARTIERS } from '../lib/quartiers.js';
 
 // Les 6 statuts existent tous côté BDD (schema.prisma), mais un
 // admin ne devrait normalement passer que par certaines transitions
@@ -23,6 +24,16 @@ const proposalStatus = z.enum([
 const lat = z.number().min(-90).max(90).optional();
 const lng = z.number().min(-180).max(180).optional();
 
+// ── Zone concernée (S5R-10) ──────────────────────────────
+// Les 8 quartiers de Senlis, centre historique et Saint-Vincent compris
+// (liste commune : lib/quartiers.js, S5R2-06)
+const zoneQuartiers = z.array(z.enum(QUARTIERS)).max(QUARTIERS.length)
+  .refine((list) => new Set(list).size === list.length, 'Quartier en double');
+
+/** « Toute la ville » et « tels quartiers » s'excluent */
+const zoneIsCoherent = (data) => !(data.zoneWholeCity && data.zoneQuartiers?.length);
+const ZONE_MESSAGE = { message: 'Choisissez « toute la ville » OU des quartiers, pas les deux', path: ['zoneQuartiers'] };
+
 export const createProposalSchema = z.object({
   title: z.string().trim().min(5, 'Le titre doit contenir au moins 5 caractères').max(200),
   summary: z.string().trim().min(10, "L'accroche doit contenir au moins 10 caractères").max(300),
@@ -32,7 +43,9 @@ export const createProposalSchema = z.object({
   lng,
   geoJson: z.any().optional(), // le format exact (GeoJSON) est validé côté Leaflet au Sprint 3
   closesAt: z.coerce.date().optional(),
-});
+  zoneWholeCity: z.boolean().optional(),
+  zoneQuartiers: zoneQuartiers.optional(),
+}).refine(zoneIsCoherent, ZONE_MESSAGE);
 
 // Édition : tout est optionnel — on ne modifie que les champs envoyés.
 export const updateProposalSchema = z.object({
@@ -40,12 +53,16 @@ export const updateProposalSchema = z.object({
   summary: z.string().trim().min(10).max(300).optional(),
   content: z.string().trim().min(20).optional(),
   status: proposalStatus.optional(),
-  lat,
-  lng,
-  geoJson: z.any().optional(),
+  // S5R-10 : null = EFFACER (avant, impossible de retirer un point ou un
+  // tracé une fois saisi : un champ vide n'était tout simplement pas envoyé)
+  lat: lat.nullable(),
+  lng: lng.nullable(),
+  geoJson: z.any().nullable().optional(),
   closesAt: z.coerce.date().optional(),
   moderationNote: z.string().trim().max(500).optional(),
-});
+  zoneWholeCity: z.boolean().optional(),
+  zoneQuartiers: zoneQuartiers.optional(),
+}).refine(zoneIsCoherent, ZONE_MESSAGE);
 
 // Query params de la liste publique : ?page=2&limit=20&status=PUBLISHED&sort=votes
 // z.coerce transforme la chaîne de l'URL ("2") en nombre (2) avant validation.
@@ -60,7 +77,7 @@ export const listProposalsQuerySchema = z.object({
 
 export const voteSchema = z.object({
   value: z.enum(['POUR', 'CONTRE', 'NEUTRE'], {
-    errorMap: () => ({ message: 'La valeur doit être POUR, CONTRE ou NEUTRE' }),
+    error: 'La valeur doit être POUR, CONTRE ou NEUTRE',
   }),
 });
 
@@ -81,6 +98,6 @@ export const adminListProposalsQuerySchema = z.object({
 // vocabulaire dans tout le projet). Absent = totaux seuls.
 export const proposalStatsQuerySchema = z.object({
   segmentBy: z.enum(['situation', 'quartier', 'travailleQuartier', 'travailType'], {
-    errorMap: () => ({ message: 'Critère de segmentation inconnu' }),
+    error: 'Critère de segmentation inconnu',
   }).optional(),
 });

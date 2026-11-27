@@ -17,8 +17,7 @@ import AccessibilityWidget from './components/AccessibilityWidget/AccessibilityW
 import MascotWidget from './components/MascotWidget/MascotWidget.jsx';
 import Header from './components/Header/Header.jsx';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute.jsx';
-import Mascot from './components/Mascot/Mascot.jsx';
-import { usePageTitle } from './hooks/usePageTitle.js';
+import NotFound from './pages/NotFound.jsx'; // S5R2-10 : page 404 (pas en chargement différé : elle doit s'afficher même si le réseau flanche)
 import { ANNOUNCER_ID } from './utils/routeAnnouncer.js';
 import { ACCESSIBILITY } from './constants/legal.js';
 
@@ -47,6 +46,9 @@ const AdminPropositionStats = lazy(() => import('./pages/AdminPropositionStats.j
 const AdminSurveys = lazy(() => import('./pages/AdminSurveys.jsx'));
 const AdminUsers = lazy(() => import('./pages/AdminUsers.jsx'));
 const AdminSurveyStats = lazy(() => import('./pages/AdminSurveyStats.jsx'));
+// S5R2-06 : outil de tracé de Saint-Vincent (admin seulement)
+const AdminQuartiers = lazy(() => import('./pages/AdminQuartiers.jsx'));
+const AdminParkings = lazy(() => import('./pages/AdminParkings.jsx')); // S5R2-05
 const AdminSurveyForm = lazy(() => import('./pages/AdminSurveyForm.jsx'));
 const Enquetes = lazy(() => import('./pages/Enquetes.jsx'));
 const EnqueteDetail = lazy(() => import('./pages/EnqueteDetail.jsx'));
@@ -56,6 +58,7 @@ const MentionsLegales = lazy(() => import('./pages/MentionsLegales.jsx'));
 const PolitiqueConfidentialite = lazy(() => import('./pages/PolitiqueConfidentialite.jsx'));
 const Accessibilite = lazy(() => import('./pages/Accessibilite.jsx'));
 const PlanDuSite = lazy(() => import('./pages/PlanDuSite.jsx'));
+const Carte = lazy(() => import('./pages/Carte.jsx')); // S5R-11
 
 // Affiché le temps de télécharger le code de la page ciblée — sur
 // une bonne connexion, cette étape dure quelques dizaines de
@@ -65,25 +68,6 @@ function RouteFallback() {
   return (
     <div className="wrap" style={{ padding: '80px 20px', textAlign: 'center', color: '#6B6257' }}>
       Chargement…
-    </div>
-  );
-}
-
-// Page 404 avec mascotte perdue 🦌
-function NotFound() {
-  usePageTitle('Page introuvable');
-  return (
-    <div className="wrap" style={{ padding: '80px 20px', textAlign: 'center' }}>
-      <Mascot size="section" speech="Je me suis perdu dans la forêt… 🌲" />
-      <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 32, margin: '20px 0 8px' }}>
-        Page introuvable
-      </h1>
-      <p style={{ color: '#6B6257', fontSize: 17 }}>
-        Cette page n'existe pas — retournons à l'accueil !
-      </p>
-      <a href="/" className="btn btn-primary" style={{ marginTop: 24 }}>
-        Retour à l'accueil
-      </a>
     </div>
   );
 }
@@ -126,19 +110,22 @@ export default function App() {
             <Route path="/confidentialite" element={<PolitiqueConfidentialite />} />
             <Route path="/accessibilite" element={<Accessibilite />} />
             <Route path="/plan-du-site" element={<PlanDuSite />} />
+            <Route path="/carte" element={<Carte />} />
 
             {/* Routes protégées */}
             <Route path="/mon-compte" element={
               <ProtectedRoute><MonCompte /></ProtectedRoute>
             } />
+            {/* S5R2-11 : staffOnly = ADMIN ou Admin-test (brouillons) ;
+                adminOnly = ADMIN seul (résultats détaillés, comptes) */}
             <Route path="/admin/propositions" element={
-              <ProtectedRoute adminOnly><AdminPropositions /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminPropositions /></ProtectedRoute>
             } />
             <Route path="/admin/propositions/nouvelle" element={
-              <ProtectedRoute adminOnly><AdminPropositionForm /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminPropositionForm /></ProtectedRoute>
             } />
             <Route path="/admin/propositions/:slug/modifier" element={
-              <ProtectedRoute adminOnly><AdminPropositionForm /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminPropositionForm /></ProtectedRoute>
             } />
             {/* :id (et non :slug) : même convention que /admin/enquetes/:id/stats —
                 l'endpoint API /proposals/:id/stats travaille sur l'identifiant. */}
@@ -146,19 +133,26 @@ export default function App() {
               <ProtectedRoute adminOnly><AdminPropositionStats /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes" element={
-              <ProtectedRoute adminOnly><AdminSurveys /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminSurveys /></ProtectedRoute>
             } />
             <Route path="/admin/comptes" element={
               <ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes/nouvelle" element={
-              <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminSurveyForm /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes/:slug/modifier" element={
-              <ProtectedRoute adminOnly><AdminSurveyForm /></ProtectedRoute>
+              <ProtectedRoute staffOnly><AdminSurveyForm /></ProtectedRoute>
             } />
             <Route path="/admin/enquetes/:id/stats" element={
               <ProtectedRoute adminOnly><AdminSurveyStats /></ProtectedRoute>
+            } />
+            <Route path="/admin/quartiers" element={
+              <ProtectedRoute adminOnly><AdminQuartiers /></ProtectedRoute>
+            } />
+            {/* S5R2-05 : l'Admin-test consulte (lecture seule) */}
+            <Route path="/admin/parkings" element={
+              <ProtectedRoute staffOnly><AdminParkings /></ProtectedRoute>
             } />
             {/* adminOnly absent : n'importe quel citoyen CONNECTÉ peut
                 répondre — pas réservé aux admins. La vérification email

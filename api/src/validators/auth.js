@@ -10,7 +10,9 @@
 // tu n'essaies pas de rentrer avec un faux nom (trim/lower).
 // ══════════════════════════════════════════════════════════
 
-import { z } from 'zod';
+import { z, requiredMessage } from '../lib/zod.js'; // Zod 4 réglé en français (S5R2-08)
+import { QUARTIERS, QUARTIERS_RESIDENCE } from '../lib/quartiers.js';
+import { normalizePassword, passwordProblem } from '../lib/passwordPolicy.js';
 
 // ── Champs réutilisables ────────────────────────────────
 
@@ -20,25 +22,24 @@ const email = z
   .toLowerCase()
   .email('Adresse email invalide');
 
-// Recommandations CNIL (délibération n° 2022-100, référentiel mots
-// de passe) : 12 caractères minimum si le mot de passe est la SEULE
-// mesure de sécurité (pas de 2FA en complément), avec au moins 3 des
-// 4 catégories de caractères — ici on demande les 4, plus strict
-// mais plus simple à expliquer côté UI qu'une règle "au moins 3 sur 4".
+// S5R-13b — politique CNIL + NIST combinée (document 21, § 8.5) :
+// 15 caractères minimum, AUCUNE règle de composition, refus des mots
+// de passe courants ou prévisibles. Toute la règle vit dans
+// lib/passwordPolicy.js ; ici, on la branche sur Zod.
 //
-// .regex() plutôt que 4 .refine() séparés : Zod s'arrêterait à la
-// première règle échouée avec .refine(), masquant les autres —
-// .regex() avec lookaheads (?=...) vérifie les 4 conditions dans la
-// MÊME passe, donc le message d'erreur ci-dessous reste correct quel
-// que soit ce qui manque exactement.
+// Avant (S5A) : 12 caractères et les 4 familles imposées (majuscule,
+// minuscule, chiffre, caractère spécial). Les comptes existants ne
+// sont pas touchés : la nouvelle règle s'applique au prochain choix.
+//
+// .transform(normalizePassword) : c'est le texte NORMALISÉ (NFC) qui
+// arrive dans le contrôleur, donc qui est haché — voir passwordPolicy.js.
 const password = z
-  .string()
-  .min(12, 'Le mot de passe doit contenir au moins 12 caractères')
-  .max(128, 'Le mot de passe ne peut pas dépasser 128 caractères')
-  .regex(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/,
-    'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un caractère spécial',
-  );
+  .string({ error: requiredMessage('Le mot de passe est requis') })
+  .transform(normalizePassword)
+  .superRefine((value, ctx) => {
+    const problem = passwordProblem(value);
+    if (problem) ctx.addIssue({ code: 'custom', message: problem });
+  });
 
 const pseudo = z
   .string()
@@ -52,29 +53,29 @@ const pseudo = z
 // et au branchement de questions selon la situation déclarée.
 const situation = z.enum(
   ['CENTRE_RESIDENT', 'AUTRE_QUARTIER', 'HORS_SENLIS'],
-  { errorMap: () => ({ message: 'Merci de préciser votre situation' }) },
+  { error: 'Merci de préciser votre situation' },
 );
 
-// Les 6 quartiers IRIS (INSEE) de Senlis autres que le centre
-// historique (déjà couvert par Situation) — menu affiché en cascade
+// Les quartiers de Senlis autres que le centre historique (déjà
+// couvert par Situation ; liste commune : lib/quartiers.js) — menu affiché en cascade
 // uniquement quand situation = AUTRE_QUARTIER, pour que ces citoyens
 // ne se sentent pas réduits à une case fourre-tout, et pour pouvoir
 // cibler de futures enquêtes/propositions par quartier précis.
 const quartier = z.enum(
-  ['BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
-  { errorMap: () => ({ message: 'Merci de préciser votre quartier' }) },
+  QUARTIERS_RESIDENCE,
+  { error: 'Merci de préciser votre quartier' },
 );
 
 // Même enum Prisma que quartier ci-dessus, mais CENTRE_HISTORIQUE en
 // plus — a du sens comme lieu de TRAVAIL (contrairement à la
 // résidence, où Situation.CENTRE_RESIDENT couvre déjà ce cas).
 const travailleQuartier = z.enum(
-  ['CENTRE_HISTORIQUE', 'BRICHEBAY', 'BON_SECOURS', 'VAL_AUNETTE_GATELIERE', 'ZONE_INDUSTRIELLE', 'VILLEVERT', 'JARDINIERS'],
-  { errorMap: () => ({ message: 'Merci de préciser le quartier de travail' }) },
+  QUARTIERS,
+  { error: 'Merci de préciser le quartier de travail' },
 );
 const travailType = z.enum(
   ['COMMERCANT', 'SALARIE'],
-  { errorMap: () => ({ message: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)' }) },
+  { error: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)' },
 );
 
 // superRefine plutôt que deux champs indépendants : la règle
@@ -83,7 +84,7 @@ const travailType = z.enum(
 function requireQuartierIfAutreQuartier(data, ctx) {
   if (data.situation === 'AUTRE_QUARTIER' && !data.quartier) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['quartier'],
       message: 'Merci de préciser votre quartier',
     });
@@ -94,7 +95,7 @@ function requireQuartierIfAutreQuartier(data, ctx) {
   // questions distinctes).
   if (data.travailleQuartier && !data.travailType) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['travailType'],
       message: 'Merci de préciser si vous dirigez cette activité ou si vous y êtes salarié(e)',
     });
@@ -113,7 +114,17 @@ export const registerSchema = z.object({
   travailType: travailType.optional(),
   // S5R-05 : la case « Je travaille à Senlis », dite explicitement
   travailleASenlis: z.boolean().optional(),
-}).superRefine(requireQuartierIfAutreQuartier);
+}).superRefine((data, ctx) => {
+  requireQuartierIfAutreQuartier(data, ctx);
+  // S5R-13b : à l'inscription, l'adresse et le pseudo sont dans la même
+  // requête — on refuse un mot de passe qui les reprend (NIST : « mots
+  // propres au contexte »). Seulement si le mot de passe a passé les
+  // autres contrôles, pour ne pas afficher deux messages à la fois.
+  if (!passwordProblem(data.password)) {
+    const problem = passwordProblem(data.password, { email: data.email, pseudo: data.pseudo });
+    if (problem) ctx.addIssue({ code: 'custom', path: ['password'], message: problem });
+  }
+});
 
 export const loginSchema = z.object({
   email,

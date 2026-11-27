@@ -14,10 +14,13 @@
 // ouvrent une page où une carte apparaît réellement.
 // ══════════════════════════════════════════════════════════
 
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from 'react-leaflet';
+import { useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Link } from 'react-router-dom';
+import { quartierOfFeature, ZONE_LABELS } from '../../constants/zones.js';
+import { regimeMeta } from '../../constants/parkings.js';
 
 // Icône personnalisée — un pin rond aux couleurs de la charte
 // graphique, avec le cerf en filigrane.
@@ -58,27 +61,90 @@ const PERIMETER_STYLE = {
 // "Centre Ville" mis en évidence en doré : c'est précisément ce que
 // demande le cahier des charges ("permettant d'isoler le centre
 // historique"), pas juste afficher les 7 quartiers au même niveau.
-function irisStyle(feature) {
-  const isCentreVille = feature.properties?.nom_iris === 'Centre Ville';
-  return isCentreVille
+// S5R2-06 : les quartiers sont repérés par leur NOM de quartier
+// (CENTRE_HISTORIQUE, SAINT_VINCENT…), plus par leur code IRIS — deux
+// quartiers du centre partagent le même code.
+function irisStyle(feature, selectedQuartiers, neutral) {
+  // S5R-11 : les quartiers choisis sur la carte « Explorer » ressortent en
+  // bleu (un quartier ou une liste de quartiers)
+  const selected = Array.isArray(selectedQuartiers) ? selectedQuartiers : [selectedQuartiers].filter(Boolean);
+  const quartier = quartierOfFeature(feature);
+  if (selected.includes(quartier)) {
+    return { color: '#1E5F7C', weight: 3, fillColor: '#1E5F7C', fillOpacity: 0.2 };
+  }
+  // Carte « Explorer » : tous les quartiers au même niveau (retour du
+  // 07/10 : le centre doré « par défaut » laissait croire à une sélection)
+  if (neutral) return { color: '#948B7D', weight: 1, fillColor: '#948B7D', fillOpacity: 0.06 };
+  // Seul le Centre historique est doré (S5R2-06 : Saint-Vincent, séparé
+  // du centre, prend le gris des autres quartiers — couleurs inchangées)
+  return quartier === 'CENTRE_HISTORIQUE'
     ? { color: '#D4A84A', weight: 2, fillColor: '#D4A84A', fillOpacity: 0.25 }
     : { color: '#948B7D', weight: 1, fillColor: '#948B7D', fillOpacity: 0.06 };
 }
 
 // Icône parking — même principe que cerfIcon (DivIcon en CSS pur,
-// pas d'image externe à résoudre), mais couleur et symbole distincts
+// pas d'image externe à résoudre), mais carrée et marquée d'une lettre
 // pour qu'on ne confonde jamais un parking avec une proposition.
-const parkingIcon = L.divIcon({
+// S5R2-05 : la couleur et la lettre suivent le RÉGIME (bleu « P »
+// gratuit, rouge « R », vert « V »… comme sur le plan de la Ville),
+// et un petit éclair signale une borne de recharge.
+// Une icône par combinaison, créée une seule fois (mémoire).
+const parkingIcons = new Map();
+export function parkingIcon(regime, charging = 'AUCUNE') {
+  const key = `${regime}|${charging}`;
+  if (!parkingIcons.has(key)) {
+    const { letter, bg, fg } = regimeMeta(regime);
+    const bolt = charging === 'EXISTANTE' || charging === 'EN_PROJET'
+      ? `<span style="position:absolute;right:-7px;top:-7px;width:16px;height:16px;border-radius:50%;
+          background:${charging === 'EXISTANTE' ? '#2A8AB4' : '#7A5BB0'};color:#fff;font-size:10px;
+          display:flex;align-items:center;justify-content:center;border:1.5px solid #fff">⚡</span>`
+      : '';
+    parkingIcons.set(key, L.divIcon({
+      className: '',
+      html: `<div style="
+        position: relative; width: 28px; height: 28px; border-radius: 6px;
+        background: ${bg}; display: flex; align-items: center;
+        justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.3);
+        border: 2px solid #fff; color: ${fg}; font-weight: 700; font-size: 14px;
+      ">${letter}${bolt}</div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    }));
+  }
+  return parkingIcons.get(key);
+}
+
+// Icône enquête (S5R-11 v2) — doré, distinct du cerf des propositions
+// et du « P » des parkings : on ne confond jamais les trois
+const surveyIcon = L.divIcon({
   className: '',
   html: `<div style="
-    width: 30px; height: 30px; border-radius: 6px;
-    background: #1E5F7C; display: flex; align-items: center;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: #D4A84A; border: 2px solid #fff; display: flex; align-items: center;
     justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.3);
-    color: #fff; font-weight: 700; font-size: 14px;
-  ">P</div>`,
+    color: #26333A; font-weight: 800; font-size: 15px;
+  ">?</div>`,
   iconSize: [30, 30],
   iconAnchor: [15, 15],
 });
+
+/**
+ * Recalcule la taille de la carte quand son CONTENEUR change de taille
+ * (passage en plein écran, panneau qui s'ouvre…). Leaflet ne surveille
+ * que la fenêtre : sans ça, une carte agrandie garderait des zones grises
+ * là où il manque des tuiles. Analogie : recadrer une photo quand on
+ * change de cadre.
+ */
+function ResizeWatcher() {
+  const map = useMap();
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
+}
 
 /**
  * @param {[number, number]} center - [latitude, longitude] du centre initial
@@ -90,9 +156,24 @@ const parkingIcon = L.divIcon({
  *   de périmètre saisi (ça arrive avec S3-04, saisie admin).
  * @param {object} iris - FeatureCollection GeoJSON des 7 quartiers IRIS de
  *   Senlis (INSEE/IGN) — absent = couche non affichée.
- * @param {Array<{id, lat, lng, label}>} parkings - parkings de report (exemple)
+ * @param {Array<{id, lat, lng, label, regime?, charging?, details?: string[]}>} parkings -
+ *   parkings gérés par l'administration (S5R2-05, utils/parkings.js) : un repère par point
+ * @param {Array<{id, positions: Array<[number, number]>, label, regime?, details?: string[]}>} parkingLines -
+ *   places le long d'une rue (recette du 20/10), dessinées comme un trait
  * @param {number|string} height - hauteur du conteneur (la largeur suit son parent)
  */
+/**
+ * Empreinte courte d'un objet GeoJSON (hachage « djb2 » de sa forme
+ * texte) : deux contenus différents donnent, en pratique, deux clés
+ * différentes. Exportée pour les tests.
+ */
+export function contentKey(geoJson) {
+  const text = JSON.stringify(geoJson);
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+  return hash.toString(36);
+}
+
 export default function MapView({
   center = SENLIS_CENTER,
   zoom = 15,
@@ -100,6 +181,12 @@ export default function MapView({
   perimeters = [],
   iris = null,
   parkings = [],
+  parkingLines = [],
+  // S5R-11 : clic sur un quartier et quartier(s) mis en valeur — S5R2-06 :
+  // par nom de quartier (ex. 'SAINT_VINCENT'), plus par code IRIS
+  onQuartierClick = null,
+  selectedQuartiers = null,
+  neutralIris = false,
   height = 320,
 }) {
   // On accepte un objet GeoJSON unique OU un tableau — plus simple
@@ -136,41 +223,86 @@ export default function MapView({
           quartier grisé en fond, pas par-dessus une proposition. */}
       {iris && (
         <GeoJSON
+          // Même raison que pour les périmètres (contentKey) : la couche
+          // n'est dessinée qu'une fois — on la recrée quand le quartier
+          // sélectionné change, pour que sa couleur suive
+          key={`iris-${[selectedQuartiers].flat().join(',') || 'aucun'}`}
           data={iris}
-          style={irisStyle}
-          // Chaque quartier affiche son nom au clic — sans ça, un
-          // visiteur ne saurait pas ce que représentent ces zones.
+          style={(feature) => irisStyle(feature, selectedQuartiers, neutralIris)}
           onEachFeature={(feature, layer) => {
-            if (feature.properties?.nom_iris) {
-              layer.bindPopup(`<strong>${feature.properties.nom_iris}</strong>`);
+            if (onQuartierClick) {
+              // Carte « Explorer » : le clic choisit le quartier (la liste
+              // à côté de la carte affiche ce qui le concerne)
+              layer.on('click', () => onQuartierClick(quartierOfFeature(feature)));
+            } else if (ZONE_LABELS[quartierOfFeature(feature)]) {
+              // Ailleurs : chaque quartier affiche son nom au clic
+              // Nom du QUARTIER (« Quartier Saint-Vincent »), pas celui de
+              // l'IRIS (« Centre Ville » valait pour les deux moitiés)
+              layer.bindPopup(`<strong>${ZONE_LABELS[quartierOfFeature(feature)]}</strong>`);
             }
           }}
         />
       )}
 
+      {/* Recette du 20/10 : places le long d'une rue (zone rouge…) — un
+          trait de la couleur du régime, bordé de blanc pour rester
+          visible sur n'importe quel fond de carte */}
+      {parkingLines.map((line) => (
+        <Polyline key={`${line.id}-casing`} positions={line.positions} pathOptions={{ color: '#FFFFFF', weight: 9, opacity: 0.9 }} interactive={false} />
+      ))}
+      {parkingLines.map((line) => (
+        <Polyline key={line.id} positions={line.positions} pathOptions={{ color: regimeMeta(line.regime).bg, weight: 5, opacity: 1 }}>
+          <Popup>
+            <strong>🅿️ {line.label}</strong>
+            <div style={{ fontSize: 13 }}>Places le long de la rue</div>
+            {line.details?.map((detail) => <div key={detail} style={{ fontSize: 13 }}>{detail}</div>)}
+          </Popup>
+        </Polyline>
+      ))}
+
       {parkings.map((p) => (
-        <Marker key={p.id} position={[p.lat, p.lng]} icon={parkingIcon}>
-          <Popup><strong>🅿️ {p.label}</strong></Popup>
+        <Marker key={p.id} position={[p.lat, p.lng]} icon={parkingIcon(p.regime, p.charging)} title={p.label}>
+          <Popup>
+            <strong>🅿️ {p.label}</strong>
+            {/* S5R2-05 : places, régime, PMR, recharge, remarque */}
+            {p.details?.map((line) => <div key={line} style={{ fontSize: 13 }}>{line}</div>)}
+          </Popup>
         </Marker>
       ))}
 
+      {/* key = EMPREINTE DU CONTENU, et non la position dans la liste.
+          Le composant <GeoJSON> de react-leaflet lit `data` UNE SEULE FOIS,
+          à sa création : changer `data` ensuite ne redessine rien. Avec
+          key={i}, cocher un 2e quartier gardait le même composant (même
+          clé 0)… et donc l'ancien dessin, avec un seul quartier (retour de
+          test du 06/10). Une clé qui change avec le contenu force React à
+          recréer la couche, donc à redessiner.
+          Analogie : un tableau peint ne se met pas à jour — on en accroche
+          un nouveau quand le sujet change. */}
       {perimeterList.filter(Boolean).map((geoJson, i) => (
-        <GeoJSON key={i} data={geoJson} style={PERIMETER_STYLE} />
+        <GeoJSON key={`${i}-${contentKey(geoJson)}`} data={geoJson} style={PERIMETER_STYLE} />
       ))}
 
+      {/* kind (S5R-11 v2) : 'survey' = enquête (icône dorée « ? »),
+          sinon proposition (le cerf). href : lien explicite, sinon celui
+          de la proposition (slug) — comportement d'avant conservé. */}
       {markers.map((m) => (
-        <Marker key={m.id} position={[m.lat, m.lng]} icon={cerfIcon}>
+        <Marker key={m.id} position={[m.lat, m.lng]} icon={m.kind === 'survey' ? surveyIcon : cerfIcon}>
           <Popup>
             <strong>{m.label}</strong>
-            {m.slug && (
+            {(m.href || m.slug) && (
               <>
                 <br />
-                <Link to={`/propositions/${m.slug}`}>Voir la proposition</Link>
+                <Link to={m.href ?? `/propositions/${m.slug}`}>
+                  {m.kind === 'survey' ? "Voir l'enquête" : 'Voir la proposition'}
+                </Link>
               </>
             )}
           </Popup>
         </Marker>
       ))}
+
+      <ResizeWatcher />
     </MapContainer>
   );
 }
